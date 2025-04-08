@@ -1,0 +1,50 @@
+{
+  "name": "advanced-frontend-logger",
+  "version": "1.0.0",
+  "description": "Console logging on steroids - Enhanced frontend error tracking and debugging",
+  "type": "module",
+  "main": "./dist/index.cjs.js",
+  "module": "./dist/index.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.cjs.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite demo",
+    "build": "vite build",
+    "preview": "vite preview --outDir dist",
+    "lint": "eslint .",
+    "test": "jest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "logger",
+    "frontend",
+    "debugging",
+    "error-tracking",
+    "console",
+    "developer-tools"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^4.3.0",
+    "vite-plugin-dts": "^2.3.0",
+    "eslint": "^8.38.0",
+    "@types/node": "^18.15.11",
+    "terser": "^5.16.8"
+  },
+  "peerDependencies": {},
+  "engines": {
+    "node": ">=14"
+  }
+}
