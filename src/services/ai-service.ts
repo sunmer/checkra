@@ -1,3 +1,4 @@
+import Settings from '../settings';
 import { ErrorInfo, AIFixResponse } from '../types';
 import { contentViewer } from '../ui/content-viewer';
 import { AIFixCache } from './ai-cache-service';
@@ -40,7 +41,7 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
     }
 
     // No cached fix, fetch from API
-    const response = await fetch(`https://logger-backend-psi.vercel.app/api/suggest/error`, {
+    const response = await fetch(`${Settings.API_URL}/suggest/error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(errorInfo),

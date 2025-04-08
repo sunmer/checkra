@@ -5,7 +5,6 @@ import { LoggerOptions } from './types';
  */
 export const defaultOptions: LoggerOptions = {
   renderErrorLogDiv: true,
-  errorLogDivId: 'error-log',
   style: {
     position: 'fixed',
     bottom: '0',
