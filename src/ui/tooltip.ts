@@ -20,7 +20,6 @@ export class Tooltip {
     this.tooltip.style.padding = '5px 8px';
     this.tooltip.style.borderRadius = '4px';
     this.tooltip.style.fontSize = '12px';
-    this.tooltip.style.fontFamily = 'monospace';
     this.tooltip.style.maxWidth = '400px';
     this.tooltip.style.wordWrap = 'break-word';
     this.tooltip.style.zIndex = '1001';

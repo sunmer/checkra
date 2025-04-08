@@ -45,8 +45,7 @@ export class ContentViewer {
       this.element.style.maxWidth = '80%';
       this.element.style.maxHeight = '80%';
       this.element.style.overflowY = 'auto';
-      this.element.style.fontFamily = 'monospace';
-      this.element.style.fontSize = '14px';
+      this.element.style.fontSize = '12px';
       this.element.style.display = 'none';
 
       // Add close button
@@ -102,20 +101,18 @@ export class ContentViewer {
     // Initialize HTML structure
     const htmlContent = `
       <div id="issue-section" style="margin-bottom:15px;">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Issue</h4>
+        <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Issue</h4>
         <p id="issue-content">Analyzing issue...</p>
       </div>
       <div id="fix-section" style="margin-bottom:15px;">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Fix</h4>
+        <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Fix</h4>
         <ul id="fix-content" style="margin-top:5px;padding-left:20px;">
           <li>Analyzing possible solutions...</li>
         </ul>
       </div>
       <div id="code-example-section">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Code Example</h4>
-        <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;margin:0;">
-          <code>Generating code example...</code>
-        </pre>
+        <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Code Example</h4>
+        <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Generating code example...</code></pre>
       </div>
     `;
     element.innerHTML = htmlContent;
