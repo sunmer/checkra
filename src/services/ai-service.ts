@@ -2,6 +2,7 @@ import Settings from '../settings';
 import { ErrorInfo, AIFixResponse } from '../types';
 import { contentViewer } from '../ui/content-viewer';
 import { AIFixCache } from './ai-cache-service';
+import { parseMarkdown } from './markdown-parser';
 
 /**
  * Fetches an AI-generated fix for an error.
@@ -35,8 +36,6 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
         contentViewer.updateCodeExample(cachedFix.codeExample);
       }
       
-      // If there was loading state shown, it should naturally 
-      // disappear as we populate the content
       return;
     }
 
@@ -55,105 +54,25 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-
-    // Object to store partially parsed data
-    let partialData: {
+    
+    // Object to store parsed data
+    let markdownData: {
       issue?: string;
       fix?: string[];
       codeExample?: string;
     } = {};
 
-    // Process the incoming stream
-    const processBuffer = () => {
-      // Extract issue if not already found
-      if (!partialData.issue) {
-        const issueMatch = buffer.match(/"issue"\s*:\s*"([^"]+)"/);
-        if (issueMatch) {
-          partialData.issue = issueMatch[1];
-          contentViewer.updateIssue(partialData.issue);
-        }
-      }
-
-      // Look for the fix array
-      if (!partialData.fix) {
-        try {
-          // First try to find the start and end of the "fix" array
-          const startMatch = buffer.match(/"fix"\s*:\s*\[/);
-          if (startMatch) {
-            const startIndex = buffer.indexOf(startMatch[0]) + startMatch[0].length;
-            let bracketCount = 1; // We're already inside one bracket
-            let endIndex = startIndex;
-
-            // Find the matching closing bracket for the array
-            for (let i = startIndex; i < buffer.length; i++) {
-              if (buffer[i] === '[') bracketCount++;
-              if (buffer[i] === ']') bracketCount--;
-
-              if (bracketCount === 0) {
-                endIndex = i + 1;
-                break;
-              }
-            }
-
-            // If we found a complete array
-            if (bracketCount === 0) {
-              const fixArrayStr = '[' + buffer.substring(startIndex, endIndex - 1) + ']';
-              try {
-                const fixArray = JSON.parse(fixArrayStr);
-                if (Array.isArray(fixArray)) {
-                  partialData.fix = fixArray;
-                  contentViewer.updateFix(fixArray);
-                }
-              } catch (e) {
-                // If parsing fails, we might have an incomplete array
-                console.log("Fix array not yet complete");
-              }
-            }
-          }
-        } catch (e) {
-          console.log("Still collecting fix data");
-        }
-      }
-
-      // Extract code example
-      if (!partialData.codeExample) {
-        try {
-          const codeExampleStartMatch = buffer.match(/"codeExample"\s*:\s*"/);
-          if (codeExampleStartMatch) {
-            const startIndex = buffer.indexOf(codeExampleStartMatch[0]) + codeExampleStartMatch[0].length;
-
-            // Find the end of the code example (looking for a quote that's not escaped)
-            let endIndex = -1;
-            let i = startIndex;
-            while (i < buffer.length) {
-              if (buffer[i] === '"' && buffer[i - 1] !== '\\') {
-                endIndex = i;
-                break;
-              }
-              i++;
-            }
-
-            if (endIndex > -1) {
-              partialData.codeExample = buffer.substring(startIndex, endIndex);
-              contentViewer.updateCodeExample(partialData.codeExample);
-            }
-          }
-        } catch (e) {
-          console.log("Still collecting code example data");
-        }
-      }
-    };
-
+    // Process incoming stream chunks
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
         console.log("Stream complete");
-        // Final processing of any remaining data
-        processBuffer();
+        // Final parsing of any remaining data
+        processMarkdownBuffer(buffer, markdownData);
         
         // Cache the complete fix
-        if (Object.keys(partialData).length > 0) {
-          cache.cacheFix(errorInfo, partialData as AIFixResponse);
+        if (Object.keys(markdownData).length > 0) {
+          cache.cacheFix(errorInfo, markdownData as AIFixResponse);
         }
         
         break;
@@ -162,7 +81,9 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
       console.log("Received chunk:", chunk.length, "bytes");
-      processBuffer();
+      
+      // Process markdown as it comes in
+      processMarkdownBuffer(buffer, markdownData);
     }
 
   } catch (error) {
@@ -170,3 +91,27 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
     contentViewer.showError(error instanceof Error ? error.message : String(error));
   }
 };
+
+/**
+ * Process the markdown buffer and update the UI
+ */
+function processMarkdownBuffer(buffer: string, markdownData: any): void {
+  // Parse the markdown content
+  const parsedData = parseMarkdown(buffer);
+  
+  // Update UI with any new content
+  if (parsedData.issue && parsedData.issue !== markdownData.issue) {
+    markdownData.issue = parsedData.issue;
+    contentViewer.updateIssue(parsedData.issue);
+  }
+  
+  if (parsedData.fix && JSON.stringify(parsedData.fix) !== JSON.stringify(markdownData.fix)) {
+    markdownData.fix = parsedData.fix;
+    contentViewer.updateFix(parsedData.fix);
+  }
+  
+  if (parsedData.codeExample && parsedData.codeExample !== markdownData.codeExample) {
+    markdownData.codeExample = parsedData.codeExample;
+    contentViewer.updateCodeExample(parsedData.codeExample);
+  }
+}

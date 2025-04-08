@@ -1,19 +1,24 @@
 import { ErrorInfo, AIFixResponse } from '../types';
 
 /**
- * Service for caching AI-generated fixes.
+ * A basic in-memory cache for AI-generated error fixes.
+ * Uses error message as a key to avoid duplicate API calls for similar errors.
  */
 export class AIFixCache {
   private static instance: AIFixCache;
-  private cache: Map<string, AIFixResponse> = new Map();
+  private cache: Map<string, AIFixResponse>;
+  private maxCacheSize: number;
 
   /**
    * Private constructor for singleton pattern.
    */
-  private constructor() {}
+  private constructor(maxCacheSize = 20) {
+    this.cache = new Map();
+    this.maxCacheSize = maxCacheSize;
+  }
 
   /**
-   * Gets the singleton instance of the cache.
+   * Get the singleton instance.
    */
   public static getInstance(): AIFixCache {
     if (!AIFixCache.instance) {
@@ -23,51 +28,49 @@ export class AIFixCache {
   }
 
   /**
-   * Generates a cache key for an error.
-   * Uses the error's content rather than a unique ID to deduplicate
-   * identical errors that may appear multiple times.
+   * Generate a unique cache key from error info.
+   * We primarily use the error message as it's the most unique identifier.
    */
   private generateCacheKey(errorInfo: ErrorInfo): string {
-    // Create a composite key from the error's details
-    const errorDetails = [
-      errorInfo.message,
-      errorInfo.fileName || '',
-      errorInfo.lineNumber || '',
-      errorInfo.columnNumber || '',
-      errorInfo.codeContext || ''
-    ].join('|');
-    
-    return errorDetails;
+    return `${errorInfo.message}-${errorInfo.fileName || ''}-${errorInfo.lineNumber || ''}`;
   }
 
   /**
-   * Gets a cached fix if it exists.
+   * Store a fix in the cache.
    */
-  public getCachedFix(errorInfo: ErrorInfo): AIFixResponse | undefined {
+  public cacheFix(errorInfo: ErrorInfo, fixData: AIFixResponse): void {
+    // Implement LRU-like behavior - if cache is full, remove oldest entry
+    if (this.cache.size >= this.maxCacheSize) {
+      const oldestKey = this.cache.keys().next().value;
+      if(oldestKey) {
+        this.cache.delete(oldestKey);
+      }
+    }
+
+    // Store the fix data
     const key = this.generateCacheKey(errorInfo);
-    return this.cache.get(key);
+    this.cache.set(key, fixData);
   }
 
   /**
-   * Stores a fix in the cache.
+   * Get a cached fix for the given error info, if it exists.
    */
-  public cacheFix(errorInfo: ErrorInfo, fixResponse: AIFixResponse): void {
+  public getCachedFix(errorInfo: ErrorInfo): AIFixResponse | null {
     const key = this.generateCacheKey(errorInfo);
-    this.cache.set(key, fixResponse);
+    return this.cache.has(key) ? this.cache.get(key) || null : null;
   }
 
   /**
-   * Checks if a fix is cached for the given error.
-   */
-  public hasCachedFix(errorInfo: ErrorInfo): boolean {
-    const key = this.generateCacheKey(errorInfo);
-    return this.cache.has(key);
-  }
-
-  /**
-   * Clears the entire cache.
+   * Clear all cached items.
    */
   public clearCache(): void {
     this.cache.clear();
+  }
+
+  /**
+   * Get the current size of the cache.
+   */
+  public size(): number {
+    return this.cache.size;
   }
 }

@@ -3,6 +3,7 @@ import { escapeHTML, createCloseButton } from './utils';
 
 /**
  * Class for managing the content viewer for displaying AI fixes and other content.
+ * Now optimized for streaming markdown responses.
  */
 export class ContentViewer {
   private element: HTMLDivElement | null = null;
@@ -31,7 +32,7 @@ export class ContentViewer {
       this.element = document.createElement('div');
       this.element.id = 'contentDiv';
 
-      // Add some basic styling
+      // Add styling
       this.element.style.position = 'fixed';
       this.element.style.top = '50%';
       this.element.style.left = '50%';
@@ -121,6 +122,12 @@ export class ContentViewer {
     this.issueContent = document.getElementById('issue-content');
     this.fixContent = document.getElementById('fix-content');
     this.codeExampleContent = document.getElementById('code-example-content');
+    
+    // Re-add close button
+    const closeButton = createCloseButton(() => {
+      this.hide();
+    });
+    element.appendChild(closeButton);
   }
 
   /**
@@ -138,7 +145,7 @@ export class ContentViewer {
   public updateFix(fixArray: string[]): void {
     if (this.fixContent) {
       let fixHtml = '';
-      fixArray.forEach(item => {
+      fixArray.forEach((item, index) => {
         fixHtml += `<li style="margin-bottom:5px;">${escapeHTML(item)}</li>`;
       });
       this.fixContent.innerHTML = fixHtml;
@@ -150,65 +157,26 @@ export class ContentViewer {
    */
   public updateCodeExample(codeExample: string): void {
     if (this.codeExampleContent) {
-      this.codeExampleContent.innerHTML = `<code>${escapeHTML(codeExample)}</code>`;
-    }
-  }
-
-  /**
-   * Updates the content viewer with the complete AIFixResponse.
-   */
-  public update(data: AIFixResponse): void {
-    const element = this.create();
-    element.style.display = 'block';
-
-    let htmlContent = '';
-
-    // Add "Issue" section if present
-    if (data.issue) {
-      htmlContent += `<div style="margin-bottom:15px;">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Issue</h4>
-        <p>${escapeHTML(data.issue)}</p>
-      </div>`;
-    }
-
-    // Add "Fix" section if present
-    if (data.fix && Array.isArray(data.fix)) {
-      htmlContent += `<div style="margin-bottom:15px;">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Fix</h4>
-        <ul style="margin-top:5px;padding-left:20px;">`;
+      // Remove any lingering markdown code block syntax
+      let cleanCode = codeExample;
       
-      data.fix.forEach(item => {
-        htmlContent += `<li style="margin-bottom:5px;">${escapeHTML(item)}</li>`;
-      });
-      
-      htmlContent += `</ul></div>`;
-    } else if (data.fix) {
-      htmlContent += `<div style="margin-bottom:15px;">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Fix</h4>
-        <pre style="white-space:pre-wrap;margin:0;">${escapeHTML(String(data.fix))}</pre>
-      </div>`;
-    }
-
-    // Add "Code Example" section if present
-    if (data.codeExample) {
-      htmlContent += `<div>
-        <h4 style="color:#6ab0ff;margin-bottom:5px;">Code Example</h4>
-        <pre style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;margin:0;">
-          <code>${escapeHTML(data.codeExample)}</code>
-        </pre>
-      </div>`;
-    }
-
-    // Update the contentDiv with the new HTML content
-    element.innerHTML = htmlContent;
-    
-    // Re-add close button
-    const closeButton = createCloseButton(() => {
-      if (this.element) {
-        this.element.style.display = 'none';
+      // Remove backticks from beginning/end if they somehow made it through
+      if (cleanCode.startsWith('```')) {
+        // Find the first newline after the opening backticks
+        const firstNewline = cleanCode.indexOf('\n');
+        if (firstNewline > 0) {
+          cleanCode = cleanCode.substring(firstNewline + 1);
+        } else {
+          cleanCode = cleanCode.substring(3); // Just remove the backticks
+        }
       }
-    });
-    element.appendChild(closeButton);
+      
+      if (cleanCode.endsWith('```')) {
+        cleanCode = cleanCode.substring(0, cleanCode.length - 3);
+      }
+      
+      this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode.trim())}</code>`;
+    }
   }
 
   /**
@@ -222,7 +190,6 @@ export class ContentViewer {
 
   /**
    * Cleans up event listeners when no longer needed.
-   * Should be called when the logger is being destroyed.
    */
   public destroy(): void {
     document.removeEventListener('mousedown', this.outsideClickHandler);
