@@ -31,14 +31,14 @@
     }
     button:hover { background-color: #2d3748; }
     
-    .log-btn { background-color: #3182ce; }
-    .log-btn:hover { background-color: #2c5282; }
-    
     .info-btn { background-color: #38b2ac; }
     .info-btn:hover { background-color: #2c7a7b; }
     
     .warn-btn { background-color: #ed8936; }
     .warn-btn:hover { background-color: #c05621; }
+
+    .error-btn { background-color: #ed3654; }
+    .error-btn:hover { background-color: #ed3654; }
     
  
   </style>
@@ -51,14 +51,11 @@
     <p>Click the buttons below to test different logger methods:</p>
     
     <div class="buttons">
-      <button id="log-btn" class="log-btn">console.log()</button>
-      <button id="info-btn" class="info-btn">console.info()</button>
       <button id="warn-btn" class="warn-btn">console.warn()</button>
       <button id="error-btn" class="error-btn">console.error()</button>
       <button id="group-btn">console.group()</button>
       <button id="groupEnd-btn">console.groupEnd()</button>
-      <button id="complex-btn">Log Complex Object</button>
-      <button id="throw-error-btn">Throw Error</button>
+      <button id="throw-error-btn" class="error-btn">Throw Error</button>
     </div>
   </div>
   
@@ -80,64 +77,44 @@ const logger = initLogger({
 });
 
 // Use like regular console, but with enhanced features
-logger.log('Hello world');
-logger.info('This is some information');
-logger.warn('This is a warning');
-logger.error('This is an error', new Error('Something went wrong'));</code></pre>
+console.log('Hello world');
+console.info('This is some information');
+console.warn('This is a warning');
+console.error('This is an error', new Error('Something went wrong'));</code></pre>
     </div>
   </div>
   
   <script type="module">
     // Import the logger from source
     import { initLogger } from '../src/index.ts';
-    
-    const output = document.getElementById('output');
-    const log = (message) => {
-      output.textContent += '\n' + message;
-    };
+
     
     // Initialize logger
     try {
-      log('Attempting to initialize logger...');
       
       const logger = initLogger({
         renderErrorLogDiv: true,
         startCollapsed: true
       });
       
-      log('Logger initialized successfully');
       
       // Set up button event listeners
-      document.getElementById('log-btn').addEventListener('click', () => {
-        logger.log('This is a test log message', { data: 'some test data' });
-        log('Log executed: logger.log()');
-      });
-      
-      document.getElementById('info-btn').addEventListener('click', () => {
-        logger.info('This is a test info message');
-        log('Info executed: logger.info()');
-      });
-      
       document.getElementById('warn-btn').addEventListener('click', () => {
-        logger.warn('This is a test warning message');
-        log('Warning executed: logger.warn()');
+        console.warn('This is a test warning message');
       });
       
       document.getElementById('error-btn').addEventListener('click', () => {
-        logger.error('This is a test error message', new Error('Test error'));
-        log('Error executed: logger.error()');
+        console.error('This is a test error message', new Error('Test error'));
       });
       
       document.getElementById('group-btn').addEventListener('click', () => {
-        logger.group('Test Group');
-        logger.log('This message is inside a group');
-        logger.info('Another grouped message');
-        log('Group started: logger.group()');
+        console.group('Test Group');
+        console.error('This error message is inside a group');
+        console.error('Another grouped error message');
       });
       
       document.getElementById('groupEnd-btn').addEventListener('click', () => {
-        logger.groupEnd();
-        log('Group ended: logger.groupEnd()');
+        console.groupEnd();
       });
       
       document.getElementById('complex-btn').addEventListener('click', () => {
@@ -163,24 +140,20 @@ logger.error('This is an error', new Error('Something went wrong'));</code></pre
           }
         };
         
-        logger.log('Complex Object Example:', complexObject);
-        log('Complex object logged');
+        console.log('Complex Object Example:', complexObject);
       });
       
       document.getElementById('throw-error-btn').addEventListener('click', () => {
-        log('Throwing an error...');
         try {
           // Create a deliberate error
           const nonExistentFunction = undefined;
           nonExistentFunction();
         } catch (error) {
-          logger.error('Caught an error:', error);
-          log(`Error caught and logged: ${error.message}`);
+          console.error('Caught an error:', error);
         }
       });
       
     } catch (error) {
-      log(`Error initializing logger: ${error.message}`);
       console.error(error);
     }
   </script>

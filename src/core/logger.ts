@@ -37,20 +37,27 @@ export function initLogger(options?: LoggerOptions): Logger {
   }
 
   // Save original console methods
-  const originalConsoleLog = console.log;
   const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
 
-  // Override console.log
-  console.log = function (...args: any[]): void {
+  // Override console.warn
+  console.warn = function (...args: any[]): void {
+    const msg = formatError(...args);
+
+    // Extract error information if there's an Error object
+    let errorInfo: ErrorInfo = { message: msg };
     for (const arg of args) {
-      if (arg instanceof Error && errorLog) {
-        const msg = formatError(arg);
-        const errorInfo = extractErrorInfo(arg);
-        errorLog.addError(msg, errorInfo);
-        errors.push(msg);
+      if (arg instanceof Error) {
+        errorInfo = extractErrorInfo(arg);
+        break;
       }
     }
-    originalConsoleLog.apply(console, args);
+
+    if (errorLog) {
+      errorLog.addError(msg, errorInfo);
+    }
+    errors.push(msg);
+    originalConsoleWarn.apply(console, args);
   };
 
   // Override console.error

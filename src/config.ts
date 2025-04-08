@@ -17,7 +17,7 @@ export const defaultOptions: LoggerOptions = {
     overflowY: 'auto',
     zIndex: '1000',
     padding: '20px 30px',
-    fontFamily: 'monospace'
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
   },
   attachToWindow: true,
   maxMessageLength: 100,
