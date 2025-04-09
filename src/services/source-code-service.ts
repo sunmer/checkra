@@ -63,7 +63,7 @@ export class SourceCodeService {
   /**
    * Generates HTML for source code display
    */
-  public generateSourceHTML(result: SourceCodeResult): string {
+  public generateSourceCodeHTML(result: SourceCodeResult): string {
     let sourceHTML = '<div style="position:relative;">';
     sourceHTML += `<h3 style="margin-top:0;color:#ccc;">${result.fileName}</h3>`;
     sourceHTML += '<pre style="margin:0;padding-bottom:20px;"><code>';

@@ -76,7 +76,7 @@ export class SourceViewer {
         errorInfo.codeContext = sourceResult.codeContext;
         
         // Generate HTML using the service
-        const sourceHTML = sourceCodeService.generateSourceHTML(sourceResult);
+        const sourceHTML = sourceCodeService.generateSourceCodeHTML(sourceResult);
         this.element!.innerHTML = sourceHTML;
         
         // Re-add close button
