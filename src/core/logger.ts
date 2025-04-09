@@ -1,6 +1,6 @@
 import { LoggerOptions, Logger, ErrorInfo } from '../types';
 import { defaultOptions } from '../config';
-import { ErrorLog } from '../ui/error-log';
+import { ErrorLog, errorSourceMap } from '../ui/error-log';
 import { tooltip } from '../ui/tooltip';
 import { sourceViewer } from '../ui/source-viewer';
 import { formatError, extractErrorInfo } from './error-handler';
@@ -19,7 +19,6 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
   // Store the original style config to ensure we can fully restore it
   const originalStyle = { ...config.style };
   const errors: string[] = [];
-  const sourceMap = new Map<string, ErrorInfo>();
   let errorLog: ErrorLog | null = null;
 
   // Save original console methods
@@ -94,13 +93,13 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
   // Create the logger object to return with cleanup function
   const loggerObj: Logger & { cleanup: () => void } = {
     get errorCount() {
-      return errorLog ? errorLog.getErrorCount() : 0;
+      return errorSourceMap.size;
     },
     get errors() {
       return errors;
     },
     get sourceMap() {
-      return errorLog ? errorLog.getSourceMap() : sourceMap;
+      return errorSourceMap;
     },
     showSource(errorId: string) {
       if (errorLog) {

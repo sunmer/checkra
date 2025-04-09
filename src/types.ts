@@ -67,5 +67,6 @@ export interface ErrorInfo {
 export interface AIFixResponse {
   issue?: string;
   fix?: string[] | any;
+  originalSource?: string;
   codeExample?: string;
 }
