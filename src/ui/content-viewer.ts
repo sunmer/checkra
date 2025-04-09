@@ -1,5 +1,5 @@
-import { AIFixResponse } from '../types';
 import { escapeHTML, createCloseButton } from './utils';
+import { AIFixResponse } from '../types';
 
 /**
  * Class for managing the content viewer for displaying AI fixes and other content.
@@ -11,6 +11,7 @@ export class ContentViewer {
   private fixContent: HTMLElement | null = null;
   private codeExampleContent: HTMLElement | null = null;
   private outsideClickHandler: (e: MouseEvent) => void;
+  private currentResponse: Partial<AIFixResponse> = {};
 
   constructor() {
     // Handler for outside clicks
@@ -128,6 +129,37 @@ export class ContentViewer {
       this.hide();
     });
     element.appendChild(closeButton);
+    
+    // Reset current response
+    this.currentResponse = {};
+  }
+
+  /**
+   * Updates the viewer with an AIFixResponse object.
+   * Can be called with partial data for streaming updates.
+   */
+  public updateWithResponse(response: Partial<AIFixResponse>): void {
+    // Update the current response with new data
+    this.currentResponse = { ...this.currentResponse, ...response };
+    
+    // Update individual sections if they exist in the response
+    if (response.issue !== undefined) {
+      this.updateIssue(response.issue);
+    }
+    
+    if (response.fix !== undefined) {
+      // Handle both string array and any other format
+      if (Array.isArray(response.fix)) {
+        this.updateFix(response.fix);
+      } else {
+        // Convert non-array fix to string and wrap in array
+        this.updateFix([String(response.fix)]);
+      }
+    }
+    
+    if (response.codeExample !== undefined) {
+      this.updateCodeExample(response.codeExample);
+    }
   }
 
   /**
@@ -137,6 +169,7 @@ export class ContentViewer {
     if (this.issueContent) {
       this.issueContent.textContent = issue;
     }
+    this.currentResponse.issue = issue;
   }
 
   /**
@@ -150,6 +183,7 @@ export class ContentViewer {
       });
       this.fixContent.innerHTML = fixHtml;
     }
+    this.currentResponse.fix = fixArray;
   }
 
   /**
@@ -177,6 +211,14 @@ export class ContentViewer {
       
       this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode.trim())}</code>`;
     }
+    this.currentResponse.codeExample = codeExample;
+  }
+
+  /**
+   * Gets the current AIFixResponse object.
+   */
+  public getCurrentResponse(): Partial<AIFixResponse> {
+    return { ...this.currentResponse };
   }
 
   /**
