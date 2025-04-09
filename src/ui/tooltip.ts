@@ -92,6 +92,23 @@ export class Tooltip {
 
   // Debounced version of updatePosition for performance
   private updatePositionHandler = debounce(this.updatePosition, 10);
+
+  /**
+   * Destroys the tooltip component, removing DOM elements and event listeners.
+   */
+  public destroy(): void {
+    // Remove event listeners
+    document.removeEventListener('mousemove', this.updatePositionHandler);
+    
+    // Remove the tooltip element from the DOM
+    if (this.tooltip && this.tooltip.parentNode) {
+      this.tooltip.parentNode.removeChild(this.tooltip);
+    }
+    
+    // Clear references
+    this.tooltip = null;
+    this.activeElement = null;
+  }
 }
 
 // Singleton instance
