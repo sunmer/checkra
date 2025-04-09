@@ -1,17 +1,20 @@
 import { escapeHTML, createCloseButton } from './utils';
-import { AIFixResponse } from '../types';
+import { AIFixResponse, ErrorInfo } from '../types';
+import { sourceCodeService } from '../services/source-code-service';
 
 /**
  * Class for managing the content viewer for displaying AI fixes and other content.
- * Now optimized for streaming markdown responses.
+ * Optimized for streaming markdown responses and improved source code display.
  */
 export class ContentViewer {
   private element: HTMLDivElement | null = null;
   private issueContent: HTMLElement | null = null;
   private fixContent: HTMLElement | null = null;
+  private originalSourceContent: HTMLElement | null = null;
   private codeExampleContent: HTMLElement | null = null;
   private outsideClickHandler: (e: MouseEvent) => void;
   private currentResponse: Partial<AIFixResponse> = {};
+  private currentErrorInfo: ErrorInfo | null = null;
 
   constructor() {
     // Handler for outside clicks
@@ -91,14 +94,24 @@ export class ContentViewer {
     element.innerHTML = `<div style="color:#ff6b6b;">Error: ${
       error instanceof Error ? error.message : String(error)
     }</div>`;
+    
+    // Re-add close button
+    const closeButton = createCloseButton(() => {
+      this.hide();
+    });
+    element.appendChild(closeButton);
   }
 
   /**
    * Initializes the content structure for streaming updates.
+   * @param errorInfo Optional error information to use for fetching source code
    */
-  public initStreamStructure(): void {
+  public async initStreamStructure(errorInfo?: ErrorInfo): Promise<void> {
     const element = this.create();
     element.style.display = 'block';
+
+    // Store error info for later use
+    this.currentErrorInfo = errorInfo || null;
 
     // Initialize HTML structure
     const htmlContent = `
@@ -112,6 +125,10 @@ export class ContentViewer {
           <li>Analyzing possible solutions...</li>
         </ul>
       </div>
+      <div id="original-source-section" style="margin-bottom:15px;">
+        <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Original Source</h4>
+        <pre id="original-source-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Loading original source code...</code></pre>
+      </div>
       <div id="code-example-section">
         <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Code Example</h4>
         <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Generating code example...</code></pre>
@@ -122,6 +139,7 @@ export class ContentViewer {
     // Store references to the content elements
     this.issueContent = document.getElementById('issue-content');
     this.fixContent = document.getElementById('fix-content');
+    this.originalSourceContent = document.getElementById('original-source-content');
     this.codeExampleContent = document.getElementById('code-example-content');
     
     // Re-add close button
@@ -132,6 +150,45 @@ export class ContentViewer {
     
     // Reset current response
     this.currentResponse = {};
+
+    // Update the original source if errorInfo is provided
+    if (errorInfo && this.originalSourceContent) {
+      await this.loadOriginalSource(errorInfo);
+    }
+  }
+
+  /**
+   * Loads and displays the original source code using sourceCodeService
+   * @param errorInfo Error information to use for fetching source code
+   */
+  private async loadOriginalSource(errorInfo: ErrorInfo): Promise<void> {
+    if (!this.originalSourceContent) return;
+
+    try {
+      // Show loading state
+      this.originalSourceContent.innerHTML = '<code>Loading original source code...</code>';
+      
+      // Use sourceCodeService to fetch source code
+      const sourceResult = await sourceCodeService.getSourceCode(errorInfo);
+      
+      if (sourceResult) {
+        // Update the errorInfo with context from the service
+        errorInfo.codeContext = sourceResult.codeContext;
+        
+        // Generate formatted HTML using the service
+        const sourceHTML = sourceCodeService.generateSourceHTML(sourceResult);
+        
+        // Update the original source content
+        this.originalSourceContent.innerHTML = sourceHTML;
+        
+        // Store the source code in the current response
+        this.currentResponse.originalSource = sourceResult.sourceCode;
+      } else {
+        this.originalSourceContent.innerHTML = '<code>Source code not available</code>';
+      }
+    } catch (error) {
+      this.originalSourceContent.innerHTML = `<code>Error loading source: ${error instanceof Error ? error.message : String(error)}</code>`;
+    }
   }
 
   /**
@@ -157,6 +214,10 @@ export class ContentViewer {
       }
     }
     
+    if (response.originalSource !== undefined) {
+      this.updateOriginalSource(response.originalSource);
+    }
+    
     if (response.codeExample !== undefined) {
       this.updateCodeExample(response.codeExample);
     }
@@ -178,12 +239,50 @@ export class ContentViewer {
   public updateFix(fixArray: string[]): void {
     if (this.fixContent) {
       let fixHtml = '';
-      fixArray.forEach((item, index) => {
+      fixArray.forEach((item) => {
         fixHtml += `<li style="margin-bottom:5px;">${escapeHTML(item)}</li>`;
       });
       this.fixContent.innerHTML = fixHtml;
     }
     this.currentResponse.fix = fixArray;
+  }
+
+  /**
+   * Updates the original source code in the streaming UI using the source code service
+   */
+  public async updateOriginalSource(originalSource: string): Promise<void> {
+    if (!this.originalSourceContent) return;
+    
+    if (this.currentErrorInfo) {
+      try {
+        // Create a source result object using the original source
+        const sourceResult = {
+          fileName: this.currentErrorInfo.fileName || 'unknown',
+          sourceCode: originalSource,
+          lines: originalSource.split('\n'),
+          codeContext: originalSource,
+          startLine: Math.max(0, (this.currentErrorInfo.lineNumber || 1) - 5),
+          endLine: (this.currentErrorInfo.lineNumber || 1) + 5,
+          lineNumber: this.currentErrorInfo.lineNumber || 1,
+          message: this.currentErrorInfo.message
+        };
+        
+        // Update errorInfo with the new code context
+        this.currentErrorInfo.codeContext = originalSource;
+        
+        // Generate HTML using the service
+        const sourceHTML = sourceCodeService.generateSourceHTML(sourceResult);
+        this.originalSourceContent.innerHTML = sourceHTML;
+      } catch (error) {
+        // Fallback to simple escaped display if service fails
+        this.originalSourceContent.innerHTML = `<code>${escapeHTML(originalSource.trim())}</code>`;
+      }
+    } else {
+      // No error info, just do simple escaped display
+      this.originalSourceContent.innerHTML = `<code>${escapeHTML(originalSource.trim())}</code>`;
+    }
+    
+    this.currentResponse.originalSource = originalSource;
   }
 
   /**
@@ -194,22 +293,27 @@ export class ContentViewer {
       // Remove any lingering markdown code block syntax
       let cleanCode = codeExample;
       
-      // Remove backticks from beginning/end if they somehow made it through
+      // Remove backticks and language identifier from beginning if present
       if (cleanCode.startsWith('```')) {
-        // Find the first newline after the opening backticks
         const firstNewline = cleanCode.indexOf('\n');
         if (firstNewline > 0) {
           cleanCode = cleanCode.substring(firstNewline + 1);
         } else {
-          cleanCode = cleanCode.substring(3); // Just remove the backticks
+          cleanCode = cleanCode.substring(3); // Just remove the opening backticks
         }
       }
       
+      // Remove closing backticks if present
       if (cleanCode.endsWith('```')) {
         cleanCode = cleanCode.substring(0, cleanCode.length - 3);
       }
       
-      this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode.trim())}</code>`;
+      // Trim any extra whitespace
+      cleanCode = cleanCode.trim();
+      
+      // Use syntax highlighting if we can determine the language
+      // For now, just use simple escaped HTML
+      this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode)}</code>`;
     }
     this.currentResponse.codeExample = codeExample;
   }
@@ -240,6 +344,14 @@ export class ContentViewer {
       this.element.parentNode.removeChild(this.element);
       this.element = null;
     }
+    
+    // Clear references
+    this.issueContent = null;
+    this.fixContent = null;
+    this.originalSourceContent = null;
+    this.codeExampleContent = null;
+    this.currentErrorInfo = null;
+    this.currentResponse = {};
   }
 }
 

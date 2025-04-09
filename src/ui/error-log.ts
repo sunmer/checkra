@@ -4,6 +4,9 @@ import { tooltip } from './tooltip';
 import { sourceViewer } from './source-viewer';
 import { fetchAIFix } from '../services/ai-service';
 
+// Create a centralized source map that can be imported by other files
+export const errorSourceMap = new Map<string, ErrorInfo>();
+
 /**
  * Class for managing the error log UI component.
  */
@@ -16,7 +19,6 @@ export class ErrorLog {
   private errorCount: number = 0;
   private originalStyle: Partial<CSSStyleDeclaration>;
   private config: LoggerOptions;
-  private sourceMap: Map<string, ErrorInfo> = new Map();
   private clickListener: (() => void) | null = null;
 
   /**
@@ -179,7 +181,7 @@ export class ErrorLog {
     
     // Generate a unique ID for this error
     const errorId = `error-${Date.now()}-${this.errorCount}`;
-    this.sourceMap.set(errorId, errorInfo);
+    errorSourceMap.set(errorId, errorInfo);
 
     if (this.errorList) {
       const li = document.createElement('li');
@@ -274,7 +276,7 @@ export class ErrorLog {
    * Shows the source code for an error.
    */
   public showSource(errorId: string): void {
-    const errorInfo = this.sourceMap.get(errorId);
+    const errorInfo = errorSourceMap.get(errorId);
     if (errorInfo) {
       sourceViewer.show(errorInfo);
     }
@@ -284,24 +286,10 @@ export class ErrorLog {
    * Gets an AI fix for an error.
    */
   private getAIFix(errorId: string): void {
-    const errorInfo = this.sourceMap.get(errorId);
+    const errorInfo = errorSourceMap.get(errorId);
     if (errorInfo) {
       fetchAIFix(errorInfo);
     }
-  }
-
-  /**
-   * Gets the current error count.
-   */
-  public getErrorCount(): number {
-    return this.errorCount;
-  }
-
-  /**
-   * Gets the source map.
-   */
-  public getSourceMap(): Map<string, ErrorInfo> {
-    return this.sourceMap;
   }
 
   /**
@@ -348,7 +336,7 @@ export class ErrorLog {
     this.closeButton = null;
     
     // Clear source map
-    this.sourceMap.clear();
+    errorSourceMap.clear();
     
     // Reset error count
     this.errorCount = 0;

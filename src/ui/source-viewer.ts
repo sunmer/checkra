@@ -1,6 +1,7 @@
 import { ErrorInfo } from '../types';
-import { escapeHTML, createCloseButton } from './utils';
+import { createCloseButton } from './utils';
 import { tooltip } from './tooltip';
+import { sourceCodeService } from '../services/source-code-service';
 
 /**
  * Class for managing the source code viewer functionality.
@@ -65,73 +66,30 @@ export class SourceViewer {
 
     if (!this.element) this.create();
     
-    if (!errorInfo || !errorInfo.fileName) {
-      this.element!.innerHTML = '<div>Source information not available</div>';
-      this.element!.style.display = 'block';
-      return;
-    }
-
     try {
-      // Try to fetch the source file
-      const response = await fetch(errorInfo.fileName);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch source: ${response.status} ${response.statusText}`);
-      }
-
-      const sourceCode = await response.text();
-      const lines = sourceCode.split('\n');
-
-      // Create source view with line numbers
-      let sourceHTML = '<div style="position:relative;">';
-      sourceHTML += `<h3 style="margin-top:0;color:#ccc;">${errorInfo.fileName}</h3>`;
-      sourceHTML += '<pre style="margin:0;padding-bottom:20px;"><code>';
-
-      // Determine range of lines to show (context around the error)
-      const lineNumber = errorInfo.lineNumber || 0;
-      const startLine = Math.max(0, lineNumber - 5);
-      const endLine = Math.min(lines.length, lineNumber + 5);
-
-      // Extract the code context to include with error info
-      const codeContext = lines.slice(startLine, endLine).join('\n');
-
-      // Update errorInfo with the code context
-      errorInfo.codeContext = codeContext;
-
-      // Add line numbers and code
-      for (let i = startLine; i < endLine; i++) {
-        const lineNum = i + 1;
-        const isErrorLine = lineNum === lineNumber;
-        const lineStyle = isErrorLine ?
-          'background-color:rgba(255,0,0,0.2);font-weight:bold;' : '';
-
-        sourceHTML += `<div style="display:flex;${lineStyle}">`;
-        sourceHTML += `<div style="color:#666;text-align:right;padding-right:10px;user-select:none;width:30px;">${lineNum}</div>`;
-        sourceHTML += `<div style="white-space:pre;">${escapeHTML(lines[i] || '')}</div>`;
-        sourceHTML += '</div>';
-      }
-
-      sourceHTML += '</code></pre>';
-
-      // Add error message
-      if (errorInfo.message) {
-        sourceHTML += `<div style="color:#ff6b6b;margin-top:10px;">Error: ${escapeHTML(errorInfo.message)}</div>`;
-      }
-
-      this.element!.innerHTML = sourceHTML;
+      const sourceResult = await sourceCodeService.getSourceCode(errorInfo);
       
-      // Re-add close button
-      const closeButton = createCloseButton(() => {
-        if (this.element) {
-          this.element.style.display = 'none';
-        }
-      });
-      this.element!.appendChild(closeButton);
-      
-      this.element!.style.display = 'block';
+      if (!sourceResult) {
+        this.element!.innerHTML = '<div>Source information not available</div>';
+      } else {
+        // Update the errorInfo with code context from the service
+        errorInfo.codeContext = sourceResult.codeContext;
+        
+        // Generate HTML using the service
+        const sourceHTML = sourceCodeService.generateSourceHTML(sourceResult);
+        this.element!.innerHTML = sourceHTML;
+        
+        // Re-add close button
+        const closeButton = createCloseButton(() => {
+          this.hide();
+        });
+        this.element!.appendChild(closeButton);
+      }
     } catch (error) {
       this.element!.innerHTML = `<div>Error loading source: ${error instanceof Error ? error.message : String(error)}</div>`;
-      this.element!.style.display = 'block';
     }
+    
+    this.element!.style.display = 'block';
   }
 
   /**
