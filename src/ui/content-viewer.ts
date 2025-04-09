@@ -176,7 +176,7 @@ export class ContentViewer {
         errorInfo.codeContext = sourceResult.codeContext;
         
         // Generate formatted HTML using the service
-        const sourceHTML = sourceCodeService.generateSourceHTML(sourceResult);
+        const sourceHTML = sourceCodeService.generateSourceCodeHTML(sourceResult);
         
         // Update the original source content
         this.originalSourceContent.innerHTML = sourceHTML;
@@ -271,7 +271,7 @@ export class ContentViewer {
         this.currentErrorInfo.codeContext = originalSource;
         
         // Generate HTML using the service
-        const sourceHTML = sourceCodeService.generateSourceHTML(sourceResult);
+        const sourceHTML = sourceCodeService.generateSourceCodeHTML(sourceResult);
         this.originalSourceContent.innerHTML = sourceHTML;
       } catch (error) {
         // Fallback to simple escaped display if service fails
@@ -287,35 +287,107 @@ export class ContentViewer {
 
   /**
    * Updates code example content in the streaming UI.
+   * Now with smart diff highlighting against the original source.
    */
   public updateCodeExample(codeExample: string): void {
-    if (this.codeExampleContent) {
-      // Remove any lingering markdown code block syntax
-      let cleanCode = codeExample;
-      
-      // Remove backticks and language identifier from beginning if present
-      if (cleanCode.startsWith('```')) {
-        const firstNewline = cleanCode.indexOf('\n');
-        if (firstNewline > 0) {
-          cleanCode = cleanCode.substring(firstNewline + 1);
-        } else {
-          cleanCode = cleanCode.substring(3); // Just remove the opening backticks
-        }
+    if (!this.codeExampleContent) return;
+    
+    // Remove any lingering markdown code block syntax
+    let cleanCode = codeExample;
+    
+    // Remove backticks and language identifier from beginning if present
+    if (cleanCode.startsWith('```')) {
+      const firstNewline = cleanCode.indexOf('\n');
+      if (firstNewline > 0) {
+        cleanCode = cleanCode.substring(firstNewline + 1);
+      } else {
+        cleanCode = cleanCode.substring(3); // Just remove the opening backticks
       }
-      
-      // Remove closing backticks if present
-      if (cleanCode.endsWith('```')) {
-        cleanCode = cleanCode.substring(0, cleanCode.length - 3);
+    }
+    
+    // Remove closing backticks if present
+    if (cleanCode.endsWith('```')) {
+      cleanCode = cleanCode.substring(0, cleanCode.length - 3);
+    }
+    
+    // Trim any extra whitespace
+    cleanCode = cleanCode.trim();
+    
+    // Check if we have original source to compare against
+    const originalSource = this.currentResponse.originalSource;
+    
+    if (originalSource && cleanCode) {
+      try {
+        // Generate diff highlighted HTML
+        const diffHtml = this.generateDiffHighlightedHTML(originalSource, cleanCode);
+        this.codeExampleContent.innerHTML = diffHtml;
+      } catch (error) {
+        // Fallback to simple display if diff generation fails
+        this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode)}</code>`;
+        console.error('Error generating diff:', error);
       }
-      
-      // Trim any extra whitespace
-      cleanCode = cleanCode.trim();
-      
-      // Use syntax highlighting if we can determine the language
-      // For now, just use simple escaped HTML
+    } else {
+      // No original source, just display the code example
       this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode)}</code>`;
     }
+    
     this.currentResponse.codeExample = codeExample;
+  }
+
+  /**
+   * Generates HTML with intelligent diff highlighting between original and modified code.
+   * Preserves indentation while highlighting actual code changes.
+   * Only the specific changes will get a green background.
+   */
+  private generateDiffHighlightedHTML(originalCode: string, modifiedCode: string): string {
+    // For comparison, normalize the code (remove whitespace but keep track of original lines)
+    const normalizeForComparison = (code: string): {normalized: string[], original: string[]} => {
+      const original = code.split('\n').filter(line => line.trim().length > 0);
+      const normalized = original.map(line => this.normalizeCodeLine(line));
+      return { normalized, original };
+    };
+    
+    const original = normalizeForComparison(originalCode);
+    const modified = normalizeForComparison(modifiedCode);
+    
+    let diffHtml = '<pre style="margin:0;"><code style="display:block;">';
+    
+    // Process the modified code line by line
+    for (let i = 0; i < modified.original.length; i++) {
+      const modifiedLine = modified.original[i];
+      const normalizedModifiedLine = modified.normalized[i];
+      
+      // Find if this line exists in original code (ignoring whitespace)
+      const isNewOrChanged = !original.normalized.some(origLine => 
+        this.compareCodeLines(origLine, normalizedModifiedLine)
+      );
+      
+      // Apply green background only to new or changed lines
+      const lineStyle = isNewOrChanged ? 
+        'background-color:rgba(0,128,0,0.2);' : '';
+      
+      // Add the line with proper indentation preserved
+      diffHtml += `<div style="white-space:pre;${lineStyle}">${escapeHTML(modifiedLine)}</div>`;
+    }
+    
+    diffHtml += '</code></pre>';
+    return diffHtml;
+  }
+  
+  /**
+   * Normalizes a code line for comparison while preserving the original formatting
+   */
+  private normalizeCodeLine(line: string): string {
+    return line.replace(/\s+/g, '') // Remove all whitespace
+               .replace(/\/\/.*$/, ''); // Remove comments
+  }
+  
+  /**
+   * Compares two already normalized code lines.
+   * @returns true if the lines are essentially the same code
+   */
+  private compareCodeLines(line1: string, line2: string): boolean {
+    return line1 === line2;
   }
 
   /**

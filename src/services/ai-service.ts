@@ -43,7 +43,7 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
 
     if (sourceResult) {
       const sourceCode = sourceCodeService.generateSourceCode(sourceResult);
-      sourceCodeService.generateSourceHTML(sourceResult);
+      sourceCodeService.generateSourceCodeHTML(sourceResult);
 
       // No cached fix, fetch from API
       const response = await fetch(`${Settings.API_URL}/suggest/error`, {
