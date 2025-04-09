@@ -17,6 +17,7 @@ export class ErrorLog {
   private originalStyle: Partial<CSSStyleDeclaration>;
   private config: LoggerOptions;
   private sourceMap: Map<string, ErrorInfo> = new Map();
+  private clickListener: (() => void) | null = null;
 
   /**
    * Creates a new ErrorLog instance.
@@ -81,13 +82,15 @@ export class ErrorLog {
     this.updateStyle();
 
     // When clicking the error log div, toggle its state
+    this.clickListener = () => {
+      if (!this.isExpanded) {
+        this.isExpanded = true;
+        this.updateStyle();
+      }
+    };
+    
     if (this.errorLogDiv) {
-      this.errorLogDiv.addEventListener('click', () => {
-        if (!this.isExpanded) {
-          this.isExpanded = true;
-          this.updateStyle();
-        }
-      });
+      this.errorLogDiv.addEventListener('click', this.clickListener);
     }
 
     // Append the error log div once the DOM is ready
@@ -299,5 +302,55 @@ export class ErrorLog {
    */
   public getSourceMap(): Map<string, ErrorInfo> {
     return this.sourceMap;
+  }
+
+  /**
+   * Destroys the error log component, removing all DOM elements and event listeners.
+   */
+  public destroy(): void {
+    // Remove event listeners
+    if (this.errorLogDiv && this.clickListener) {
+      this.errorLogDiv.removeEventListener('click', this.clickListener);
+      this.clickListener = null;
+    }
+    
+    if (this.closeButton) {
+      // Clone and replace to remove all event listeners
+      const oldCloseButton = this.closeButton;
+      this.closeButton = oldCloseButton.cloneNode(true) as HTMLSpanElement;
+      if (oldCloseButton.parentNode) {
+        oldCloseButton.parentNode.replaceChild(this.closeButton, oldCloseButton);
+      }
+    }
+
+    // Remove tooltip event listeners from all error message spans
+    if (this.errorList) {
+      const errorMessages = this.errorList.querySelectorAll('.error-message');
+      errorMessages.forEach(msgElem => {
+        // Clone and replace to remove all event listeners
+        const oldMsgElem = msgElem;
+        const newMsgElem = oldMsgElem.cloneNode(true);
+        if (oldMsgElem.parentNode) {
+          oldMsgElem.parentNode.replaceChild(newMsgElem, oldMsgElem);
+        }
+      });
+    }
+
+    // Remove the error log div from the DOM
+    if (this.errorLogDiv && this.errorLogDiv.parentNode) {
+      this.errorLogDiv.parentNode.removeChild(this.errorLogDiv);
+    }
+
+    // Clear references
+    this.errorLogDiv = null;
+    this.errorList = null;
+    this.errorCountBadge = null;
+    this.closeButton = null;
+    
+    // Clear source map
+    this.sourceMap.clear();
+    
+    // Reset error count
+    this.errorCount = 0;
   }
 }
