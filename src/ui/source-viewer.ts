@@ -43,7 +43,7 @@ export class SourceViewer {
     this.element.style.maxHeight = '80%';
     this.element.style.overflowY = 'auto';
     this.element.style.fontFamily = 'monospace';
-    this.element.style.fontSize = '14px';
+    this.element.style.fontSize = '12px';
     this.element.style.display = 'none';
 
     // Add close button

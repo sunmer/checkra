@@ -40,7 +40,8 @@
     .error-btn { background-color: #ed3654; }
     .error-btn:hover { background-color: #ed3654; }
     
- 
+    .nested-error-btn { background-color: #9c2292; }
+    .nested-error-btn:hover { background-color: #7c1b72; }
   </style>
 </head>
 <body>
@@ -59,6 +60,7 @@
       <button id="range-error-btn" class="error-btn">Range Error</button>
       <button id="group-btn">console.group()</button>
       <button id="groupEnd-btn">console.groupEnd()</button>
+      <button id="nested-error-btn" class="nested-error-btn">Nested Error</button>
     </div>
   </div>
   
@@ -90,97 +92,10 @@ console.error('This is an error', new Error('Something went wrong'));</code></pr
   <script type="module">
     // Import the logger from source
     import { initLogger } from '../src/index.ts';
-
+    import { setupDemo } from '../src/demo.ts';
     
-    // Initialize logger
-    try {
-      
-      const logger = initLogger({
-        renderErrorLogDiv: true,
-        startCollapsed: true
-      });
-      
-      
-      // Set up button event listeners
-      document.getElementById('warn-btn').addEventListener('click', () => {
-        // Warning from using a deprecated method
-        const obj = {};
-        Object.defineProperty(obj, 'prop', {
-          get: function() {
-            console.warn('Property "prop" is deprecated and will be removed in future versions');
-            return 'deprecated value';
-          }
-        });
-        const value = obj.prop;
-        console.log('Retrieved value:', value);
-      });
-      
-      document.getElementById('error-btn').addEventListener('click', () => {
-        // Error from trying to access a property on null
-        const user = null;
-        try {
-          console.log(user.name); // This will throw an error
-        } catch (error) {
-          console.error('Failed to access user data:', error);
-        }
-      });
-      
-      document.getElementById('reference-error-btn').addEventListener('click', () => {
-        // ReferenceError: trying to access an undefined variable
-        try {
-          console.log(undefinedVariable); // Variable doesn't exist
-        } catch (error) {
-          console.error('Reference error caught:', error);
-        }
-      });
-      
-      document.getElementById('type-error-btn').addEventListener('click', () => {
-        // TypeError: calling a method on the wrong type
-        try {
-          const num = 42;
-          num.toUpperCase(); // Numbers don't have toUpperCase method
-        } catch (error) {
-          console.error('Type error caught:', error);
-        }
-      });
-      
-      document.getElementById('syntax-error-btn').addEventListener('click', () => {
-        // SyntaxError: using eval with invalid syntax
-        try {
-          eval('if (true) { console.log("Missing closing brace"');
-        } catch (error) {
-          console.error('Syntax error caught:', error);
-        }
-      });
-      
-      document.getElementById('range-error-btn').addEventListener('click', () => {
-        // RangeError: invalid array length
-        try {
-          const arr = new Array(-1); // Negative array length is invalid
-        } catch (error) {
-          console.error('Range error caught:', error);
-        }
-      });
-      
-      document.getElementById('group-btn').addEventListener('click', () => {
-        console.group('Error Group');
-        try {
-          // Nested error in a group
-          const obj = {};
-          obj.nonExistentMethod();
-        } catch (error) {
-          console.error('Error in group:', error);
-        }
-        console.log('Additional context information');
-      });
-      
-      document.getElementById('groupEnd-btn').addEventListener('click', () => {
-        console.groupEnd();
-      });
-      
-    } catch (error) {
-      console.error(error);
-    }
+    // Initialize demo when DOM is loaded
+    document.addEventListener('DOMContentLoaded', setupDemo);
   </script>
 </body>
 </html>
