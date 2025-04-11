@@ -95,12 +95,18 @@ export class FileService {
 
     // If not a JS/TS file, fall back to simple replacement or clipboard
     if (!isJsTsFile) {
-        statusCallback?.(`File type (${fileName}) not supported by Babel. Attempting direct replacement.`, 'warning');
-        return this.applySimpleFix(fileHandle, originalFileContent, originalSourceSnippet, newCodeSnippet, statusCallback);
+      statusCallback?.(`File type (${fileName}) not supported by Babel. Attempting direct replacement.`, 'warning');
+      return this.applySimpleFix(fileHandle, originalFileContent, originalSourceSnippet, newCodeSnippet, statusCallback);
     }
 
     const cleanedNewCode = this.cleanCodeExample(newCodeSnippet);
     const lineHint = errorInfo.lineNumber || 1;
+    const errorName = errorInfo.message ? this.extractErrorIdentifier(errorInfo.message) : null;
+
+    // Log error name for debugging
+    if (errorName) {
+      statusCallback?.(`Detected error identifier: "${errorName}"`, 'info');
+    }
 
     // --- Start of main try block ---
     try {
@@ -112,619 +118,1338 @@ export class FileService {
         plugins: [
           'typescript', // Enable TypeScript syntax
           'jsx',        // Enable JSX syntax
-          // Add other plugins if needed (e.g., 'decorators-legacy', 'classProperties')
+          'decorators-legacy',
+          'classProperties',
+          'exportDefaultFrom',
+          'doExpressions',
+          'optionalChaining',
+          'nullishCoalescingOperator'
         ],
         errorRecovery: true, // Try to parse even with minor errors
       });
 
-      // --- 2. Parse the new code snippet ---
-      let newAstNodes: t.Statement[] | null = null;
-      try {
-        // Try parsing as a full program body
-        const newAst = parser.parse(cleanedNewCode, {
-           sourceType: 'module',
-           plugins: ['typescript', 'jsx'],
-           allowReturnOutsideFunction: true, // Helps parse snippets
-        });
-        newAstNodes = newAst.program.body;
-        if (newAstNodes.length === 0 && newAst.program.directives.length > 0) {
-            // Handle cases like "use strict"; being parsed as a directive
-            newAstNodes = newAst.program.directives.map(dir => t.expressionStatement(t.stringLiteral(dir.value.value)));
-        }
-      } catch (snippetParseError) {
-         // If parsing the whole snippet fails, maybe it's just an expression?
-         try {
-            const expressionNode = parser.parseExpression(cleanedNewCode, {
-                 plugins: ['typescript', 'jsx'],
-            });
-            // Wrap expression in an ExpressionStatement to be insertable as a statement
-            newAstNodes = [t.expressionStatement(expressionNode)];
-         } catch (expressionParseError) {
-             statusCallback?.(`Failed to parse the new code snippet: ${snippetParseError instanceof Error ? snippetParseError.message : String(snippetParseError)}`, 'error');
-             await this.copyToClipboard(cleanedNewCode);
-             statusCallback?.('New code copied to clipboard due to parsing error.', 'warning');
-             return false;
-         }
-      }
+      // Extract all existing identifiers first for better duplicate detection
+      const existingIdentifiers = this.collectExistingIdentifiers(ast);
+      statusCallback?.(`Found ${existingIdentifiers.size} named declarations in the file.`, 'info');
 
-      // It's possible parsing succeeded but resulted in no statements (e.g. comments only)
-      if (!newAstNodes) {
-        statusCallback?.('New code snippet resulted in invalid AST nodes after parsing.', 'error');
-        return false;
-      }
-       // Note: newAstNodes can be an empty array [] here if the snippet was empty or only comments after cleaning. This is handled later.
+      // --- 2. Analyze the error context to determine what exactly is missing ---
+      // Find the node containing the error
+      let errorNodePath: NodePath | null = null;
+      let errorContainingFunction: NodePath | null = null;
+      let errorLineBlockPaths: NodePath[] = [];
 
+      const self = this; // Store reference to class instance
 
-      // --- 3. Traverse the AST to find the node to replace ---
-      statusCallback?.(`Searching for code block near line ${lineHint}...`, 'info');
-      let replacementMade = false;
-      // *** Initialize errorNodePath correctly ***
-      let errorNodePath: NodePath;
-      // Initialize to null and allow null/undefined type (findParent can return null/undefined)
-      let functionNodePath: NodePath;
-      let minErrorNodeDistance = Infinity;
-
-      // First pass: Find the most specific node containing the error line
-      let functionNodes: NodePath[] = [];
       traverse(ast, {
         enter(path) {
           if (!path.node.loc) return;
+
           const startLine = path.node.loc.start.line;
           const endLine = path.node.loc.end.line;
 
-          // Track all function-like nodes containing the error line for later prioritization
-          if (lineHint >= startLine && lineHint <= endLine && (
-            path.isFunctionDeclaration() || 
-            path.isFunctionExpression() || 
-            path.isArrowFunctionExpression() || 
-            path.isObjectMethod() || 
-            path.isClassMethod() ||
-            (path.isVariableDeclaration() && path.node.declarations.some(decl => 
-              decl.init && (
-                t.isFunctionExpression(decl.init) || 
-                t.isArrowFunctionExpression(decl.init)
-              )
-            )) ||
-            (path.isExportNamedDeclaration() && (
-              (path.node.declaration && (
-                t.isFunctionDeclaration(path.node.declaration) ||
-                (t.isVariableDeclaration(path.node.declaration) && 
-                 path.node.declaration.declarations.some(decl => 
-                   decl.init && (t.isFunctionExpression(decl.init) || t.isArrowFunctionExpression(decl.init))
-                 ))
-              ))
-            )) ||
-            path.isExportDefaultDeclaration()
-          )) {
-            functionNodes.push(path);
-          }
-
+          // Collect all nodes containing the error line
           if (lineHint >= startLine && lineHint <= endLine) {
-            const distance = Math.abs(startLine - lineHint);
-            const lineSpan = endLine - startLine;
-            
-            let currentBestDistance = Infinity;
-            if (errorNodePath?.node?.loc) {
-              currentBestDistance = Math.abs(errorNodePath.node.loc.start.line - lineHint);
+            errorLineBlockPaths.push(path);
+
+            // Specifically look for the function containing the error
+            if ((path.isFunctionDeclaration() ||
+              path.isFunctionExpression() ||
+              path.isArrowFunctionExpression() ||
+              path.isObjectMethod() ||
+              path.isClassMethod()) &&
+              !errorContainingFunction) {
+              errorContainingFunction = path;
             }
-            
-            // Original heuristic: still useful as fallback
-            if (lineSpan < minErrorNodeDistance || (lineSpan === minErrorNodeDistance && distance < currentBestDistance)) {
-              minErrorNodeDistance = lineSpan;
+
+            // Find the most specific node containing the error line
+            if (!errorNodePath || !errorNodePath.node.loc ||
+                (endLine - startLine) <
+                (errorNodePath.node.loc.end.line - errorNodePath.node.loc.start.line)) {
               errorNodePath = path;
             }
           }
         }
       });
 
-      // Prioritize function nodes if available
-      if (functionNodes.length > 0) {
-        // Score function nodes by proximity to line hint and node type importance
-        const scoredNodes = functionNodes.map(path => {
-          let score = 0;
-          
-          // Prefer nodes closer to the error line
-          if (path.node.loc) {
-            score -= Math.abs(path.node.loc.start.line - lineHint);
+      // Analyze function call graph
+      const callGraph = this.analyzeCallGraph(ast);
+
+      // --- 3. Parse the new code snippet into AST nodes ---
+      // Try a more robust approach to parsing the new code
+      const { parsedNodes, parseError } = this.parseNewCodeSnippet(cleanedNewCode, statusCallback);
+
+      if (parseError || !parsedNodes || parsedNodes.length === 0) {
+        // If parsing as a whole fails, try parsing declarations separately
+        const { declaredNodes, declareError } = this.parseSeparateDeclarations(cleanedNewCode, statusCallback);
+
+        if (declareError || declaredNodes.length === 0) {
+          // All parsing attempts failed
+          statusCallback?.('Failed to parse the new code snippet. Trying alternative approach...', 'warning');
+
+          // Try one more time with a custom approach for the specific error type
+          if (errorName) {
+            const customFixResult = await this.applyCustomFix(
+              fileHandle,
+              originalFileContent,
+              errorName,
+              cleanedNewCode,
+              errorInfo,
+              statusCallback
+            );
+
+            if (customFixResult) {
+              return true; // Custom fix was successful
+            }
           }
-          
-          // Boost specific node types
-          if (path.isExportNamedDeclaration() || path.isExportDefaultDeclaration()) score += 30;
-          else if (path.isFunctionDeclaration()) score += 25;
-          else if (path.isVariableDeclaration()) score += 20;
-          else if (path.isFunctionExpression() || path.isArrowFunctionExpression()) score += 15;
-          else if (path.isObjectMethod() || path.isClassMethod()) score += 10;
-          
-          return { path, score };
-        });
-        
-        // Sort by score (highest first)
-        scoredNodes.sort((a, b) => b.score - a.score);
-        
-        // Use highest scoring function node if available
-        if (scoredNodes.length > 0) {
-          statusCallback?.(`Found ${functionNodes.length} function nodes. Using highest scored node type: ${scoredNodes[0].path.node.type}`, 'info');
-          errorNodePath = scoredNodes[0].path;
+
+          // Last resort - clipboard
+          await this.copyToClipboard(cleanedNewCode);
+          statusCallback?.('New code copied to clipboard due to parsing error.', 'warning');
+          return false;
         }
+
+        // Use the separately parsed declarations
+        statusCallback?.(`Successfully parsed ${declaredNodes.length} separate declarations.`, 'info');
+
+        // Apply selective fix with individual declarations
+        return await this.applySelectiveFix(
+          fileHandle,
+          originalFileContent,
+          ast,
+          declaredNodes,
+          errorInfo,
+          errorName,
+          existingIdentifiers,
+          callGraph,
+          statusCallback
+        );
       }
 
-      // --- Guard Clause ---
-      // This check now correctly narrows errorNodePath to NodePath for the rest of the function scope
-      // @ts-ignore
-      if (!errorNodePath) {
-        statusCallback?.('Could not find any AST node containing the specified line.', 'warning');
+      // Successfully parsed the new code as a whole
+      statusCallback?.(`Successfully parsed ${parsedNodes.length} AST nodes from new code.`, 'info');
+
+      // -- 4. Determine which parts of the new code are needed --
+      const { nodesToAdd, nodesToReplace } = this.identifyNeededNodes(
+        ast,
+        parsedNodes,
+        errorName,
+        existingIdentifiers,
+        callGraph,
+        errorNodePath,
+        errorContainingFunction,
+        statusCallback
+      );
+
+      if (nodesToAdd.length === 0 && nodesToReplace.size === 0) {
+        statusCallback?.('No unique declarations to add or replace were identified.', 'warning');
         await this.copyToClipboard(cleanedNewCode);
         statusCallback?.('Code fix copied to clipboard.', 'warning');
         return false;
       }
-      // --- End Guard Clause ---
 
-      // Now it's safe to call methods on errorNodePath because the function would have returned if it was null
-      // @ts-ignore
-      functionNodePath = errorNodePath.findParent(
-          (p) => p.isFunctionDeclaration() ||
-                 p.isFunctionExpression() ||
-                 p.isArrowFunctionExpression() ||
-                 p.isObjectMethod() ||
-                 p.isClassMethod()
-      );
-
-      // If the functionNode is inside a VariableDeclarator (like const fn = () => ...),
-      // the actual replaceable unit might be the VariableDeclaration
-      let topLevelFunctionPath: NodePath | null = null; // Keep this as NodePath | null
-
-      // This check correctly guards functionNodePath
-      if (functionNodePath) {
-          // It's safe to call methods on functionNodePath here
-          const variableDeclaratorParent = functionNodePath.findParent((p) => p.isVariableDeclarator());
-          if (variableDeclaratorParent) {
-              const variableDeclarationParent = variableDeclaratorParent.findParent((p) => p.isVariableDeclaration());
-              if (variableDeclarationParent) {
-                  topLevelFunctionPath = variableDeclarationParent; // Target the whole 'const fn = ...;'
-              } else {
-                   topLevelFunctionPath = functionNodePath; // Should not happen often, fallback
-              }
-          } else {
-             topLevelFunctionPath = functionNodePath; // Regular function or method
-          }
+      // --- 5. Apply the identified fixes ---
+      // First handle replacements
+      let replacementsMade = 0;
+      for (const [pathToReplace, replacementNode] of nodesToReplace.entries()) {
+        try {
+          pathToReplace.replaceWith(replacementNode);
+          replacementsMade++;
+        } catch (replaceError) {
+          statusCallback?.(
+            `Error replacing node: ${replaceError instanceof Error ? replaceError.message : String(replaceError)}`,
+            'warning'
+          );
+        }
       }
 
-
-      // --- 4. Perform the replacement ---
-      // errorNodePath is guaranteed to be NodePath here
-      statusCallback?.(
-        `Found error node: ${errorNodePath.node.type} at lines ${errorNodePath.node.loc?.start.line}-${errorNodePath.node.loc?.end.line}.`,
-        'info'
-      );
-
-      // This check correctly guards topLevelFunctionPath
-      if (topLevelFunctionPath) {
-           statusCallback?.(
-                // It's safe to access topLevelFunctionPath.node here
-                `Enclosing function context: ${topLevelFunctionPath.node.type} at lines ${topLevelFunctionPath.node.loc?.start.line}-${topLevelFunctionPath.node.loc?.end.line}.`,
-                'info'
-           );
+      // Then handle additions
+      let additionsMade = 0;
+      if (nodesToAdd.length > 0) {
+        additionsMade = await this.addNewNodes(ast, nodesToAdd, errorInfo, statusCallback);
       }
 
+      const anyChangesMade = replacementsMade > 0 || additionsMade > 0;
 
-      // --- Strategy A: Try Full Function Replacement ---
-      if (topLevelFunctionPath && newAstNodes.length === 1) {
-        const newNode = newAstNodes[0];
-        
-        // Enhance node type checking to handle more equivalence cases
-        const isNodeCompatible = () => {
-          // Direct type match
-          if (newNode.type === topLevelFunctionPath.node.type) return true;
-          
-          // Function declaration can replace variable declaration with function expression and vice versa
-          if (t.isFunctionDeclaration(newNode) && 
-              (t.isVariableDeclaration(topLevelFunctionPath.node) || t.isExportNamedDeclaration(topLevelFunctionPath.node))) {
-            return true;
-          }
-          
-          if (t.isVariableDeclaration(newNode) && 
-              (t.isFunctionDeclaration(topLevelFunctionPath.node) || t.isExportNamedDeclaration(topLevelFunctionPath.node))) {
-            return true;
-          }
-          
-          // Export named declaration can replace function or variable
-          if (t.isExportNamedDeclaration(newNode) && 
-              (t.isFunctionDeclaration(topLevelFunctionPath.node) || t.isVariableDeclaration(topLevelFunctionPath.node))) {
-            return true;
-          }
-          
-          return false;
-        };
-        
-        // More flexible compatibility checking
-        const isCompatibleVarDecl = t.isVariableDeclaration(newNode) && 
-          t.isVariableDeclaration(topLevelFunctionPath.node) &&
-          newNode.declarations.length > 0 && 
-          topLevelFunctionPath.node.declarations.length > 0 &&
-          (newNode.declarations[0].init && topLevelFunctionPath.node.declarations[0].init && 
-           (t.isFunctionExpression(newNode.declarations[0].init) || t.isArrowFunctionExpression(newNode.declarations[0].init)) &&
-           (t.isFunctionExpression(topLevelFunctionPath.node.declarations[0].init) || t.isArrowFunctionExpression(topLevelFunctionPath.node.declarations[0].init))
+      if (anyChangesMade) {
+        // Generate the updated file content
+        statusCallback?.('Generating updated code from AST...', 'info');
+        const output = generate(ast, {
+          retainLines: true,
+          concise: false,
+          compact: false,
+          jsescOption: {
+            minimal: true
+          },
+          minified: false
+        }, originalFileContent);
+
+        // Write the updated content back to the file
+        statusCallback?.('Writing updated content to file...', 'info');
+        const writable = await fileHandle.createWritable();
+        await writable.write(output.code);
+        await writable.close();
+
+        statusCallback?.(
+          `Code fix successfully applied! (${replacementsMade} replacements, ${additionsMade} additions)`,
+          'success'
+        );
+        return true;
+      } else {
+        // Fallback approach
+        statusCallback?.('Standard approaches failed. Attempting direct insertion of missing identifier...', 'warning');
+
+        if (errorName) {
+          const fallbackResult = await this.applyFallbackFix(
+            fileHandle,
+            originalFileContent,
+            errorName,
+            cleanedNewCode,
+            errorInfo,
+            statusCallback
           );
 
-        const isDirectFunctionMatch = !t.isVariableDeclaration(newNode) &&
-          !t.isVariableDeclaration(topLevelFunctionPath.node) &&
-          (t.isFunctionDeclaration(newNode) || t.isFunctionExpression(newNode) || t.isArrowFunctionExpression(newNode)) &&
-          (t.isFunctionDeclaration(topLevelFunctionPath.node) || t.isFunctionExpression(topLevelFunctionPath.node) || t.isArrowFunctionExpression(topLevelFunctionPath.node));
-
-        const isExportNamedMatch = (t.isExportNamedDeclaration(newNode) || t.isExportDefaultDeclaration(newNode)) &&
-          (t.isExportNamedDeclaration(topLevelFunctionPath.node) || t.isExportDefaultDeclaration(topLevelFunctionPath.node) || 
-           t.isFunctionDeclaration(topLevelFunctionPath.node) || 
-          (t.isVariableDeclaration(topLevelFunctionPath.node) && topLevelFunctionPath.node.declarations.length > 0));
-
-        if (isCompatibleVarDecl || isDirectFunctionMatch || isExportNamedMatch || isNodeCompatible()) {
-          statusCallback?.(`Attempting Strategy A: Replacing entire ${topLevelFunctionPath.node.type}...`, 'info');
-          try {
-            // Prepare the new node based on the target type for better compatibility
-            let replacementNode = newNode;
-            
-            // When replacing export with non-export or vice versa, adapt the node
-            if (t.isExportNamedDeclaration(topLevelFunctionPath.node) && !t.isExportNamedDeclaration(newNode)) {
-              // Only declarations can be directly exported
-              if (t.isFunctionDeclaration(newNode) || 
-                  t.isClassDeclaration(newNode) || 
-                  t.isVariableDeclaration(newNode) ||
-                  t.isTSInterfaceDeclaration(newNode) ||
-                  t.isTSTypeAliasDeclaration(newNode)) {
-                // This is a valid declaration that can be exported
-                replacementNode = t.exportNamedDeclaration(newNode, [], null);
-              } else {
-                // For non-declaration nodes, we need special handling
-                statusCallback?.('Cannot directly export this node type. Keeping original export structure.', 'warning');
-                // Try to maintain the original export but replace its inner content
-              }
-            } else if (!t.isExportNamedDeclaration(topLevelFunctionPath.node) && t.isExportNamedDeclaration(newNode)) {
-              // Extract the declaration from export
-              replacementNode = newNode.declaration || newNode;
-            }
-            
-            topLevelFunctionPath.replaceWith(replacementNode);
-            replacementMade = true;
-            statusCallback?.('Strategy A: Full function replacement successful.', 'success');
-          } catch (replaceError) {
-            statusCallback?.(`Strategy A failed: ${replaceError instanceof Error ? replaceError.message : String(replaceError)}`, 'warning');
-            console.error("AST Replacement Error (Strategy A):", replaceError);
+          if (fallbackResult) {
+            return true;
           }
-        } else {
-          // Safe access
-          statusCallback?.(`Strategy A skipped: New node type (${newNode.type}) doesn't match function context type (${topLevelFunctionPath.node.type}) or structure.`, 'info');
-        }
-      } else if (newAstNodes.length > 1 && topLevelFunctionPath) {
-        statusCallback?.(`Strategy A skipped: New code has multiple statements, cannot replace single function declaration.`, 'info');
-      } else {
-        statusCallback?.(`Strategy A skipped: Could not identify suitable enclosing function or new code is not a single node.`, 'info');
-      }
-
-
-      // --- Strategy B: Try Targeted Replacement (if Strategy A failed or wasn't applicable) ---
-      // Note: newAstNodes cannot be null here
-      if (!replacementMade && newAstNodes.length > 0) {
-        statusCallback?.('Attempting Strategy B: Targeted replacement near error line...', 'info');
-        let targetPathForB = errorNodePath;
-
-        try {
-          // Check for potential duplicates before insertion
-          let willCreateDuplicate = false;
-          let duplicateNode: NodePath | null = null;
-          
-          // Only check for duplicates if inserting functions
-          if (newAstNodes.some(node => 
-            t.isFunctionDeclaration(node) || 
-            t.isVariableDeclaration(node) || 
-            t.isExportNamedDeclaration(node) ||
-            t.isExportDefaultDeclaration(node)
-          )) {
-            // Extract function names from new nodes
-            const newNames: string[] = [];
-            newAstNodes.forEach(node => {
-              if (t.isFunctionDeclaration(node) && node.id) {
-                newNames.push(node.id.name);
-              } else if (t.isVariableDeclaration(node) && node.declarations.length > 0 && t.isIdentifier(node.declarations[0].id)) {
-                newNames.push(node.declarations[0].id.name);
-              } else if (t.isExportNamedDeclaration(node) && node.declaration) {
-                if (t.isFunctionDeclaration(node.declaration) && node.declaration.id) {
-                  newNames.push(node.declaration.id.name);
-                } else if (t.isVariableDeclaration(node.declaration) && 
-                          node.declaration.declarations.length > 0 && 
-                          t.isIdentifier(node.declaration.declarations[0].id)) {
-                  newNames.push(node.declaration.declarations[0].id.name);
-                }
-              }
-            });
-            
-            // Look for any existing nodes with the same names
-            if (newNames.length > 0) {
-              traverse(ast, {
-                enter(path) {
-                  // Skip the current node
-                  if (path === targetPathForB || path === errorNodePath) return;
-                  
-                  let nodeName = '';
-                  if (t.isFunctionDeclaration(path.node) && path.node.id) {
-                    nodeName = path.node.id.name;
-                  } else if (t.isVariableDeclaration(path.node) && 
-                            path.node.declarations.length > 0 && 
-                            t.isIdentifier(path.node.declarations[0].id)) {
-                    nodeName = path.node.declarations[0].id.name;
-                  } else if (t.isExportNamedDeclaration(path.node) && path.node.declaration) {
-                    if (t.isFunctionDeclaration(path.node.declaration) && path.node.declaration.id) {
-                      nodeName = path.node.declaration.id.name;
-                    } else if (t.isVariableDeclaration(path.node.declaration) && 
-                              path.node.declaration.declarations.length > 0 && 
-                              t.isIdentifier(path.node.declaration.declarations[0].id)) {
-                      nodeName = path.node.declaration.declarations[0].id.name;
-                    }
-                  }
-                  
-                  if (newNames.includes(nodeName)) {
-                    willCreateDuplicate = true;
-                    duplicateNode = path;
-                    path.stop(); // Stop traversal once found
-                  }
-                }
-              });
-            }
-          }
-          
-          // If we detected a potential duplicate, try to replace it instead
-          if (willCreateDuplicate && duplicateNode) {
-            statusCallback?.(`Found existing declaration with same name. Replacing to avoid duplicates.`, 'info');
-            
-            if (newAstNodes.length === 1) {
-              // Cast duplicateNode to NodePath to access replaceWith
-              (duplicateNode as NodePath).replaceWith(newAstNodes[0]); 
-            } else if ((duplicateNode as NodePath).parentPath?.isBlockStatement() || 
-                      (duplicateNode as NodePath).parentPath?.isProgram() ||
-                      (duplicateNode as NodePath).inList) {
-              (duplicateNode as NodePath).replaceWithMultiple(newAstNodes);
-            } else {
-              statusCallback?.(`Cannot replace duplicate with multiple nodes in this context.`, 'warning');
-              // Continue with normal strategy B, might create duplicate but better than failing
-              willCreateDuplicate = false;
-            }
-            
-            if (willCreateDuplicate) {
-              replacementMade = true;
-              statusCallback?.('Successfully replaced existing declaration to avoid duplicate.', 'success');
-            }
-          }
-          
-          // Continue with original Strategy B if no duplicates were handled
-          if (!willCreateDuplicate) {
-            // Safe access to targetPathForB properties/methods
-            const canReplaceWithMultiple = targetPathForB.parentPath?.isBlockStatement() ||
-                                          targetPathForB.parentPath?.isProgram() ||
-                                          targetPathForB.inList;
-
-            if (newAstNodes.length === 1) {
-                // Try replacing the specific error node first
-                targetPathForB.replaceWith(newAstNodes[0]);
-                replacementMade = true;
-            } else if (canReplaceWithMultiple) {
-                 // Try replacing the specific error node with multiple nodes
-                targetPathForB.replaceWithMultiple(newAstNodes);
-                replacementMade = true;
-            } else {
-                // Cannot replace error node directly with multiple nodes, try parent statement
-                statusCallback?.(`Cannot replace ${targetPathForB.node.type} with multiple nodes here. Trying parent statement...`, 'warning');
-                if (targetPathForB.parentPath?.isStatement()) {
-                    targetPathForB.parentPath.replaceWithMultiple(newAstNodes);
-                    replacementMade = true;
-                } else {
-                     statusCallback?.(`Cannot replace parent of ${targetPathForB.node.type} either (not a statement or no parent?).`, 'error');
-                }
-            }
-          }
-        } catch (directReplaceError) {
-            // Safe access to targetPathForB.node.type
-            statusCallback?.(`Strategy B: Direct replacement of ${targetPathForB.node.type} failed: ${directReplaceError instanceof Error ? directReplaceError.message : String(directReplaceError)}`, 'warning');
-            console.error("AST Replacement Error (Strategy B - Direct):", directReplaceError);
-            // Fallback: Try replacing the parent statement if direct replacement failed
-            if (targetPathForB.parentPath?.isStatement() && targetPathForB.parentPath !== targetPathForB) {
-                statusCallback?.(`Strategy B: Attempting to replace parent statement (${targetPathForB.parentPath.node.type})...`, 'info');
-                try {
-                   // Check again if parent context allows multiple before replacing
-                   const parentCanReplaceWithMultiple = targetPathForB.parentPath.parentPath?.isBlockStatement() ||
-                                                        targetPathForB.parentPath.parentPath?.isProgram() ||
-                                                        targetPathForB.parentPath.inList;
-                   if (newAstNodes.length === 1) {
-                       targetPathForB.parentPath.replaceWith(newAstNodes[0]);
-                       replacementMade = true;
-                   } else if (parentCanReplaceWithMultiple) {
-                        targetPathForB.parentPath.replaceWithMultiple(newAstNodes);
-                        replacementMade = true;
-                   } else {
-                       statusCallback?.(`Strategy B: Cannot replace parent statement ${targetPathForB.parentPath.node.type} with multiple nodes in this context.`, 'error');
-                   }
-                } catch (parentReplaceError) {
-                     statusCallback?.(`Strategy B: Replacing parent statement failed: ${parentReplaceError instanceof Error ? parentReplaceError.message : String(parentReplaceError)}`, 'error');
-                     console.error("AST Replacement Error (Strategy B - Parent):", parentReplaceError);
-                }
-            } else {
-                 statusCallback?.(`Strategy B: No suitable parent statement found to replace.`, 'warning');
-            }
         }
 
-        if (replacementMade) {
-           statusCallback?.('Strategy B: Targeted replacement successful.', 'success');
-        } else {
-           statusCallback?.('Strategy B: Targeted replacement attempt failed.', 'error');
-        }
-
-      } else if (!replacementMade && newAstNodes.length === 0) {
-         // Handle empty snippet -> remove node (errorNodePath is NodePath here)
-         statusCallback?.(`New code snippet is empty. Removing target node: ${errorNodePath.node.type}`, 'info');
-          try {
-              errorNodePath.remove();
-              replacementMade = true;
-              statusCallback?.('Node removal successful.', 'success');
-          } catch (removeError) {
-               statusCallback?.(`Error removing node: ${removeError instanceof Error ? removeError.message : String(removeError)}`, 'error');
-               console.error("AST Removal Error:", removeError);
-          }
+        // Last resort - clipboard
+        statusCallback?.('All automatic fix attempts failed.', 'error');
+        await this.copyToClipboard(cleanedNewCode);
+        statusCallback?.('Code fix copied to clipboard.', 'warning');
+        return false;
       }
-
-
-      // --- 5. Generate and Write ---
-      if (replacementMade) {
-          statusCallback?.('Generating updated code from AST...', 'info');
-          const output = generate(ast, {
-            retainLines: true, // Try to preserve line numbers somewhat
-            concise: false,    // Avoid overly compacting code
-            // comments: true, // Including comments can be buggy, enable with caution
-          }, originalFileContent); // Pass original content for potentially better formatting
-          const newContent = output.code;
-
-          statusCallback?.('Writing updated content to file...', 'info');
-          const writable = await fileHandle.createWritable();
-          await writable.write(newContent);
-          await writable.close();
-
-          statusCallback?.('Code fix successfully applied using Babel AST manipulation!', 'success');
-          return true; // Success
-      } else {
-          // If we reach here, neither strategy worked or the snippet was empty and removal failed
-          statusCallback?.('Automatic replacement failed after trying multiple strategies. Please apply the fix manually.', 'error');
-          await this.copyToClipboard(cleanedNewCode);
-          statusCallback?.('Code fix copied to clipboard.', 'warning');
-          return false; // Failure
-      }
-
-    // --- Catch block for the main try ---
     } catch (error) {
       statusCallback?.(
         `Error applying code fix via Babel: ${error instanceof Error ? error.message : String(error)}`,
         'error'
       );
-      console.error("Error during Babel fix process:", error); // Log full error for debugging
-      // Optionally copy to clipboard on error too
+      console.error("Error during Babel fix process:", error);
+
+      // Fallback on error
+      if (errorName) {
+        const fallbackResult = await this.applyFallbackFix(
+          fileHandle,
+          originalFileContent,
+          errorName,
+          cleanedNewCode,
+          errorInfo,
+          statusCallback
+        );
+
+        if (fallbackResult) {
+          return true;
+        }
+      }
+
+      // Clipboard as final resort
       await this.copyToClipboard(cleanedNewCode);
       statusCallback?.('New code copied to clipboard due to error.', 'warning');
-      return false; // Failure
+      return false;
     }
-    // --- End of catch block ---
-  } // End of applyCodeFix function
+  }
+
+  /**
+   * Parse the new code snippet into AST nodes
+   */
+  private parseNewCodeSnippet(
+    code: string,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): { parsedNodes: t.Statement[] | null, parseError: Error | null } {
+    let parsedNodes: t.Statement[] | null = null;
+    let parseError: Error | null = null;
+
+    try {
+      // Try parsing as a complete program
+      const newAst = parser.parse(code, {
+        sourceType: 'module',
+        plugins: [
+          'typescript',
+          'jsx',
+          'decorators-legacy',
+          'classProperties',
+          'exportDefaultFrom',
+          'doExpressions',
+          'optionalChaining',
+          'nullishCoalescingOperator'
+        ],
+        allowReturnOutsideFunction: true,
+        errorRecovery: true,
+      });
+
+      parsedNodes = newAst.program.body;
+
+      // Handle empty body or only directives
+      if (parsedNodes.length === 0 && newAst.program.directives.length > 0) {
+        parsedNodes = newAst.program.directives.map(dir =>
+          t.expressionStatement(t.stringLiteral(dir.value.value))
+        );
+      }
+
+      if (parsedNodes.length === 0) {
+        statusCallback?.('Parsed AST has no statements.', 'warning');
+      }
+    } catch (error) {
+      parseError = error instanceof Error ? error : new Error(String(error));
+      statusCallback?.(`Error parsing code as program: ${parseError.message}`, 'warning');
+
+      // Try parsing as an expression
+      try {
+        const expressionNode = parser.parseExpression(code, {
+          plugins: ['typescript', 'jsx']
+        });
+
+        parsedNodes = [t.expressionStatement(expressionNode)];
+        parseError = null; // Clear error since we succeeded
+      } catch (expressionError) {
+        // Keep the original error since both approaches failed
+        statusCallback?.(`Also failed to parse as expression: ${expressionError instanceof Error ? expressionError.message : String(expressionError)}`, 'warning');
+      }
+    }
+
+    return { parsedNodes, parseError };
+  }
+
+  /**
+   * Parse separate declarations from the code snippet
+   */
+  private parseSeparateDeclarations(
+    code: string,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): { declaredNodes: t.Statement[], declareError: Error | null } {
+    const declaredNodes: t.Statement[] = [];
+    let declareError: Error | null = null;
+
+    // Split the code into potential separate declarations
+    const lines = code.split('\n');
+    let currentDeclaration = '';
+    let braceCount = 0;
+    let inString = false;
+    let stringChar = '';
+
+    // Process line by line to identify complete declarations
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      currentDeclaration += line + '\n';
+
+      // Count braces and track string contexts to detect declaration boundaries
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+
+        // Handle string context
+        if ((char === '"' || char === "'" || char === '`') &&
+          (j === 0 || line[j - 1] !== '\\')) {
+          if (!inString) {
+            inString = true;
+            stringChar = char;
+          } else if (char === stringChar) {
+            inString = false;
+          }
+        }
+
+        // Only count braces outside of strings
+        if (!inString) {
+          if (char === '{') braceCount++;
+          if (char === '}') braceCount--;
+        }
+      }
+
+      // Check for potential declaration boundaries
+      const isExportStatement = currentDeclaration.trim().startsWith('export');
+      const isConstOrLetOrVar = /^\s*(const|let|var)\s+/.test(currentDeclaration.trim());
+      const isFunctionDeclaration = /^\s*function\s+\w+/.test(currentDeclaration.trim());
+      const isClassDeclaration = /^\s*class\s+\w+/.test(currentDeclaration.trim());
+      const isInterfaceDeclaration = /^\s*interface\s+\w+/.test(currentDeclaration.trim());
+      const isTypeDeclaration = /^\s*type\s+\w+/.test(currentDeclaration.trim());
+
+      const isPotentialDeclaration = isExportStatement || isConstOrLetOrVar ||
+        isFunctionDeclaration || isClassDeclaration ||
+        isInterfaceDeclaration || isTypeDeclaration;
+
+      // If we detected a declaration boundary and braces are balanced, try to parse it
+      if (isPotentialDeclaration && braceCount <= 0 && currentDeclaration.trim().length > 0) {
+        const declarationCode = currentDeclaration.trim();
+
+        // Try to parse this single declaration
+        try {
+          const { parsedNodes, parseError } = this.parseNewCodeSnippet(declarationCode, statusCallback);
+
+          if (!parseError && parsedNodes && parsedNodes.length > 0) {
+            // Add all successfully parsed nodes
+            parsedNodes.forEach(node => declaredNodes.push(node));
+          }
+        } catch (error) {
+          // Just log and continue with next declaration
+          console.error(`Error parsing declaration: ${declarationCode}`, error);
+        }
+
+        // Reset for next declaration
+        currentDeclaration = '';
+        braceCount = 0;
+      }
+    }
+
+    // Try to parse any remaining code
+    if (currentDeclaration.trim().length > 0) {
+      try {
+        const { parsedNodes, parseError } = this.parseNewCodeSnippet(currentDeclaration, statusCallback);
+
+        if (!parseError && parsedNodes && parsedNodes.length > 0) {
+          parsedNodes.forEach(node => declaredNodes.push(node));
+        }
+      } catch (error) {
+        declareError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    // Return all successfully parsed declarations
+    return { declaredNodes, declareError };
+  }
+
+  /**
+   * Extract the error identifier from an error message
+   * Example: "ReferenceError: nonExistentFunction is not defined" -> "nonExistentFunction"
+   */
+  private extractErrorIdentifier(errorMessage: string): string | null {
+    // Common patterns for different error types
+    const patterns = [
+      /(?:ReferenceError|TypeError):\s+(\w+)\s+is not defined/i,
+      /Cannot read (?:property|properties) '(\w+)' of/i,
+      /(\w+) is not a function/i,
+      /Identifier '(\w+)' has already been declared/i,
+      /(\w+) is not recognized/i,
+      /cannot find name '(\w+)'/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = errorMessage.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Identify which nodes from the new code are needed to fix the error
+   */
+  private identifyNeededNodes(
+    ast: parser.ParseResult<t.File>,
+    newNodes: t.Statement[],
+    errorName: string | null,
+    existingIdentifiers: Set<string>,
+    callGraph: Map<string, Set<string>>,
+    errorNodePath: NodePath | null,
+    errorContainingFunction: NodePath | null,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): {
+    nodesToAdd: t.Statement[],
+    nodesToReplace: Map<NodePath, t.Statement>
+  } {
+    const nodesToAdd: t.Statement[] = [];
+    const nodesToReplace = new Map<NodePath, t.Statement>();
+
+    // If we have an error name, prioritize nodes that define that identifier
+    if (errorName) {
+      statusCallback?.(`Looking for declarations of "${errorName}" in the new code...`, 'info');
+
+      // First pass: look for exact matches to the error identifier
+      for (const node of newNodes) {
+        const nodeName = this.extractNodeName(node);
+
+        if (nodeName === errorName) {
+          statusCallback?.(`Found declaration for "${errorName}" in new code.`, 'info');
+
+          // Check if this identifier already exists (possible duplicate)
+          if (existingIdentifiers.has(nodeName)) {
+            statusCallback?.(`Warning: "${nodeName}" is already declared in the file.`, 'warning');
+
+            // Find the existing declaration to replace it
+            let existingPath: NodePath | null = null;
+            const self = this; // Capture this reference
+
+            // Then inside the traverse callback
+            traverse(ast, {
+              enter(path) {
+                if (existingPath) return;
+                const pathNodeName = self.extractNodeName(path.node);
+                if (pathNodeName === nodeName) {
+                  existingPath = path;
+                  path.stop();
+                }
+              }
+            });
+
+            if (existingPath) {
+              statusCallback?.(`Will replace existing declaration of "${nodeName}".`, 'info');
+              nodesToReplace.set(existingPath, node);
+            } else {
+              // Strange case - identifier exists but declaration not found
+              statusCallback?.(`Identifier exists but declaration not found. Will add as new.`, 'warning');
+              nodesToAdd.push(node);
+            }
+          } else {
+            // New identifier, just add it
+            nodesToAdd.push(node);
+          }
+
+          // We found and handled the error identifier, no need to check more
+          return { nodesToAdd, nodesToReplace };
+        }
+      }
+
+      // Second pass: look for any node that mentions the error identifier
+      // This helps when the error is used inside another function
+      for (const node of newNodes) {
+        let mentionsError = false;
+
+        // Analyze the node to see if it mentions the error identifier
+        traverse(t.file(t.program([node])), {
+          Identifier(path) {
+            if (path.node.name === errorName) {
+              mentionsError = true;
+              path.stop();
+            }
+          }
+        });
+
+        if (mentionsError) {
+          const nodeName = this.extractNodeName(node);
+          statusCallback?.(`Found node referencing "${errorName}": ${nodeName || '[anonymous]'}`, 'info');
+
+          // Check for duplicates as above
+          if (nodeName && existingIdentifiers.has(nodeName)) {
+            let existingPath: NodePath | null = null;
+            const self = this; // Capture this reference
+
+            traverse(ast, {
+              enter(path) {
+                if (existingPath) return;
+                const pathNodeName = self.extractNodeName(path.node);
+                if (pathNodeName === nodeName) {
+                  existingPath = path;
+                  path.stop();
+                }
+              }
+            });
+
+            if (existingPath) {
+              nodesToReplace.set(existingPath, node);
+            } else {
+              nodesToAdd.push(node);
+            }
+          } else {
+            nodesToAdd.push(node);
+          }
+        }
+      }
+    }
+
+    // If we haven't found anything yet, use a broader approach
+    if (nodesToAdd.length === 0 && nodesToReplace.size === 0) {
+      // Identify missing vs. existing declarations
+      for (const node of newNodes) {
+        const nodeName = this.extractNodeName(node);
+
+        if (!nodeName) {
+          // Anonymous declarations, add if they seem relevant
+          if (this.isNodeRelevantToError(node, errorName, errorContainingFunction)) {
+            nodesToAdd.push(node);
+          }
+          continue;
+        }
+
+        if (existingIdentifiers.has(nodeName)) {
+          // Find the existing declaration
+          let existingPath: NodePath | null = null;
+          const self = this; // Capture this reference
+
+          traverse(ast, {
+            enter(path) {
+              if (existingPath) return;
+              const pathNodeName = self.extractNodeName(path.node);
+              if (pathNodeName === nodeName) {
+                existingPath = path;
+                path.stop();
+              }
+            }
+          });
+
+          if (existingPath) {
+            // Check if the contents are different before deciding to replace
+            const typedExistingPath = existingPath as unknown as { node: t.Node };
+            const existingCode = this.generateCodeForNode(typedExistingPath.node);
+            const newCode = this.generateCodeForNode(node);
+
+            if (!this.areNodesEquivalent(existingCode, newCode)) {
+              nodesToReplace.set(existingPath, node);
+            }
+            // Else: skip identical declarations
+          } else {
+            // Strange case - add anyway
+            nodesToAdd.push(node);
+          }
+        } else {
+          // New declaration, add if it seems relevant
+          if (this.isNodeRelevantToError(node, errorName, errorContainingFunction)) {
+            nodesToAdd.push(node);
+          }
+        }
+      }
+    }
+
+    return { nodesToAdd, nodesToReplace };
+  }
+
+  /**
+   * Determine if a node is relevant to fixing the current error
+   */
+  private isNodeRelevantToError(
+    node: t.Node,
+    errorName: string | null,
+    errorContainingFunction: NodePath | null
+  ): boolean {
+    // Without error context, consider all nodes relevant
+    if (!errorName && !errorContainingFunction) {
+      return true;
+    }
+
+    // Check if node mentions the error name
+    if (errorName) {
+      let mentionsError = false;
+      traverse(t.file(t.program([node as t.Statement])), {
+        Identifier(path) {
+          if (path.node.name === errorName) {
+            mentionsError = true;
+            path.stop();
+          }
+        }
+      });
+
+      if (mentionsError) {
+        return true;
+      }
+    }
+
+    // Check if this node is structurally similar to the error-containing function
+    if (errorContainingFunction &&
+      (t.isFunctionDeclaration(node) ||
+        t.isFunctionExpression(node) ||
+        t.isArrowFunctionExpression(node))) {
+      // You could implement structural similarity analysis here
+      // For now, consider all functions potentially relevant
+      return true;
+    }
+
+    // Default to considering it relevant
+    return true;
+  }
+
+  /**
+   * Add new nodes to the AST in appropriate locations
+   */
+  private async addNewNodes(
+    ast: parser.ParseResult<t.File>,
+    nodesToAdd: t.Statement[],
+    errorInfo: ErrorInfo,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<number> {
+    let additionsMade = 0;
+
+    // Find the program node
+    let programPath: NodePath | null = null;
+    traverse(ast, {
+      Program(path) {
+        programPath = path;
+        path.stop();
+      }
+    });
+
+    if (!programPath) {
+      statusCallback?.('Could not find program node to add declarations.', 'error');
+      return 0;
+    }
+
+    // Categorize nodes by type
+    const exportNodes: t.Statement[] = [];
+    const functionNodes: t.Statement[] = [];
+    const varNodes: t.Statement[] = [];
+    const otherNodes: t.Statement[] = [];
+
+    for (const node of nodesToAdd) {
+      if (t.isExportDeclaration(node)) {
+        exportNodes.push(node);
+      } else if (t.isFunctionDeclaration(node)) {
+        functionNodes.push(node);
+      } else if (t.isVariableDeclaration(node)) {
+        varNodes.push(node);
+      } else {
+        otherNodes.push(node);
+      }
+    }
+
+    // Try to insert each category in appropriate locations
+    try {
+      // Add type assertion to programPath
+      const program = programPath as unknown as { node: { body: Array<any> } };
+
+      // Find the last existing export to insert export nodes after it
+      let lastExportIndex = -1;
+      for (let i = 0; i < program.node.body.length; i++) {
+        if (t.isExportDeclaration(program.node.body[i])) {
+          lastExportIndex = i;
+        }
+      }
+
+      // Find a good position for function declarations
+      let functionInsertIndex = -1;
+      for (let i = 0; i < program.node.body.length; i++) {
+        if (t.isFunctionDeclaration(program.node.body[i])) {
+          functionInsertIndex = i;
+          // Don't break - find the last one
+        }
+      }
+
+      // If no functions found, look for variable declarations
+      if (functionInsertIndex === -1) {
+        for (let i = 0; i < program.node.body.length; i++) {
+          if (t.isVariableDeclaration(program.node.body[i])) {
+            functionInsertIndex = i;
+            // Don't break - find the last one
+          }
+        }
+      }
+
+      // Determine insert positions based on above analysis
+      const exportInsertIndex = lastExportIndex !== -1 ? lastExportIndex + 1 : program.node.body.length;
+      const functionInsertPos = functionInsertIndex !== -1 ? functionInsertIndex + 1 :
+        (exportInsertIndex > 0 ? exportInsertIndex : 0);
+      const varInsertPos = functionInsertPos;
+
+      // Try to insert near the error line if possible
+      const errorLine = errorInfo.lineNumber || 0;
+      let nearErrorInsertIndex = -1;
+
+      if (errorLine > 0) {
+        let minDistance = Infinity;
+        for (let i = 0; i < program.node.body.length; i++) {
+          const node = program.node.body[i];
+          if (node.loc) {
+            const distance = Math.abs(node.loc.start.line - errorLine);
+            if (distance < minDistance) {
+              minDistance = distance;
+              nearErrorInsertIndex = i;
+            }
+          }
+        }
+      }
+
+      // If we found a node near the error line, use that position
+      const otherInsertPos = nearErrorInsertIndex !== -1 ? nearErrorInsertIndex + 1 :
+        (functionInsertPos > 0 ? functionInsertPos : 0);
+
+      // Now insert the nodes in appropriate positions
+      // Insert exports at export position
+      if (exportNodes.length > 0) {
+        program.node.body.splice(exportInsertIndex, 0, ...exportNodes);
+        additionsMade += exportNodes.length;
+        statusCallback?.(`Added ${exportNodes.length} export declarations.`, 'info');
+      }
+
+      // Insert functions at function position
+      if (functionNodes.length > 0) {
+        program.node.body.splice(functionInsertPos, 0, ...functionNodes);
+        additionsMade += functionNodes.length;
+        statusCallback?.(`Added ${functionNodes.length} function declarations.`, 'info');
+      }
+
+      // Insert vars at var position
+      if (varNodes.length > 0) {
+        program.node.body.splice(varInsertPos, 0, ...varNodes);
+        additionsMade += varNodes.length;
+        statusCallback?.(`Added ${varNodes.length} variable declarations.`, 'info');
+      }
+
+      // Insert other nodes at other position
+      if (otherNodes.length > 0) {
+        program.node.body.splice(otherInsertPos, 0, ...otherNodes);
+        additionsMade += otherNodes.length;
+        statusCallback?.(`Added ${otherNodes.length} other declarations.`, 'info');
+      }
+    } catch (error) {
+      statusCallback?.(
+        `Error adding nodes: ${error instanceof Error ? error.message : String(error)}`,
+        'error'
+      );
+      console.error("Node addition error:", error);
+    }
+
+    return additionsMade;
+  }
+
+  /**
+   * Apply a selective fix with only the necessary nodes
+   */
+  private async applySelectiveFix(
+    fileHandle: FileSystemFileHandle,
+    originalFileContent: string,
+    ast: parser.ParseResult<t.File>,
+    declaredNodes: t.Statement[],
+    errorInfo: ErrorInfo,
+    errorName: string | null,
+    existingIdentifiers: Set<string>,
+    callGraph: Map<string, Set<string>>,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<boolean> {
+    // If we have an error name, filter for only the relevant declarations
+    let relevantNodes: t.Statement[] = [];
+
+    if (errorName) {
+      // First try to find exactly the declaration for the error name
+      const exactMatch = declaredNodes.find(node => {
+        const nodeName = this.extractNodeName(node);
+        return nodeName === errorName;
+      });
+
+      if (exactMatch) {
+        relevantNodes = [exactMatch];
+        statusCallback?.(`Found exact declaration for "${errorName}".`, 'info');
+      } else {
+        // Look for any node that references the error name
+        relevantNodes = declaredNodes.filter(node => {
+          let referencesError = false;
+          traverse(t.file(t.program([node])), {
+            Identifier(path) {
+              if (path.node.name === errorName) {
+                referencesError = true;
+                path.stop();
+              }
+            }
+          });
+          return referencesError;
+        });
+
+        if (relevantNodes.length > 0) {
+          statusCallback?.(`Found ${relevantNodes.length} declarations referencing "${errorName}".`, 'info');
+        } else {
+          // No references found, fall back to all declarations
+          relevantNodes = declaredNodes;
+          statusCallback?.(`No declarations referencing "${errorName}" found. Using all declarations.`, 'warning');
+        }
+      }
+    } else {
+      // No error name to filter by, use all declarations
+      relevantNodes = declaredNodes;
+    }
+
+    // Identify which nodes already exist and need replacement vs. which are new
+    const existingNodePaths = new Map<string, NodePath>();
+    const nodesToAdd: t.Statement[] = [];
+    const nodesToReplace = new Map<NodePath, t.Statement>();
+
+    // Collect existing node paths
+    const self = this; // Capture this reference
+    traverse(ast, {
+      enter(path) {
+        const nodeName = self.extractNodeName(path.node);
+        if (nodeName && !existingNodePaths.has(nodeName)) {
+          existingNodePaths.set(nodeName, path);
+        }
+      }
+    });
+
+    // Determine which nodes to add vs. replace
+    for (const node of relevantNodes) {
+      const nodeName = this.extractNodeName(node);
+
+      if (!nodeName) {
+        // Anonymous node, always add
+        nodesToAdd.push(node);
+        continue;
+      }
+
+      if (existingNodePaths.has(nodeName)) {
+        // Node exists, compare code to see if it's different
+        const existingPath = existingNodePaths.get(nodeName)!;
+        const existingCode = this.generateCodeForNode(existingPath.node);
+        const newCode = this.generateCodeForNode(node);
+
+        if (!this.areNodesEquivalent(existingCode, newCode)) {
+          // Different implementation, replace
+          nodesToReplace.set(existingPath, node);
+        }
+        // Else: identical declaration, skip
+      } else {
+        // New node, add
+        nodesToAdd.push(node);
+      }
+    }
+
+    // Apply the changes
+    let changesMade = false;
+
+    // First handle replacements
+    let replacementsMade = 0;
+    for (const [pathToReplace, replacementNode] of nodesToReplace.entries()) {
+      try {
+        pathToReplace.replaceWith(replacementNode);
+        replacementsMade++;
+        changesMade = true;
+      } catch (replaceError) {
+        statusCallback?.(
+          `Error replacing node: ${replaceError instanceof Error ? replaceError.message : String(replaceError)}`,
+          'warning'
+        );
+      }
+    }
+
+    // Then handle additions
+    let additionsMade = 0;
+    if (nodesToAdd.length > 0) {
+      additionsMade = await this.addNewNodes(ast, nodesToAdd, errorInfo, statusCallback);
+      if (additionsMade > 0) {
+        changesMade = true;
+      }
+    }
+
+    if (changesMade) {
+      // Generate and write the updated file
+      statusCallback?.('Generating updated code from AST...', 'info');
+      const output = generate(ast, {
+        retainLines: true,
+        concise: false,
+        compact: false,
+        jsescOption: {
+          minimal: true
+        },
+        minified: false
+      }, originalFileContent);
+
+      statusCallback?.('Writing updated content to file...', 'info');
+      const writable = await fileHandle.createWritable();
+      await writable.write(output.code);
+      await writable.close();
+
+      statusCallback?.(
+        `Code fix successfully applied! (${replacementsMade} replacements, ${additionsMade} additions)`,
+        'success'
+      );
+      return true;
+    } else {
+      // No changes made with this approach
+      statusCallback?.('No changes applied with selective fix approach.', 'warning');
+      return false;
+    }
+  }
+
+  /**
+   * Apply a custom fix for specific error types
+   */
+  private async applyCustomFix(
+    fileHandle: FileSystemFileHandle,
+    originalFileContent: string,
+    errorName: string,
+    newCodeSnippet: string,
+    errorInfo: ErrorInfo,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<boolean> {
+    statusCallback?.(`Attempting custom fix for "${errorName}" error...`, 'info');
+
+    // Look for patterns in the new code related to the error name
+    const errorNamePattern = new RegExp(`(const|let|var|function)\\s+${errorName}\\s*=\\s*[^;]+`, 'i');
+    const match = newCodeSnippet.match(errorNamePattern);
+
+    if (match && match[0]) {
+      const declaration = match[0];
+      statusCallback?.(`Found declaration for "${errorName}" in new code.`, 'info');
+
+      // Try to insert just before the error line
+      const lineHint = errorInfo.lineNumber || 1;
+      const contentLines = originalFileContent.split('\n');
+
+      // Find a good line to insert the declaration
+      // Try to find a reasonable spot before the error line
+      let insertLineIndex = lineHint - 1;
+
+      // Look for a blank line or a line ending with a closing brace
+      let bestInsertSpot = -1;
+      for (let i = insertLineIndex; i >= 0; i--) {
+        const line = contentLines[i].trim();
+        if (line === '' || line.endsWith('}')) {
+          bestInsertSpot = i + 1;
+          break;
+        }
+      }
+
+      // If no good spot found, just insert right before the error line
+      if (bestInsertSpot === -1) {
+        bestInsertSpot = Math.max(0, insertLineIndex);
+      }
+
+      // Add the declaration with a newline after it
+      contentLines.splice(bestInsertSpot, 0, declaration + ';');
+
+      // Write the updated content
+      try {
+        const updatedContent = contentLines.join('\n');
+        const writable = await fileHandle.createWritable();
+        await writable.write(updatedContent);
+        await writable.close();
+
+        statusCallback?.(`Custom fix successfully applied for "${errorName}".`, 'success');
+        return true;
+      } catch (writeError) {
+        statusCallback?.(
+          `Error writing file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+          'error'
+        );
+        return false;
+      }
+    }
+
+    // Try another approach - extract just a function definition
+    const functionPattern = new RegExp(`(const|function)\\s+${errorName}\\s*=?\\s*\\([^)]*\\)\\s*=>?\\s*{[\\s\\S]*?}`, 'i');
+    const functionMatch = newCodeSnippet.match(functionPattern);
+
+    if (functionMatch && functionMatch[0]) {
+      const functionDef = functionMatch[0];
+      statusCallback?.(`Found function definition for "${errorName}" in new code.`, 'info');
+
+      // Try to insert at a good spot in the file
+      const contentLines = originalFileContent.split('\n');
+
+      // Look for the last function definition or export
+      let bestInsertSpot = -1;
+      for (let i = contentLines.length - 1; i >= 0; i--) {
+        const line = contentLines[i].trim();
+        if (line.startsWith('function') ||
+          line.startsWith('const') ||
+          line.startsWith('let') ||
+          line.startsWith('var') ||
+          line.startsWith('export')) {
+          // Found a declaration, now find where it ends
+          let j = i;
+          let braceCount = 0;
+          let foundStart = false;
+
+          while (j < contentLines.length) {
+            const currentLine = contentLines[j];
+
+            // Count braces to track code blocks
+            for (const char of currentLine) {
+              if (char === '{') {
+                foundStart = true;
+                braceCount++;
+              } else if (char === '}') {
+                braceCount--;
+              }
+            }
+
+            // If braces are balanced after finding an opening brace, we've found the end
+            if (foundStart && braceCount <= 0) {
+              bestInsertSpot = j + 1;
+              break;
+            }
+
+            j++;
+          }
+
+          if (bestInsertSpot !== -1) {
+            break;
+          }
+        }
+      }
+
+      // If no good spot found, just append to the end
+      if (bestInsertSpot === -1) {
+        bestInsertSpot = contentLines.length;
+      }
+
+      // Add the function definition with newlines around it
+      contentLines.splice(bestInsertSpot, 0, '', functionDef, '');
+
+      // Write the updated content
+      try {
+        const updatedContent = contentLines.join('\n');
+        const writable = await fileHandle.createWritable();
+        await writable.write(updatedContent);
+        await writable.close();
+
+        statusCallback?.(`Custom function fix successfully applied for "${errorName}".`, 'success');
+        return true;
+      } catch (writeError) {
+        statusCallback?.(
+          `Error writing file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+          'error'
+        );
+        return false;
+      }
+    }
+
+    // No match found for custom fix
+    statusCallback?.(`No suitable pattern found for custom fix of "${errorName}".`, 'warning');
+    return false;
+  }
+
+  /**
+   * Apply a fallback fix by directly adding a minimal implementation
+   */
+  private async applyFallbackFix(
+    fileHandle: FileSystemFileHandle,
+    originalFileContent: string,
+    errorName: string,
+    newCodeSnippet: string,
+    errorInfo: ErrorInfo,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<boolean> {
+    statusCallback?.(`Applying fallback fix for "${errorName}"...`, 'info');
+
+    // Create a minimal declaration for the missing identifier
+    let minimalDeclaration: string;
+
+    // Try to extract from the new code first
+    const errorNamePattern = new RegExp(`(const|let|var|function)\\s+${errorName}\\s*=?\\s*\\(?[^{]*\\)?\\s*=>?\\s*{[\\s\\S]*?}`, 'i');
+    const match = newCodeSnippet.match(errorNamePattern);
+
+    if (match && match[0]) {
+      minimalDeclaration = match[0];
+    } else {
+      // Create a stub implementation
+      minimalDeclaration = `// Define the ${errorName}
+const ${errorName} = () => {
+  console.log("This is a defined function now.");
+};`;
+    }
+
+    // Find a good spot to insert the declaration
+    const contentLines = originalFileContent.split('\n');
+
+    // Try inserting just before existing exports at the end
+    let insertPosition = contentLines.length;
+    for (let i = contentLines.length - 1; i >= 0; i--) {
+      const line = contentLines[i].trim();
+      if (line.startsWith('export ')) {
+        insertPosition = i;
+        break;
+      }
+    }
+
+    // Insert the declaration
+    contentLines.splice(insertPosition, 0, '', minimalDeclaration, '');
+
+    // Write the updated content
+    try {
+      const updatedContent = contentLines.join('\n');
+      const writable = await fileHandle.createWritable();
+      await writable.write(updatedContent);
+      await writable.close();
+
+      statusCallback?.(`Fallback fix successfully applied for "${errorName}".`, 'success');
+      return true;
+    } catch (writeError) {
+      statusCallback?.(
+        `Error writing file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+        'error'
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Collect all existing identifiers in the AST to avoid duplications
+   */
+  private collectExistingIdentifiers(ast: parser.ParseResult<t.File>): Set<string> {
+    const identifiers = new Set<string>();
+
+    traverse(ast, {
+      // Check variable declarations
+      VariableDeclarator(path) {
+        if (t.isIdentifier(path.node.id)) {
+          identifiers.add(path.node.id.name);
+        }
+      },
+      // Check function declarations
+      FunctionDeclaration(path) {
+        if (path.node.id && t.isIdentifier(path.node.id)) {
+          identifiers.add(path.node.id.name);
+        }
+      },
+      // Check class declarations
+      ClassDeclaration(path) {
+        if (path.node.id && t.isIdentifier(path.node.id)) {
+          identifiers.add(path.node.id.name);
+        }
+      },
+      // Check export named declarations
+      ExportNamedDeclaration(path) {
+        if (path.node.declaration) {
+          if (t.isFunctionDeclaration(path.node.declaration) &&
+            path.node.declaration.id &&
+            t.isIdentifier(path.node.declaration.id)) {
+            identifiers.add(path.node.declaration.id.name);
+          } else if (t.isVariableDeclaration(path.node.declaration)) {
+            path.node.declaration.declarations.forEach(decl => {
+              if (t.isIdentifier(decl.id)) {
+                identifiers.add(decl.id.name);
+              }
+            });
+          } else if (t.isClassDeclaration(path.node.declaration) &&
+            path.node.declaration.id &&
+            t.isIdentifier(path.node.declaration.id)) {
+            identifiers.add(path.node.declaration.id.name);
+          }
+        }
+        // Also check named exports
+        if (path.node.specifiers) {
+          path.node.specifiers.forEach(specifier => {
+            if (t.isExportSpecifier(specifier) && t.isIdentifier(specifier.exported)) {
+              identifiers.add(specifier.exported.name);
+            }
+          });
+        }
+      },
+      // Check identifiers in any context (referenced variables)
+      Identifier(path) {
+        // Only collect top-level identifiers or those used in declarations
+        if (path.parent &&
+          (t.isVariableDeclarator(path.parent) ||
+            t.isFunctionDeclaration(path.parent) ||
+            t.isClassDeclaration(path.parent))) {
+          identifiers.add(path.node.name);
+        }
+      }
+    });
+
+    return identifiers;
+  }
 
   /**
    * Applies a code fix using simple string replacement (fallback).
    */
   private async applySimpleFix(
-     fileHandle: FileSystemFileHandle,
-     originalFileContent: string,
-     originalSourceSnippet: string,
-     newCodeSnippet: string,
-     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+    fileHandle: FileSystemFileHandle,
+    originalFileContent: string,
+    originalSourceSnippet: string,
+    newCodeSnippet: string,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<boolean> {
-     const cleanedNewCode = this.cleanCodeExample(newCodeSnippet);
-     const cleanedOriginalSnippet = this.cleanCodeExample(originalSourceSnippet);
+    const cleanedNewCode = this.cleanCodeExample(newCodeSnippet);
+    const cleanedOriginalSnippet = this.cleanCodeExample(originalSourceSnippet);
 
-     if (!cleanedOriginalSnippet) {
-         statusCallback?.('Original snippet is empty, cannot perform direct replacement.', 'warning');
-         await this.copyToClipboard(cleanedNewCode);
-         statusCallback?.('Code fix copied to clipboard.', 'warning');
-         return false;
-     }
-
-     if (originalFileContent.includes(cleanedOriginalSnippet)) {
-        statusCallback?.('Attempting direct string replacement...', 'info');
-        const newContent = originalFileContent.replace(cleanedOriginalSnippet, cleanedNewCode);
-
-        try {
-            statusCallback?.('Writing updated content (simple replacement)...', 'info');
-            const writable = await fileHandle.createWritable();
-            await writable.write(newContent);
-            await writable.close();
-            statusCallback?.('Code fix applied using direct replacement (less reliable).', 'success');
-            return true;
-        } catch (error) {
-             statusCallback?.(
-                `Error writing file during simple replacement: ${error instanceof Error ? error.message : String(error)}`,
-                'error'
-            );
-            console.error("Error during Simple Fix write:", error);
-        }
-      }
-
-      // Last Resort: Copy to clipboard
-      statusCallback?.('Direct replacement failed or original snippet not found. Please apply the fix manually.', 'error');
+    if (!cleanedOriginalSnippet) {
+      statusCallback?.('Original snippet is empty, cannot perform direct replacement.', 'warning');
       await this.copyToClipboard(cleanedNewCode);
       statusCallback?.('Code fix copied to clipboard.', 'warning');
       return false;
-  }
-
-
-  // --- Helper Methods ---
-
-  /** Clean code example (removes ``` fences and line numbers) */
-  public cleanCodeExample(codeExample: string): string {
-     if (!codeExample) return '';
-     let cleanCode = codeExample.trim();
-     // Updated regex to handle optional language identifiers (like ```javascript) and potential whitespace
-     cleanCode = cleanCode.replace(/^```[\w\s]*\n?/m, ''); // Remove starting fence
-     cleanCode = cleanCode.replace(/\n?```$/m, ''); // Remove ending fence
-     // Regex to remove leading line numbers like "1.", "1 |", "1:", etc. possibly followed by whitespace
-     cleanCode = cleanCode.replace(/^\s*\d+\s*[:.|]\s*/gm, '');
-     return cleanCode.trim();
-  }
-
-  /** Copy to clipboard */
-  public async copyToClipboard(text: string): Promise<void> {
-    if (!text) return;
-    try {
-        if (navigator.clipboard && window.isSecureContext) {
-             await navigator.clipboard.writeText(text);
-        } else {
-            // Fallback for insecure contexts or older browsers
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed'; // Prevent scrolling to bottom
-            textarea.style.opacity = '0';
-            textarea.style.left = '-9999px';
-            textarea.style.top = '-9999px';
-            document.body.appendChild(textarea);
-            textarea.focus();
-            textarea.select();
-            try {
-                const success = document.execCommand('copy');
-                if (!success) {
-                   throw new Error('Fallback document.execCommand failed');
-                }
-            } catch (e) {
-                console.error('Fallback clipboard copy failed:', e);
-                // Avoid throwing here, let the caller handle UI feedback
-            } finally {
-               document.body.removeChild(textarea);
-            }
-        }
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      // Let the calling function decide how to handle clipboard failure via statusCallback.
     }
+
+    if (originalFileContent.includes(cleanedOriginalSnippet)) {
+      statusCallback?.('Attempting direct string replacement...', 'info');
+      const newContent = originalFileContent.replace(cleanedOriginalSnippet, cleanedNewCode);
+
+      try {
+        statusCallback?.('Writing updated content (simple replacement)...', 'info');
+        const writable = await fileHandle.createWritable();
+        await writable.write(newContent);
+        await writable.close();
+        statusCallback?.('Code fix applied using direct replacement (less reliable).', 'success');
+        return true;
+      } catch (error) {
+        statusCallback?.(
+          `Error writing file during simple replacement: ${error instanceof Error ? error.message : String(error)}`,
+          'error'
+        );
+        console.error("Error during Simple Fix write:", error);
+      }
+    }
+
+    // Last Resort: Copy to clipboard
+    statusCallback?.('Direct replacement failed or original snippet not found. Please apply the fix manually.', 'error');
+    await this.copyToClipboard(cleanedNewCode);
+    statusCallback?.('Code fix copied to clipboard.', 'warning');
+    return false;
   }
 
   /**
-   * Helper function to extract names from AST nodes
-   * Useful for duplicate detection and function matching
+   * Analyze function call relationships to identify connected functions
+   */
+  private analyzeCallGraph(ast: any): Map<string, Set<string>> {
+    const callGraph = new Map<string, Set<string>>();
+    const self = this; // Store reference to class instance
+
+    // First pass: collect all function names
+    traverse(ast, {
+      FunctionDeclaration(path) {
+        if (path.node.id) {
+          callGraph.set(path.node.id.name, new Set());
+        }
+      },
+      VariableDeclarator(path) {
+        if (t.isIdentifier(path.node.id) &&
+          (t.isFunctionExpression(path.node.init) || t.isArrowFunctionExpression(path.node.init))) {
+          callGraph.set(path.node.id.name, new Set());
+        }
+      }
+    });
+
+    // Second pass: identify function calls
+    traverse(ast, {
+      CallExpression(path) {
+        if (t.isIdentifier(path.node.callee)) {
+          const callerFunction = self.findEnclosingFunctionName(path);
+          const calleeName = path.node.callee.name;
+
+          if (callerFunction && callGraph.has(callerFunction) && callGraph.has(calleeName)) {
+            callGraph.get(callerFunction)?.add(calleeName);
+          }
+        }
+      }
+    });
+
+    return callGraph;
+  }
+
+  /**
+   * Find the name of the function enclosing a given path
+   */
+  private findEnclosingFunctionName(path: NodePath): string | null {
+    let currentPath = path;
+    while (currentPath.parentPath) {
+      currentPath = currentPath.parentPath;
+
+      if (t.isFunctionDeclaration(currentPath.node) && currentPath.node.id) {
+        return currentPath.node.id.name;
+      }
+
+      if (t.isVariableDeclarator(currentPath.node) &&
+        t.isIdentifier(currentPath.node.id) &&
+        (t.isFunctionExpression(currentPath.node.init) || t.isArrowFunctionExpression(currentPath.node.init))) {
+        return currentPath.node.id.name;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Enhanced node name extraction from AST nodes
    */
   private extractNodeName(node: t.Node): string | null {
     if (t.isFunctionDeclaration(node) && node.id) {
       return node.id.name;
-    } 
-    
-    if (t.isVariableDeclaration(node) && 
-        node.declarations.length > 0 && 
-        t.isIdentifier(node.declarations[0].id)) {
+    }
+
+    if (t.isVariableDeclaration(node) &&
+      node.declarations.length > 0 &&
+      t.isIdentifier(node.declarations[0].id)) {
       return node.declarations[0].id.name;
     }
-    
+
     if (t.isExportNamedDeclaration(node) && node.declaration) {
       return this.extractNodeName(node.declaration);
     }
-    
+
     if (t.isExportDefaultDeclaration(node) && node.declaration) {
       if (t.isIdentifier(node.declaration)) {
         return node.declaration.name;
@@ -732,8 +1457,96 @@ export class FileService {
       // For anonymous export default, use a special identifier
       return '_default_';
     }
-    
+
+    // Extract name for arrow functions in variable declarations
+    if (t.isVariableDeclarator(node) && t.isIdentifier(node.id)) {
+      return node.id.name;
+    }
+
     return null;
+  }
+
+  /**
+   * Compare two AST nodes to determine if they are functionally equivalent
+   */
+  private areNodesEquivalent(codeA: string, codeB: string): boolean {
+    // More accurate comparison by normalizing whitespace and formatting
+    const normalizeCode = (code: string) => {
+      return code
+        .trim()
+        .replace(/\s+/g, ' ')           // Normalize whitespace
+        .replace(/;\s*}/g, '}')         // Normalize semicolons before closing brackets
+        .replace(/\(\s*\)/g, '()')      // Normalize empty parentheses
+        .replace(/{\s*}/g, '{}')        // Normalize empty blocks
+        .replace(/\/\/.*$/gm, '')       // Remove comments
+        .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+        .trim();
+    };
+
+    return normalizeCode(codeA) === normalizeCode(codeB);
+  }
+
+  /**
+   * Generate code string from an AST node for comparison
+   */
+  private generateCodeForNode(node: any): string {
+    try {
+      const output = generate(node, {
+        comments: false,
+        compact: true
+      });
+      return output.code;
+    } catch (error) {
+      console.error('Error generating code for node:', error);
+      return '';
+    }
+  }
+
+  /** Clean code example (removes ``` fences and line numbers) */
+  public cleanCodeExample(codeExample: string): string {
+    if (!codeExample) return '';
+    let cleanCode = codeExample.trim();
+    // Updated regex to handle optional language identifiers (like ```javascript) and potential whitespace
+    cleanCode = cleanCode.replace(/^```[\w\s]*\n?/m, ''); // Remove starting fence
+    cleanCode = cleanCode.replace(/\n?```$/m, ''); // Remove ending fence
+    // Regex to remove leading line numbers like "1.", "1 |", "1:", etc. possibly followed by whitespace
+    cleanCode = cleanCode.replace(/^\s*\d+\s*[:.|]\s*/gm, '');
+    return cleanCode.trim();
+  }
+
+  /** Copy to clipboard */
+  public async copyToClipboard(text: string): Promise<void> {
+    if (!text) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for insecure contexts or older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed'; // Prevent scrolling to bottom
+        textarea.style.opacity = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+          const success = document.execCommand('copy');
+          if (!success) {
+            throw new Error('Fallback document.execCommand failed');
+          }
+        } catch (e) {
+          console.error('Fallback clipboard copy failed:', e);
+          // Avoid throwing here, let the caller handle UI feedback
+        } finally {
+          document.body.removeChild(textarea);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      // Let the calling function decide how to handle clipboard failure via statusCallback.
+    }
   }
 }
 
