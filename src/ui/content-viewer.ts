@@ -1,6 +1,7 @@
 import { escapeHTML, createCloseButton } from './utils';
 import { AIFixResponse, ErrorInfo } from '../types';
 import { sourceCodeService } from '../services/source-code-service';
+import { fileService } from '../services/file-service'; // Import the FileService
 
 /**
  * Class for managing the content viewer for displaying AI fixes and other content.
@@ -15,14 +16,15 @@ export class ContentViewer {
   private outsideClickHandler: (e: MouseEvent) => void;
   private currentResponse: Partial<AIFixResponse> = {};
   private currentErrorInfo: ErrorInfo | null = null;
+  private applyButton: HTMLButtonElement | null = null;
 
   constructor() {
     // Handler for outside clicks
     this.outsideClickHandler = (e: MouseEvent) => {
-      if (this.element && 
-          this.element.style.display !== 'none' && 
-          e.target instanceof Node && 
-          !this.element.contains(e.target)) {
+      if (this.element &&
+        this.element.style.display !== 'none' &&
+        e.target instanceof Node &&
+        !this.element.contains(e.target)) {
         this.hide();
       }
     };
@@ -74,10 +76,10 @@ export class ContentViewer {
   public showLoading(): void {
     const element = this.create();
     element.style.display = 'block';
-    
+
     // Clear existing content and add loading message
     element.innerHTML = '<div style="text-align:center;">Loading AI suggestion...</div>';
-    
+
     // Re-add close button
     const closeButton = createCloseButton(() => {
       this.hide();
@@ -91,10 +93,9 @@ export class ContentViewer {
   public showError(error: Error | string): void {
     const element = this.create();
     element.style.display = 'block';
-    element.innerHTML = `<div style="color:#ff6b6b;">Error: ${
-      error instanceof Error ? error.message : String(error)
-    }</div>`;
-    
+    element.innerHTML = `<div style="color:#ff6b6b;">Error: ${error instanceof Error ? error.message : String(error)
+      }</div>`;
+
     // Re-add close button
     const closeButton = createCloseButton(() => {
       this.hide();
@@ -130,8 +131,11 @@ export class ContentViewer {
         <pre id="original-source-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Loading original source code...</code></pre>
       </div>
       <div id="code-example-section">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Code Example</h4>
-        <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Generating code example...</code></pre>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Code Fix</h4>
+          <button id="apply-fix-button" style="background-color:#0e639c;color:white;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;font-size:12px;margin-left:10px;">Apply Fix</button>
+        </div>
+        <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Generating code fix...</code></pre>
       </div>
     `;
     element.innerHTML = htmlContent;
@@ -141,13 +145,22 @@ export class ContentViewer {
     this.fixContent = document.getElementById('fix-content');
     this.originalSourceContent = document.getElementById('original-source-content');
     this.codeExampleContent = document.getElementById('code-example-content');
-    
+    this.applyButton = document.getElementById('apply-fix-button') as HTMLButtonElement;
+
+    // Add event listener to apply button
+    if (this.applyButton) {
+      this.applyButton.addEventListener('click', () => this.applyCodeFix());
+      // Initially disable the button until we have a code fix
+      this.applyButton.disabled = true;
+      this.applyButton.style.opacity = '0.5';
+    }
+
     // Re-add close button
     const closeButton = createCloseButton(() => {
       this.hide();
     });
     element.appendChild(closeButton);
-    
+
     // Reset current response
     this.currentResponse = {};
 
@@ -167,20 +180,20 @@ export class ContentViewer {
     try {
       // Show loading state
       this.originalSourceContent.innerHTML = '<code>Loading original source code...</code>';
-      
+
       // Use sourceCodeService to fetch source code
       const sourceResult = await sourceCodeService.getSourceCode(errorInfo);
-      
+
       if (sourceResult) {
         // Update the errorInfo with context from the service
         errorInfo.codeContext = sourceResult.codeContext;
-        
+
         // Generate formatted HTML using the service
         const sourceHTML = sourceCodeService.generateSourceCodeHTML(sourceResult);
-        
+
         // Update the original source content
         this.originalSourceContent.innerHTML = sourceHTML;
-        
+
         // Store the source code in the current response
         this.currentResponse.originalSource = sourceResult.sourceCode;
       } else {
@@ -198,12 +211,12 @@ export class ContentViewer {
   public updateWithResponse(response: Partial<AIFixResponse>): void {
     // Update the current response with new data
     this.currentResponse = { ...this.currentResponse, ...response };
-    
+
     // Update individual sections if they exist in the response
     if (response.issue !== undefined) {
       this.updateIssue(response.issue);
     }
-    
+
     if (response.fix !== undefined) {
       // Handle both string array and any other format
       if (Array.isArray(response.fix)) {
@@ -213,11 +226,11 @@ export class ContentViewer {
         this.updateFix([String(response.fix)]);
       }
     }
-    
+
     if (response.originalSource !== undefined) {
       this.updateOriginalSource(response.originalSource);
     }
-    
+
     if (response.codeExample !== undefined) {
       this.updateCodeExample(response.codeExample);
     }
@@ -252,7 +265,7 @@ export class ContentViewer {
    */
   public async updateOriginalSource(originalSource: string): Promise<void> {
     if (!this.originalSourceContent) return;
-    
+
     if (this.currentErrorInfo) {
       try {
         // Create a source result object using the original source
@@ -266,10 +279,10 @@ export class ContentViewer {
           lineNumber: this.currentErrorInfo.lineNumber || 1,
           message: this.currentErrorInfo.message
         };
-        
+
         // Update errorInfo with the new code context
         this.currentErrorInfo.codeContext = originalSource;
-        
+
         // Generate HTML using the service
         const sourceHTML = sourceCodeService.generateSourceCodeHTML(sourceResult);
         this.originalSourceContent.innerHTML = sourceHTML;
@@ -281,7 +294,7 @@ export class ContentViewer {
       // No error info, just do simple escaped display
       this.originalSourceContent.innerHTML = `<code>${escapeHTML(originalSource.trim())}</code>`;
     }
-    
+
     this.currentResponse.originalSource = originalSource;
   }
 
@@ -291,31 +304,13 @@ export class ContentViewer {
    */
   public updateCodeExample(codeExample: string): void {
     if (!this.codeExampleContent) return;
-    
-    // Remove any lingering markdown code block syntax
-    let cleanCode = codeExample;
-    
-    // Remove backticks and language identifier from beginning if present
-    if (cleanCode.startsWith('```')) {
-      const firstNewline = cleanCode.indexOf('\n');
-      if (firstNewline > 0) {
-        cleanCode = cleanCode.substring(firstNewline + 1);
-      } else {
-        cleanCode = cleanCode.substring(3); // Just remove the opening backticks
-      }
-    }
-    
-    // Remove closing backticks if present
-    if (cleanCode.endsWith('```')) {
-      cleanCode = cleanCode.substring(0, cleanCode.length - 3);
-    }
-    
-    // Trim any extra whitespace
-    cleanCode = cleanCode.trim();
-    
+
+    // Clean up the code example using the fileService
+    const cleanCode = fileService.cleanCodeExample(codeExample);
+
     // Check if we have original source to compare against
     const originalSource = this.currentResponse.originalSource;
-    
+
     if (originalSource && cleanCode) {
       try {
         // Generate diff highlighted HTML
@@ -330,8 +325,14 @@ export class ContentViewer {
       // No original source, just display the code example
       this.codeExampleContent.innerHTML = `<code>${escapeHTML(cleanCode)}</code>`;
     }
-    
+
     this.currentResponse.codeExample = codeExample;
+
+    // Enable the apply button now that we have a code fix
+    if (this.applyButton && cleanCode) {
+      this.applyButton.disabled = false;
+      this.applyButton.style.opacity = '1';
+    }
   }
 
   /**
@@ -341,53 +342,193 @@ export class ContentViewer {
    */
   private generateDiffHighlightedHTML(originalCode: string, modifiedCode: string): string {
     // For comparison, normalize the code (remove whitespace but keep track of original lines)
-    const normalizeForComparison = (code: string): {normalized: string[], original: string[]} => {
+    const normalizeForComparison = (code: string): { normalized: string[], original: string[] } => {
       const original = code.split('\n').filter(line => line.trim().length > 0);
       const normalized = original.map(line => this.normalizeCodeLine(line));
       return { normalized, original };
     };
-    
+
     const original = normalizeForComparison(originalCode);
     const modified = normalizeForComparison(modifiedCode);
-    
+
     let diffHtml = '<pre style="margin:0;"><code style="display:block;">';
-    
+
     // Process the modified code line by line
     for (let i = 0; i < modified.original.length; i++) {
       const modifiedLine = modified.original[i];
       const normalizedModifiedLine = modified.normalized[i];
-      
+
       // Find if this line exists in original code (ignoring whitespace)
-      const isNewOrChanged = !original.normalized.some(origLine => 
+      const isNewOrChanged = !original.normalized.some(origLine =>
         this.compareCodeLines(origLine, normalizedModifiedLine)
       );
-      
+
       // Apply green background only to new or changed lines
-      const lineStyle = isNewOrChanged ? 
+      const lineStyle = isNewOrChanged ?
         'background-color:rgba(0,128,0,0.2);' : '';
-      
+
       // Add the line with proper indentation preserved
       diffHtml += `<div style="white-space:pre;${lineStyle}">${escapeHTML(modifiedLine)}</div>`;
     }
-    
+
     diffHtml += '</code></pre>';
     return diffHtml;
   }
-  
+
   /**
    * Normalizes a code line for comparison while preserving the original formatting
    */
   private normalizeCodeLine(line: string): string {
     return line.replace(/\s+/g, '') // Remove all whitespace
-               .replace(/\/\/.*$/, ''); // Remove comments
+      .replace(/\/\/.*$/, ''); // Remove comments
   }
-  
+
   /**
    * Compares two already normalized code lines.
    * @returns true if the lines are essentially the same code
    */
   private compareCodeLines(line1: string, line2: string): boolean {
     return line1 === line2;
+  }
+
+  /**
+   * Applies the suggested code fix to the file.
+   */
+  private async applyCodeFix(): Promise<void> {
+    if (!this.currentResponse.codeExample || !this.currentErrorInfo?.fileName) {
+      this.showStatusMessage('Missing code example or file information.', 'error');
+      return;
+    }
+
+    // Show status during file access request
+    this.showStatusMessage('Requesting file access...', 'info');
+
+    const fileHandle = await fileService.requestFileAccess(
+      this.currentErrorInfo.fileName,
+      (message, type) => this.showStatusMessage(message, type)
+    );
+
+    if (!fileHandle) {
+      this.showStatusMessage('File access denied or cancelled.', 'warning');
+      // Optionally copy to clipboard as fallback
+      if (this.currentResponse.codeExample) {
+         const cleanCode = fileService.cleanCodeExample(this.currentResponse.codeExample);
+         await fileService.copyToClipboard(cleanCode);
+         this.showStatusMessage('Fix copied to clipboard.', 'info');
+      }
+      return;
+    }
+
+    try {
+      // Read the original file content
+      const file = await fileHandle.getFile();
+      const originalFileContent = await file.text();
+      const cleanCode = fileService.cleanCodeExample(this.currentResponse.codeExample);
+
+      // --- Fetch the original source snippet (code context) ---
+      let originalSourceSnippet = '';
+      if (this.currentErrorInfo) {
+          this.showStatusMessage('Fetching relevant code snippet...', 'info');
+          const sourceResult = await sourceCodeService.getSourceCode(this.currentErrorInfo);
+          if (sourceResult && sourceResult.codeContext) {
+              originalSourceSnippet = sourceResult.codeContext;
+              this.showStatusMessage('Code snippet retrieved.', 'info');
+          } else {
+              this.showStatusMessage('Could not retrieve original code snippet for context.', 'warning');
+              // Fallback or decide how to handle this - maybe use the whole file or error out?
+              // For now, let's try proceeding without a specific snippet, applyCodeFix might fallback
+          }
+      } else {
+           this.showStatusMessage('Missing error information to fetch code snippet.', 'warning');
+      }
+      // --- End fetching snippet ---
+
+
+      // Apply the fix using the fetched snippet
+      const success = await fileService.applyCodeFix(
+        fileHandle,
+        originalFileContent,
+        originalSourceSnippet, // Use the fetched codeContext here
+        cleanCode,
+        this.currentErrorInfo, // Pass the full errorInfo
+        (message, type) => this.showStatusMessage(message, type)
+      );
+
+      if (success) {
+        this.showStatusMessage('Code fix applied successfully!', 'success');
+        // Optionally hide the viewer after success
+        setTimeout(() => this.hide(), 2000);
+      } else {
+        // If the fix wasn't applied to the file, try to copy it to clipboard
+        await fileService.copyToClipboard(cleanCode);
+        this.showStatusMessage('Could not apply fix directly. Fix copied to clipboard instead.', 'warning');
+      }
+    } catch (error) {
+      this.showStatusMessage(
+        `Failed to apply code fix: ${error instanceof Error ? error.message : String(error)}`,
+        'error'
+      );
+      console.error('Apply fix error:', error);
+
+      // Try to copy to clipboard as fallback
+      if (this.currentResponse.codeExample) {
+        const cleanCode = fileService.cleanCodeExample(this.currentResponse.codeExample);
+        await fileService.copyToClipboard(cleanCode);
+        this.showStatusMessage('Fix copied to clipboard as fallback.', 'info');
+      }
+    }
+  }
+
+  /**
+   * Shows a status message in the content viewer.
+   */
+  private showStatusMessage(message: string, type: 'info' | 'success' | 'error' | 'warning'): void {
+    const colorMap = {
+      info: '#6ab0ff',
+      success: '#4CAF50',
+      error: '#ff6b6b',
+      warning: '#FFC107'
+    };
+
+    // Create a status container if it doesn't exist
+    let statusContainer = document.getElementById('status-message-container');
+    if (!statusContainer) {
+      statusContainer = document.createElement('div');
+      statusContainer.id = 'status-message-container';
+      statusContainer.style.position = 'fixed';
+      statusContainer.style.bottom = '20px';
+      statusContainer.style.right = '20px';
+      statusContainer.style.zIndex = '1005';
+      document.body.appendChild(statusContainer);
+    }
+
+    // Create the status message element
+    const statusElement = document.createElement('div');
+    statusElement.style.backgroundColor = colorMap[type];
+    statusElement.style.color = '#ffffff';
+    statusElement.style.padding = '10px 15px';
+    statusElement.style.borderRadius = '4px';
+    statusElement.style.marginTop = '10px';
+    statusElement.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+    statusElement.style.transition = 'opacity 0.3s ease-in-out';
+    statusElement.textContent = message;
+
+    // Add to the container
+    statusContainer.appendChild(statusElement);
+
+    // Remove after delay
+    setTimeout(() => {
+      statusElement.style.opacity = '0';
+      setTimeout(() => {
+        if (statusContainer && statusElement.parentNode === statusContainer) {
+          statusContainer.removeChild(statusElement);
+        }
+        // If no more messages, remove the container
+        if (statusContainer && statusContainer.childNodes.length === 0) {
+          document.body.removeChild(statusContainer);
+        }
+      }, 300);
+    }, 3000);
   }
 
   /**
@@ -411,17 +552,28 @@ export class ContentViewer {
    */
   public destroy(): void {
     document.removeEventListener('mousedown', this.outsideClickHandler);
-    
+
+    if (this.applyButton) {
+      this.applyButton.removeEventListener('click', () => this.applyCodeFix());
+    }
+
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
       this.element = null;
     }
-    
+
+    // Remove status container if it exists
+    const statusContainer = document.getElementById('status-message-container');
+    if (statusContainer && statusContainer.parentNode) {
+      statusContainer.parentNode.removeChild(statusContainer);
+    }
+
     // Clear references
     this.issueContent = null;
     this.fixContent = null;
     this.originalSourceContent = null;
     this.codeExampleContent = null;
+    this.applyButton = null;
     this.currentErrorInfo = null;
     this.currentResponse = {};
   }
