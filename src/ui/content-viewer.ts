@@ -393,7 +393,7 @@ export class ContentViewer {
   }
 
   /**
-   * Applies the suggested code fix to the file.
+   * Applies the suggested code fix to the file within the selected directory.
    */
   private async applyCodeFix(): Promise<void> {
     if (!this.currentResponse.codeExample || !this.currentErrorInfo?.fileName) {
@@ -401,75 +401,77 @@ export class ContentViewer {
       return;
     }
 
-    // Show status during file access request
-    this.showStatusMessage('Requesting file access...', 'info');
-
-    const fileHandle = await fileService.requestFileAccess(
-      this.currentErrorInfo.fileName,
-      (message, type) => this.showStatusMessage(message, type)
+    // --- Ensure Directory Access ---
+    this.showStatusMessage('Checking directory access...', 'info');
+    const directoryHandle = await fileService.getDirectoryHandle(
+        (message, type) => this.showStatusMessage(message, type)
     );
 
-    if (!fileHandle) {
-      this.showStatusMessage('File access denied or cancelled.', 'warning');
-      // Optionally copy to clipboard as fallback
-      if (this.currentResponse.codeExample) {
-         const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
-         await copyToClipboard(cleanCode);
-         this.showStatusMessage('Fix copied to clipboard.', 'info');
-      }
+    if (!directoryHandle) {
+      // getDirectoryHandle already shows status messages for errors/cancellation
+      this.showStatusMessage('Directory access is required to apply fixes automatically.', 'warning');
+       // Optionally copy to clipboard as fallback
+       if (this.currentResponse.codeExample) {
+          const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
+          await copyToClipboard(cleanCode);
+          this.showStatusMessage('Fix copied to clipboard.', 'info');
+       }
       return;
     }
+    // --- Directory Access Confirmed ---
 
     try {
-      // Read the original file content
-      const file = await fileHandle.getFile();
-      const originalFileContent = await file.text();
+      // Clean the suggested code *before* passing it
       const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
 
       // --- Fetch the original source snippet (code context) ---
+      // This snippet is used by applySimpleFix and potentially by AST processor for context
       let originalSourceSnippet = '';
       if (this.currentErrorInfo) {
-          this.showStatusMessage('Fetching relevant code snippet...', 'info');
+          this.showStatusMessage('Fetching relevant code snippet for context...', 'info');
           const sourceResult = await sourceCodeService.getSourceCode(this.currentErrorInfo);
           if (sourceResult && sourceResult.codeContext) {
-              originalSourceSnippet = sourceResult.codeContext;
+              // Use the cleaned version of the context for better matching later
+              originalSourceSnippet = cleanCodeExample(sourceResult.codeContext);
               this.showStatusMessage('Code snippet retrieved.', 'info');
           } else {
-              this.showStatusMessage('Could not retrieve original code snippet for context.', 'warning');
-              // Fallback or decide how to handle this - maybe use the whole file or error out?
-              // For now, let's try proceeding without a specific snippet, applyCodeFix might fallback
+              this.showStatusMessage('Could not retrieve original code snippet for context matching.', 'warning');
+              // Proceeding without snippet context, direct replacement might fail. AST might still work.
           }
       } else {
            this.showStatusMessage('Missing error information to fetch code snippet.', 'warning');
       }
       // --- End fetching snippet ---
 
-
-      // Apply the fix using the fetched snippet
+      // Apply the fix using the directory handle and error info
+      // FileService will handle getting the file handle and reading content
       const success = await fileService.applyCodeFix(
-        fileHandle,
-        originalFileContent,
-        originalSourceSnippet, // Use the fetched codeContext here
-        cleanCode,
-        this.currentErrorInfo, // Pass the full errorInfo
-        (message, type) => this.showStatusMessage(message, type)
+        originalSourceSnippet, // Pass the context snippet
+        cleanCode,             // Pass the cleaned AI suggestion
+        this.currentErrorInfo, // Pass the full errorInfo (contains fileName)
+        (message, type) => this.showStatusMessage(message, type) // Pass status callback
       );
 
       if (success) {
-        this.showStatusMessage('Code fix applied successfully!', 'success');
+        // fileService.applyCodeFix or its delegates already show success messages
+        // this.showStatusMessage('Code fix applied successfully!', 'success');
         // Optionally hide the viewer after success
         setTimeout(() => this.hide(), 2000);
       } else {
-        // If the fix wasn't applied to the file, try to copy it to clipboard
-        await copyToClipboard(cleanCode);
-        this.showStatusMessage('Could not apply fix directly. Fix copied to clipboard instead.', 'warning');
+        // fileService.applyCodeFix or its delegates show error/warning messages
+        // and handle clipboard copy as a fallback.
+        this.showStatusMessage('Automatic fix application failed. See previous messages.', 'error');
+        // Ensure it's copied if not done already by fileService
+         await copyToClipboard(cleanCode);
+         this.showStatusMessage('Fix copied to clipboard as a fallback.', 'info');
       }
     } catch (error) {
+      // Catch unexpected errors during the process
       this.showStatusMessage(
         `Failed to apply code fix: ${error instanceof Error ? error.message : String(error)}`,
         'error'
       );
-      console.error('Apply fix error:', error);
+      console.error('Apply fix error in ContentViewer:', error);
 
       // Try to copy to clipboard as fallback
       if (this.currentResponse.codeExample) {
