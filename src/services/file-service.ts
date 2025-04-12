@@ -12,60 +12,176 @@ export class FileService {
   private astProcessor: AstProcessor;
   private selectedDirectoryHandle: FileSystemDirectoryHandle | null = null;
   private isInitialized = false; // Flag to prevent multiple initializations
+  private initializationPromise: Promise<void> | null = null; // Promise resolves when init is done
 
   constructor() {
     this.astProcessor = new AstProcessor();
-    // Don't call initialize() here directly, let the app call it
+    // Start initialization immediately but store the promise
+    // Use a dedicated status callback or just console log for constructor init
+    this.initializationPromise = this.initialize( (msg, type) =>
+        console.log(`[FileService Init Status - ${type.toUpperCase()}]: ${msg}`)
+    ).catch(err => {
+        // Catch initialization errors here so they don't become unhandled rejections
+        console.error("[FileService] Initialization failed:", err);
+        // isInitialized remains false
+    });
   }
 
   /**
    * Initializes the service by attempting to load the stored directory handle.
-   * Should be called once when the application starts.
+   * Checks permission status without requesting it.
    */
-  public async initialize(
+  private async initialize(
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<void> {
+    // Prevent re-entry if already initialized or initializing
     if (this.isInitialized) {
       return;
     }
-    this.isInitialized = true;
+    // Check if another call is already in progress (though constructor pattern makes this less likely)
+    if (this.initializationPromise && !this.isInitialized) {
+        return this.initializationPromise; // Wait for the existing initialization
+    }
+
+    console.log('[FileService] Initializing...');
     statusCallback?.('Initializing File Service, checking for stored directory access...', 'info');
 
     try {
       const storedHandle = await getStoredDirectoryHandle(STORED_HANDLE_KEY);
       if (storedHandle) {
-        statusCallback?.(`Found stored handle for: ${storedHandle.name}. Verifying permissions...`, 'info');
-        // IMPORTANT: Verify permission still exists
-        if (await this.verifyPermission(storedHandle)) {
-          statusCallback?.(`Permissions verified for directory: ${storedHandle.name}`, 'success');
-          this.selectedDirectoryHandle = storedHandle;
-        } else {
-          statusCallback?.(`Permissions lost or denied for stored directory: ${storedHandle.name}. Please re-select the directory when needed.`, 'warning');
-          // Remove the stale handle from storage
-          await removeStoredDirectoryHandle(STORED_HANDLE_KEY);
+        statusCallback?.(`Found stored handle for: ${storedHandle.name}. Checking permission status...`, 'info');
+        // --- Use checkPermissionStatus instead of verifyPermission ---
+        const permissionStatus = await this.checkPermissionStatus(storedHandle);
+        statusCallback?.(`Initial permission status for ${storedHandle.name}: ${permissionStatus}`, 'info');
+
+        if (permissionStatus === 'granted') {
+          statusCallback?.(`Permissions previously granted for directory: ${storedHandle.name}`, 'success');
+          this.selectedDirectoryHandle = storedHandle; // Cache the handle
+        } else if (permissionStatus === 'prompt') {
+           statusCallback?.(`Permissions require confirmation for stored directory: ${storedHandle.name}. Will prompt when needed.`, 'info');
+           // Don't cache yet, getDirectoryHandle will re-verify and prompt later
+           // Optionally, could remove from storage here too, to force picker if prompt fails later
+           // await removeStoredDirectoryHandle(STORED_HANDLE_KEY);
+        } else { // 'denied'
+          statusCallback?.(`Permissions were denied for stored directory: ${storedHandle.name}. Forgetting handle.`, 'warning');
+          await removeStoredDirectoryHandle(STORED_HANDLE_KEY); // Remove invalid handle
         }
       } else {
          statusCallback?.('No stored directory handle found.', 'info');
       }
+      this.isInitialized = true; // Set flag *after* successful completion
+      console.log('[FileService] Initialization complete.');
     } catch (error) {
-      statusCallback?.(`Error loading stored directory handle: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      // --- Handle potential errors during checkPermissionStatus or IndexedDB access ---
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      // Check specifically for the user activation error, although it shouldn't happen with queryPermission
+      if (errorMsg.includes('User activation is required')) {
+         statusCallback?.('Error during initialization: Stored handle exists but cannot check status without user interaction. Please re-select directory later.', 'warning');
+         // Remove the problematic handle to avoid loops
+         await removeStoredDirectoryHandle(STORED_HANDLE_KEY).catch(e => console.warn("Failed to remove handle after init error:", e));
+      } else {
+         statusCallback?.(`Error loading/checking stored directory handle: ${errorMsg}`, 'error');
+         console.error('[FileService] Initialization failed during load/check:', error);
+      }
+      // Do not set isInitialized = true on error
+      // Rethrow only if it's not the activation error we handled gracefully
+      if (!errorMsg.includes('User activation is required')) {
+          throw error;
+      }
+      // If it *was* the activation error, we logged a warning and removed the handle,
+      // consider initialization "complete" but without a cached handle.
+      this.isInitialized = true;
+    }
+  }
+
+  /** Helper to wait for initialization to complete */
+  public async ensureInitialized(): Promise<boolean> {
+      if (this.isInitialized) {
+          return true;
+      }
+      if (this.initializationPromise) {
+          try {
+              await this.initializationPromise;
+              // Re-check isInitialized state after await, in case of error during init
+              return this.isInitialized;
+          } catch (error) {
+              // Error already logged by the initialization catch block
+              console.error("[FileService] Waiting for initialization failed.");
+              return false; // Initialization failed
+          }
+      } else {
+          // This case should ideally not be reached if constructor logic is sound
+          console.error("[FileService] Initialization promise missing unexpectedly.");
+          // Attempt recovery? Or just fail.
+          try {
+              console.log("[FileService] Attempting recovery initialization...");
+              this.initializationPromise = this.initialize( (msg, type) =>
+                  console.log(`[FileService Recovery Init Status - ${type.toUpperCase()}]: ${msg}`)
+              ).catch(err => { console.error("[FileService] Recovery initialization failed:", err); });
+              await this.initializationPromise;
+              return this.isInitialized;
+          } catch {
+              return false;
+          }
+      }
+  }
+
+  /**
+   * Helper to check the current permission status for a given handle using queryPermission.
+   * Does NOT request permission.
+   */
+  private async checkPermissionStatus(handle: FileSystemDirectoryHandle): Promise<PermissionState> {
+    const options = { mode: 'readwrite' as FileSystemPermissionMode };
+    try {
+        const status = await handle.queryPermission(options);
+        return status;
+    } catch (error) {
+        console.error("Error querying permission status:", error);
+        // If querying fails, assume we need to prompt later or it's denied.
+        // Returning 'prompt' might be safer, but 'denied' reflects the error state.
+        return 'denied';
     }
   }
 
   /**
-   * Helper to verify permissions for a given handle.
+   * Helper to verify permissions, requesting if necessary.
+   * Should only be called in response to user activation.
    */
-  private async verifyPermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  private async verifyOrRequestPermission(handle: FileSystemDirectoryHandle, statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void): Promise<boolean> {
     const options = { mode: 'readwrite' as FileSystemPermissionMode };
-    // Check if permission was already granted
-    if (await handle.queryPermission(options) === 'granted') {
-      return true;
+    try {
+      // 1. Check current status
+      const currentStatus = await handle.queryPermission(options);
+      statusCallback?.(`Permission status for ${handle.name}: ${currentStatus}`, 'info');
+
+      if (currentStatus === 'granted') {
+        return true;
+      }
+
+      if (currentStatus === 'denied') {
+        statusCallback?.(`Permission explicitly denied for ${handle.name}. Cannot proceed.`, 'warning');
+        return false;
+      }
+
+      // 2. If 'prompt', request permission (requires user activation)
+      if (currentStatus === 'prompt') {
+        statusCallback?.(`Requesting permission for ${handle.name}...`, 'info');
+        // This is the call that requires user activation
+        if (await handle.requestPermission(options) === 'granted') {
+          statusCallback?.(`Permission granted for ${handle.name}.`, 'success');
+          return true;
+        } else {
+          statusCallback?.(`Permission denied by user or browser for ${handle.name}.`, 'warning');
+          return false;
+        }
+      }
+    } catch (error) {
+        // Catch errors during query or request
+        statusCallback?.(`Error verifying/requesting permission for ${handle.name}: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        console.error("Error in verifyOrRequestPermission:", error);
+        return false;
     }
-    // Try to request permission without prompting the user again if possible
-    // Note: Depending on the browser, this might still prompt if permission was explicitly revoked.
-    if (await handle.requestPermission(options) === 'granted') {
-      return true;
-    }
+    // Fallback case (shouldn't be reached ideally)
     return false;
   }
 
@@ -221,164 +337,199 @@ export class FileService {
   }
 
   /**
-   * Gets the directory handle, trying memory, then IndexedDB, then prompting.
+   * Clears the selected directory handle from memory and IndexedDB.
+   */
+  public async forgetDirectoryAccess(
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<void> {
+    statusCallback?.('Forgetting directory access...', 'info');
+    this.selectedDirectoryHandle = null; // Clear memory cache
+    try {
+      await removeStoredDirectoryHandle(STORED_HANDLE_KEY); // Clear storage
+      statusCallback?.('Directory access has been forgotten. You will be prompted next time.', 'success');
+    } catch (error) {
+      statusCallback?.(`Error removing stored directory handle: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      console.error('Error forgetting directory access:', error);
+    }
+  }
+
+  /**
+   * Gets the directory handle, trying cache/storage first, then prompting.
+   * Verifies/requests permissions when a handle is found.
    */
   public async getDirectoryHandle(
-     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<FileSystemDirectoryHandle | null> {
-    // 1. Check memory cache first
-    if (this.selectedDirectoryHandle) {
-      statusCallback?.(`Using cached handle: ${this.selectedDirectoryHandle.name}. Verifying permissions...`, 'info');
-      if (await this.verifyPermission(this.selectedDirectoryHandle)) {
-         statusCallback?.(`Permissions verified for cached handle: ${this.selectedDirectoryHandle.name}`, 'success');
-        return this.selectedDirectoryHandle;
-      } else {
-        statusCallback?.(`Permissions lost for cached handle: ${this.selectedDirectoryHandle.name}.`, 'warning');
-        this.selectedDirectoryHandle = null; // Clear invalid cached handle
-        // Also remove from storage as it's invalid
-        await removeStoredDirectoryHandle(STORED_HANDLE_KEY).catch(e => console.warn("Could not remove stored handle:", e));
-        // Proceed to prompt
-      }
+    // Wait for initialization to finish before proceeding
+    const initialized = await this.ensureInitialized();
+    if (!initialized) {
+        statusCallback?.('FileService initialization failed or did not complete. Cannot get handle.', 'error');
+        return null;
     }
 
-    // 2. Try loading from IndexedDB if not in memory or permission lost
-    if (!this.selectedDirectoryHandle) {
-        try {
-            const storedHandle = await getStoredDirectoryHandle(STORED_HANDLE_KEY);
-            if (storedHandle) {
-                statusCallback?.(`Using stored handle: ${storedHandle.name}. Verifying permissions...`, 'info');
-                if (await this.verifyPermission(storedHandle)) {
-                    statusCallback?.(`Permissions verified for stored handle: ${storedHandle.name}`, 'success');
-                    this.selectedDirectoryHandle = storedHandle; // Cache in memory
-                    return this.selectedDirectoryHandle;
-                } else {
-                    statusCallback?.(`Permissions lost or denied for stored directory: ${storedHandle.name}. Please re-select.`, 'warning');
-                    // Remove the stale handle from storage
-                    await removeStoredDirectoryHandle(STORED_HANDLE_KEY);
-                    // Proceed to prompt
-                }
-            }
-        } catch (error) {
-            statusCallback?.(`Error checking stored directory handle: ${error instanceof Error ? error.message : String(error)}`, 'warning');
-            // Proceed to prompt
+    let handleToCheck: FileSystemDirectoryHandle | null | undefined = this.selectedDirectoryHandle;
+    let source = 'memory cache';
+
+    // 1. Check memory cache
+    if (handleToCheck) {
+        statusCallback?.(`Found handle in ${source}: ${handleToCheck.name}. Verifying/Requesting permissions...`, 'info');
+        // --- Use verifyOrRequestPermission ---
+        if (await this.verifyOrRequestPermission(handleToCheck, statusCallback)) {
+            // statusCallback message handled within verifyOrRequestPermission
+            return this.selectedDirectoryHandle; // Already verified and cached
+        } else {
+            statusCallback?.(`Permissions lost or denied for directory in ${source}: ${handleToCheck.name}. Clearing...`, 'warning');
+            this.selectedDirectoryHandle = null; // Clear invalid cached handle
+            handleToCheck = null; // Ensure we try storage next
+            try { await removeStoredDirectoryHandle(STORED_HANDLE_KEY); } catch { /* ignore */ }
         }
     }
 
-    // 3. If not found or permissions failed, prompt the user
-    statusCallback?.('Directory handle not available or permissions insufficient.', 'info');
-    return await this.requestDirectoryAccess(statusCallback);
+    // 2. Check IndexedDB storage if not found in memory or memory check failed
+    if (!handleToCheck) {
+        source = 'storage';
+        try {
+            handleToCheck = await getStoredDirectoryHandle(STORED_HANDLE_KEY);
+            if (handleToCheck) {
+                statusCallback?.(`Found handle in ${source}: ${handleToCheck.name}. Verifying/Requesting permissions...`, 'info');
+                 // --- Use verifyOrRequestPermission ---
+                if (await this.verifyOrRequestPermission(handleToCheck, statusCallback)) {
+                    // statusCallback message handled within verifyOrRequestPermission
+                    this.selectedDirectoryHandle = handleToCheck; // Cache in memory
+                    return this.selectedDirectoryHandle;
+                } else {
+                    statusCallback?.(`Permissions lost or denied for directory in ${source}: ${handleToCheck.name}. Clearing...`, 'warning');
+                    this.selectedDirectoryHandle = null; // Clear memory cache just in case
+                    await removeStoredDirectoryHandle(STORED_HANDLE_KEY); // Remove stale handle
+                    handleToCheck = null; // Ensure we prompt next
+                }
+            } else {
+                 statusCallback?.(`No valid handle found in ${source}.`, 'info');
+            }
+        } catch (error) {
+            statusCallback?.(`Error checking ${source} for handle: ${error instanceof Error ? error.message : String(error)}`, 'error');
+            handleToCheck = null; // Ensure we prompt on error
+        }
+    }
+
+
+    // 3. If no valid handle found/verified, prompt the user
+    statusCallback?.('Directory access required. Prompting user...', 'info');
+    // requestDirectoryAccess internally calls storeDirectoryHandle which is fine
+    const newHandle = await this.requestDirectoryAccess(statusCallback);
+    // No need to call verifyOrRequestPermission immediately after requestDirectoryAccess,
+    // as showDirectoryPicker grants permission implicitly upon selection.
+    return newHandle;
   }
 
   /**
    * Applies a code fix to the correct file within the selected directory.
    */
   public async applyCodeFix(
+    errorInfo: ErrorInfo,
     originalSourceSnippet: string,
     newCodeSnippet: string,
-    errorInfo: ErrorInfo,
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<boolean> {
-
-    // getDirectoryHandle will now try memory/storage before prompting
-    const directoryHandle = await this.getDirectoryHandle(statusCallback);
-    if (!directoryHandle) {
-        // getDirectoryHandle or requestDirectoryAccess already showed messages
-        return false;
-    }
-
-    if (!errorInfo.fileName) {
-        statusCallback?.('Error information does not contain a filename.', 'error');
-        return false;
-    }
-
-    // --- Get the project-relative path ---
-    const projectRelativePath = this.getProjectRelativePath(errorInfo.fileName);
-    if (!projectRelativePath) {
-      statusCallback?.(`Could not determine a usable relative path for: ${errorInfo.fileName}`, 'error');
-      return false;
-    }
-    // Example: projectRelativePath might be "src/demo.ts"
-
-    // --- Calculate path relative to the selected directory handle ---
-    let pathForGetHandle: string;
-    if (directoryHandle.name === 'src' && projectRelativePath.startsWith('src/')) {
-        pathForGetHandle = projectRelativePath.substring(4); // Remove "src/"
-    }
-    // Add more conditions here if users might select other directories (e.g., the root)
-    // else if (directoryHandle.name === 'my-project' && projectRelativePath.startsWith(...)) { ... }
-    else {
-        // Default assumption: the projectRelativePath is already relative to the selected handle
-        pathForGetHandle = projectRelativePath;
-    }
-
-    if (!pathForGetHandle) {
-        statusCallback?.(`Calculated path for getFileHandle is empty. Original path: ${projectRelativePath}, Directory: ${directoryHandle.name}`, 'error');
-        return false;
-    }
-
-    // --- >>> ADD DEBUGGING LOGS HERE <<< ---
-    console.log('[Debug] Directory Handle Name:', directoryHandle.name);
-    console.log('[Debug] Project Relative Path:', projectRelativePath);
-    console.log('[Debug] Calculated Path for getFileHandle:', pathForGetHandle);
-    // --- >>> END DEBUGGING LOGS <<< ---
-
-    let fileHandle: FileSystemFileHandle;
-    try {
-      statusCallback?.(`Attempting to access file: ${pathForGetHandle} within ${directoryHandle.name}`, 'info');
-      // Permission check is implicitly done by verifyPermission within getDirectoryHandle now,
-      // but requesting again here ensures write access specifically for getFileHandle/write operations.
-      // It might be redundant but ensures the latest state.
-      if (await directoryHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
-         statusCallback?.(`Write permission denied for directory ${directoryHandle.name}.`, 'error');
-         return false;
+      // Wait for initialization to finish before proceeding
+      const initialized = await this.ensureInitialized();
+      if (!initialized) {
+          statusCallback?.('Cannot apply fix: FileService initialization failed.', 'error');
+          return false;
       }
-      fileHandle = await directoryHandle.getFileHandle(pathForGetHandle, { create: false });
-      statusCallback?.(`Successfully accessed file handle for: ${fileHandle.name}`, 'info');
-    } catch (error) {
-      let errorMsg = error instanceof Error ? error.message : String(error);
-      if (error instanceof Error && error.name === 'NotFoundError') {
-          errorMsg = `File not found at path "${pathForGetHandle}" inside "${directoryHandle.name}". Check if the selected directory is correct.`;
+
+      statusCallback?.('Attempting to apply code fix...', 'info');
+      // getDirectoryHandle will now also wait if called, but ensureInitialized check is good practice
+      const directoryHandle = await this.getDirectoryHandle(statusCallback);
+
+      if (!directoryHandle) {
+        // Error message handled within getDirectoryHandle or requestDirectoryAccess
+        statusCallback?.('Failed to get directory handle. Cannot apply fix.', 'error');
+        return false;
+      }
+      // --- Directory handle obtained ---
+
+      // --- Calculate relative path ---
+      const projectRelativePath = this.getProjectRelativePath(errorInfo.fileName || '');
+      if (!projectRelativePath) {
+          statusCallback?.(`Could not determine project relative path for: ${errorInfo.fileName}`, 'error');
+          return false;
+      }
+
+      // Determine the path needed for directoryHandle.getFileHandle()
+      // It should be relative to the directoryHandle itself.
+      let pathForGetHandle: string;
+      if (directoryHandle.name === 'src' && projectRelativePath.startsWith('src/')) {
+          pathForGetHandle = projectRelativePath.substring(4); // Remove 'src/'
       } else {
-          errorMsg = `Failed to get file handle for "${pathForGetHandle}" in "${directoryHandle.name}": ${errorMsg}`;
+          // Fallback or handle cases where the selected directory isn't 'src'
+          // This might need adjustment based on expected directory structures
+          pathForGetHandle = projectRelativePath;
+          statusCallback?.(`Selected directory is "${directoryHandle.name}", using path "${pathForGetHandle}". Ensure this is correct.`, 'warning');
       }
-      statusCallback?.(errorMsg, 'error');
-      console.error(`Error getting file handle for ${pathForGetHandle} in ${directoryHandle.name}`, error);
-      return false;
-    }
-    // --- File handle obtained ---
 
-    // --- Read original content ---
-    let originalFileContent: string;
-    try {
-        const file = await fileHandle.getFile();
-        originalFileContent = await file.text();
-    } catch (error) {
-        statusCallback?.(
-            `Failed to read file content for "${fileHandle.name}": ${error instanceof Error ? error.message : String(error)}`,
-            'error'
-        );
+      // --- Debugging Logs ---
+      // console.log('[Debug] Directory Handle Name:', directoryHandle.name);
+      // console.log('[Debug] Project Relative Path:', projectRelativePath);
+      // console.log('[Debug] Calculated Path for getFileHandle:', pathForGetHandle);
+      // --- End Debugging Logs ---
+
+      // --- Get file handle ---
+      let fileHandle: FileSystemFileHandle;
+      try {
+        statusCallback?.(`Attempting to access file: ${pathForGetHandle} within ${directoryHandle.name}`, 'info');
+        // Re-verify permission just before access (might be redundant but safe)
+        if (await directoryHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+           statusCallback?.(`Write permission denied for directory ${directoryHandle.name}.`, 'error');
+           return false;
+        }
+        fileHandle = await directoryHandle.getFileHandle(pathForGetHandle, { create: false });
+        statusCallback?.(`Successfully accessed file handle for: ${fileHandle.name}`, 'info');
+      } catch (error) {
+        let errorMsg = error instanceof Error ? error.message : String(error);
+        if (error instanceof Error && error.name === 'NotFoundError') {
+            errorMsg = `File not found at path "${pathForGetHandle}" inside "${directoryHandle.name}". Check if the selected directory is correct.`;
+        } else {
+            errorMsg = `Failed to get file handle for "${pathForGetHandle}" in "${directoryHandle.name}": ${errorMsg}`;
+        }
+        statusCallback?.(errorMsg, 'error');
+        console.error(`Error getting file handle for ${pathForGetHandle} in ${directoryHandle.name}`, error);
         return false;
-    }
-    // --- Original content read ---
+      }
+      // --- File handle obtained ---
 
-    const fileName = fileHandle.name;
-    const isJsTsFile = /\.(js|jsx|ts|tsx|mjs|cjs)$/i.test(fileName);
-    const cleanedNewCode = cleanCodeExample(newCodeSnippet);
+      // --- Read original content ---
+      let originalFileContent: string;
+      try {
+          const file = await fileHandle.getFile();
+          originalFileContent = await file.text();
+      } catch (error) {
+          statusCallback?.(
+              `Failed to read file content for "${fileHandle.name}": ${error instanceof Error ? error.message : String(error)}`,
+              'error'
+          );
+          return false;
+      }
+      // --- Original content read ---
 
-    if (!isJsTsFile) {
-      statusCallback?.(`File type (${fileName}) not supported by AST analysis. Attempting direct replacement.`, 'warning');
-      return this.applySimpleFix(fileHandle, originalFileContent, originalSourceSnippet, cleanedNewCode, statusCallback);
-    }
+      const fileName = fileHandle.name;
+      const isJsTsFile = /\.(js|jsx|ts|tsx|mjs|cjs)$/i.test(fileName);
+      const cleanedNewCode = cleanCodeExample(newCodeSnippet);
 
-    statusCallback?.(`Applying fix to ${fileName} using AST analysis...`, 'info');
-    return await this.astProcessor.processCodeFix(
-      fileHandle,
-      originalFileContent,
-      originalSourceSnippet,
-      cleanedNewCode,
-      errorInfo,
-      statusCallback
-    );
+      if (!isJsTsFile) {
+        statusCallback?.(`File type (${fileName}) not supported by AST analysis. Attempting direct replacement.`, 'warning');
+        return this.applySimpleFix(fileHandle, originalFileContent, originalSourceSnippet, cleanedNewCode, statusCallback);
+      }
+
+      statusCallback?.(`Applying fix to ${fileName} using AST analysis...`, 'info');
+      return await this.astProcessor.processCodeFix(
+        fileHandle,
+        originalFileContent,
+        originalSourceSnippet,
+        cleanedNewCode,
+        errorInfo,
+        statusCallback
+      );
   }
 
   /**
