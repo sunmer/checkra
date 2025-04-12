@@ -31,7 +31,7 @@ const setupButtonListeners = () => {
   document.getElementById('group-btn')?.addEventListener('click', handleGroupClick);
   document.getElementById('groupEnd-btn')?.addEventListener('click', handleGroupEndClick);
   document.getElementById('nested-error-btn')?.addEventListener('click', handleNestedErrorClick);
-  
+
   // New configuration error button listeners
   document.getElementById('env-config-error-btn')?.addEventListener('click', handleEnvConfigErrorClick);
   document.getElementById('cors-config-error-btn')?.addEventListener('click', handleCorsConfigErrorClick);
@@ -56,16 +56,16 @@ const handleWarnClick = () => {
 
 /**
  * Handler for the error button click
- */
-const handleErrorClick = () => {
-  // Error from trying to access a property on null
-  const user = null;
-  try {
-    console.log(user.name); // This will throw an error
-  } catch (error) {
-    console.error('Failed to access user data:', error);
-  }
-};
+ */const handleErrorClick = () => {const user = null;try {if (user) {console.log(user.name);} else {console.log("User is null, cannot access properties.");}} catch (error) {console.error("Failed to access user data:", error);}};
+
+
+
+
+
+
+
+
+
 
 /**
  * Handler for the reference error button click
@@ -81,16 +81,16 @@ const handleReferenceErrorClick = () => {
 
 /**
  * Handler for the type error button click
- */
-const handleTypeErrorClick = () => {
-  // TypeError: calling a method on the wrong type
-  try {
-    const num = 42;
-    num.toUpperCase(); // Numbers don't have toUpperCase method
-  } catch (error) {
-    console.error('Type error caught:', error);
-  }
-};
+ */const handleTypeErrorClick = () => {try {const num = 42;const upperCaseString = String(num).toUpperCase(); // Convert num to string and then to uppercase
+    console.log(upperCaseString); // This will log "42" as uppercase (remains "42" since it's a number)
+  } catch (error) {console.error("Type error caught:", error);}};
+
+
+
+
+
+
+
 
 /**
  * Handler for the syntax error button click
@@ -197,11 +197,11 @@ const handleEnvConfigErrorClick = () => {
     }
 
     // Try to use the API URL, which will fail
-    fetch(apiUrl + '/data')
-      .then(response => response.json())
-      .catch(err => {
-        console.error('Failed to fetch data:', err);
-      });
+    fetch(apiUrl + '/data').
+    then((response) => response.json()).
+    catch((err) => {
+      console.error('Failed to fetch data:', err);
+    });
   } catch (error) {
     console.error('Environment configuration error:', error);
   }
@@ -223,12 +223,12 @@ const handleCorsConfigErrorClick = () => {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ test: 'data' })
-  })
-    .then(response => response.json())
-    .catch(error => {
-      console.error('CORS configuration error:', error);
-      console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
-    });
+  }).
+  then((response) => response.json()).
+  catch((error) => {
+    console.error('CORS configuration error:', error);
+    console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
+  });
 };
 
 /**
@@ -257,4 +257,4 @@ const handleCspErrorClick = () => {
 };
 
 // Deprecated legacy export that was mentioned in the original file
-export const demo = () => { };
+export const demo = () => {};
