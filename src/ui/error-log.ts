@@ -3,6 +3,7 @@ import { truncateText } from './utils';
 import { tooltip } from './tooltip';
 import { sourceViewer } from './source-viewer';
 import { fetchAIFix } from '../services/ai-service';
+import { fileService } from '../services/file-service';
 
 // Create a centralized source map that can be imported by other files
 export const errorSourceMap = new Map<string, ErrorInfo>();
@@ -15,6 +16,10 @@ export class ErrorLog {
   private errorList: HTMLUListElement | null = null;
   private errorCountBadge: HTMLSpanElement | null = null;
   private closeButton: HTMLSpanElement | null = null;
+  private settingsButton: HTMLSpanElement | null = null;
+  private settingsView: HTMLDivElement | null = null;
+  private settingsCloseButton: HTMLSpanElement | null = null;
+  private settingsStatus: HTMLParagraphElement | null = null;
   private isExpanded: boolean;
   private errorCount: number = 0;
   private originalStyle: Partial<CSSStyleDeclaration>;
@@ -79,7 +84,105 @@ export class ErrorLog {
       e.stopPropagation();
       this.isExpanded = false;
       this.updateStyle();
+      this.hideSettingsView();
     });
+
+    // Create settings button (⚙️)
+    this.settingsButton = document.createElement('span');
+    this.settingsButton.textContent = '⚙️';
+    this.settingsButton.title = 'Settings';
+    this.settingsButton.style.position = 'absolute';
+    this.settingsButton.style.top = '28px';
+    this.settingsButton.style.right = '8px';
+    this.settingsButton.style.cursor = 'pointer';
+    this.settingsButton.style.fontSize = '14px';
+    this.settingsButton.style.color = 'white';
+    this.settingsButton.style.userSelect = 'none';
+    this.settingsButton.style.display = 'none';
+
+    this.settingsButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleSettingsView();
+    });
+
+    // Create settings view
+    this.settingsView = document.createElement('div');
+    this.settingsView.style.position = 'fixed';
+    this.settingsView.style.top = '50%';
+    this.settingsView.style.left = '50%';
+    this.settingsView.style.transform = 'translate(-50%, -50%)';
+    this.settingsView.style.backgroundColor = '#282c34';
+    this.settingsView.style.border = '1px solid #444';
+    this.settingsView.style.borderRadius = '5px';
+    this.settingsView.style.padding = '20px';
+    this.settingsView.style.paddingTop = '40px';
+    this.settingsView.style.zIndex = '1050';
+    this.settingsView.style.display = 'none';
+    this.settingsView.style.color = '#abb2bf';
+    this.settingsView.style.fontSize = '13px';
+    this.settingsView.style.minWidth = '300px';
+    this.settingsView.style.maxWidth = '90vw';
+    this.settingsView.style.maxHeight = '80vh';
+    this.settingsView.style.overflowY = 'auto';
+    this.settingsView.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
+
+    this.settingsView.addEventListener('click', (e) => e.stopPropagation());
+
+    // Create close button for settings view
+    this.settingsCloseButton = document.createElement('span');
+    this.settingsCloseButton.textContent = '×';
+    this.settingsCloseButton.style.position = 'absolute';
+    this.settingsCloseButton.style.top = '10px';
+    this.settingsCloseButton.style.right = '15px';
+    this.settingsCloseButton.style.fontSize = '24px';
+    this.settingsCloseButton.style.color = '#abb2bf';
+    this.settingsCloseButton.style.cursor = 'pointer';
+    this.settingsCloseButton.style.fontWeight = 'bold';
+    this.settingsCloseButton.style.lineHeight = '1';
+    this.settingsCloseButton.addEventListener('click', () => this.hideSettingsView());
+    this.settingsView.appendChild(this.settingsCloseButton);
+
+    // Settings content
+    const settingsTitle = document.createElement('h3');
+    settingsTitle.textContent = 'Directory Settings';
+    settingsTitle.style.marginTop = '0';
+    settingsTitle.style.marginBottom = '15px';
+    settingsTitle.style.color = '#ffffff';
+    this.settingsView.appendChild(settingsTitle);
+
+    // Status message area
+    this.settingsStatus = document.createElement('p');
+    this.settingsStatus.style.margin = '0 0 10px 0';
+    this.settingsStatus.style.fontSize = '12px';
+    this.settingsStatus.style.minHeight = '1.2em';
+    this.settingsStatus.style.color = '#999';
+    this.settingsView.appendChild(this.settingsStatus);
+
+    // Forget Directory Button
+    const forgetButton = document.createElement('button');
+    forgetButton.textContent = 'Forget Directory Access';
+    this.styleSettingsButton(forgetButton);
+    forgetButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      this.showSettingsStatus('Forgetting access...', 'info');
+      await fileService.forgetDirectoryAccess((msg, type) => this.showSettingsStatus(msg, type));
+    });
+    this.settingsView.appendChild(forgetButton);
+
+    // Change Directory Button
+    const changeButton = document.createElement('button');
+    changeButton.textContent = 'Change Directory';
+    this.styleSettingsButton(changeButton);
+    changeButton.style.marginTop = '8px';
+    changeButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      this.showSettingsStatus('Requesting directory access...', 'info');
+      this.hideSettingsView();
+      await fileService.requestDirectoryAccess((msg, type) => {
+        console.log(`[Directory Change Status - ${type.toUpperCase()}]: ${msg}`);
+      });
+    });
+    this.settingsView.appendChild(changeButton);
 
     // Create "No warnings or errors" message
     this.noErrorsMessage = document.createElement('div');
@@ -114,12 +217,74 @@ export class ErrorLog {
         if (this.errorLogDiv) {
           document.body.appendChild(this.errorLogDiv);
         }
+        if (this.settingsView) {
+          document.body.appendChild(this.settingsView);
+        }
       });
     } else {
       if (this.errorLogDiv) {
         document.body.appendChild(this.errorLogDiv);
       }
+      if (this.settingsView) {
+        document.body.appendChild(this.settingsView);
+      }
     }
+  }
+
+  /** Helper to style settings buttons */
+  private styleSettingsButton(button: HTMLButtonElement): void {
+    button.style.display = 'block';
+    button.style.width = '100%';
+    button.style.padding = '8px 12px';
+    button.style.fontSize = '13px';
+    button.style.backgroundColor = '#4a76c7';
+    button.style.color = 'white';
+    button.style.border = '1px solid #3a5a9a';
+    button.style.borderRadius = '4px';
+    button.style.cursor = 'pointer';
+    button.style.textAlign = 'center';
+    button.style.transition = 'background-color 0.2s ease';
+
+    button.onmouseover = () => button.style.backgroundColor = '#5a86d7';
+    button.onmouseout = () => button.style.backgroundColor = '#4a76c7';
+  }
+
+  /** Show status message inside the settings view */
+  private showSettingsStatus(message: string, type: 'info' | 'success' | 'error' | 'warning'): void {
+    if (this.settingsStatus) {
+      this.settingsStatus.textContent = message;
+      switch (type) {
+        case 'success': this.settingsStatus.style.color = '#98c379'; break;
+        case 'error': this.settingsStatus.style.color = '#e06c75'; break;
+        case 'warning': this.settingsStatus.style.color = '#e5c07b'; break;
+        case 'info':
+        default: this.settingsStatus.style.color = '#999'; break;
+      }
+    }
+    console.log(`[Settings Status - ${type.toUpperCase()}]: ${message}`);
+  }
+
+  /** Toggle visibility of the settings view */
+  private toggleSettingsView(): void {
+    if (this.settingsView) {
+      const isVisible = this.settingsView.style.display !== 'none';
+      if (isVisible) {
+        this.hideSettingsView();
+      } else {
+        this.showSettingsView();
+      }
+    }
+  }
+
+  /** Show the settings view */
+  private showSettingsView(): void {
+    if (this.settingsView) this.settingsView.style.display = 'block';
+    this.showSettingsStatus('', 'info');
+  }
+
+  /** Hide the settings view */
+  private hideSettingsView(): void {
+    if (this.settingsView) this.settingsView.style.display = 'none';
   }
 
   /**
@@ -143,6 +308,18 @@ export class ErrorLog {
 
       if (this.closeButton && !this.errorLogDiv.contains(this.closeButton)) {
         this.errorLogDiv.appendChild(this.closeButton);
+      }
+
+      if (this.settingsButton && !this.errorLogDiv.contains(this.settingsButton)) {
+        this.errorLogDiv.appendChild(this.settingsButton);
+      }
+
+      if (this.settingsView && !this.errorLogDiv.contains(this.settingsView)) {
+        this.errorLogDiv.appendChild(this.settingsView);
+      }
+
+      if (this.settingsButton) {
+        this.settingsButton.style.display = 'inline-block';
       }
 
       // Hide error count in expanded state
@@ -182,6 +359,14 @@ export class ErrorLog {
       if (this.closeButton && this.errorLogDiv.contains(this.closeButton)) {
         this.errorLogDiv.removeChild(this.closeButton);
       }
+
+      // Remove the settings button
+      if (this.settingsButton && this.errorLogDiv.contains(this.settingsButton)) {
+        this.errorLogDiv.removeChild(this.settingsButton);
+      }
+
+      // Remove the settings view and ensure it's hidden
+      this.hideSettingsView();
 
       // Show error count in collapsed state
       if (this.errorCountBadge) {
@@ -330,44 +515,38 @@ export class ErrorLog {
       this.clickListener = null;
     }
     
-    if (this.closeButton) {
-      // Clone and replace to remove all event listeners
-      const oldCloseButton = this.closeButton;
-      this.closeButton = oldCloseButton.cloneNode(true) as HTMLSpanElement;
-      if (oldCloseButton.parentNode) {
-        oldCloseButton.parentNode.replaceChild(this.closeButton, oldCloseButton);
-      }
-    }
+    // Remove button listeners (cloning)
+    if (this.closeButton) this.closeButton.replaceWith(this.closeButton.cloneNode(true));
+    if (this.settingsButton) this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
+    if (this.settingsView) this.settingsView.replaceWith(this.settingsView.cloneNode(true));
 
     // Remove tooltip event listeners from all error message spans
     if (this.errorList) {
-      const errorMessages = this.errorList.querySelectorAll('.error-message');
-      errorMessages.forEach(msgElem => {
-        // Clone and replace to remove all event listeners
-        const oldMsgElem = msgElem;
-        const newMsgElem = oldMsgElem.cloneNode(true);
-        if (oldMsgElem.parentNode) {
-          oldMsgElem.parentNode.replaceChild(newMsgElem, oldMsgElem);
-        }
+      this.errorList.querySelectorAll('.error-message').forEach(span => {
+        span.replaceWith(span.cloneNode(true));
       });
     }
 
-    // Remove the error log div from the DOM
+    // Remove the main div from the DOM
     if (this.errorLogDiv && this.errorLogDiv.parentNode) {
       this.errorLogDiv.parentNode.removeChild(this.errorLogDiv);
     }
+    // Remove settings view from DOM
+    if (this.settingsView && this.settingsView.parentNode) {
+      this.settingsView.parentNode.removeChild(this.settingsView);
+    }
 
-    // Clear references
+    // Nullify references
     this.errorLogDiv = null;
     this.errorList = null;
     this.errorCountBadge = null;
     this.closeButton = null;
+    this.settingsButton = null;
+    this.settingsView = null;
+    this.settingsCloseButton = null;
+    this.settingsStatus = null;
     this.noErrorsMessage = null;
-    
-    // Clear source map
+    this.originalStyle = {};
     errorSourceMap.clear();
-    
-    // Reset error count
-    this.errorCount = 0;
   }
 }

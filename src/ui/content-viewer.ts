@@ -425,36 +425,40 @@ export class ContentViewer {
       const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
 
       // --- Fetch the original source snippet (code context) ---
-      // This snippet is used by applySimpleFix and potentially by AST processor for context
       let originalSourceSnippet = '';
       if (this.currentErrorInfo) {
           this.showStatusMessage('Fetching relevant code snippet for context...', 'info');
           const sourceResult = await sourceCodeService.getSourceCode(this.currentErrorInfo);
           if (sourceResult && sourceResult.codeContext) {
-              // Use the cleaned version of the context for better matching later
               originalSourceSnippet = cleanCodeExample(sourceResult.codeContext);
               this.showStatusMessage('Code snippet retrieved.', 'info');
           } else {
               this.showStatusMessage('Could not retrieve original code snippet for context matching.', 'warning');
-              // Proceeding without snippet context, direct replacement might fail. AST might still work.
           }
       } else {
            this.showStatusMessage('Missing error information to fetch code snippet.', 'warning');
+           // We need errorInfo to proceed with applyCodeFix
+           return; // Exit early if errorInfo is missing
       }
       // --- End fetching snippet ---
+
+      // Ensure we have error info before calling applyCodeFix
+      if (!this.currentErrorInfo) {
+          this.showStatusMessage('Cannot apply fix: Missing error information.', 'error');
+          return;
+      }
 
       // Apply the fix using the directory handle and error info
       // FileService will handle getting the file handle and reading content
       const success = await fileService.applyCodeFix(
-        originalSourceSnippet, // Pass the context snippet
-        cleanCode,             // Pass the cleaned AI suggestion
-        this.currentErrorInfo, // Pass the full errorInfo (contains fileName)
+        this.currentErrorInfo, // <-- Pass ErrorInfo first
+        originalSourceSnippet, // Pass the context snippet second
+        cleanCode,             // Pass the cleaned AI suggestion third
         (message, type) => this.showStatusMessage(message, type) // Pass status callback
       );
 
       if (success) {
         // fileService.applyCodeFix or its delegates already show success messages
-        // this.showStatusMessage('Code fix applied successfully!', 'success');
         // Optionally hide the viewer after success
         setTimeout(() => this.hide(), 2000);
       } else {
