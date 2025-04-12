@@ -20,6 +20,7 @@ export class ErrorLog {
   private originalStyle: Partial<CSSStyleDeclaration>;
   private config: LoggerOptions;
   private clickListener: (() => void) | null = null;
+  private noErrorsMessage: HTMLElement | null = null;
 
   /**
    * Creates a new ErrorLog instance.
@@ -70,7 +71,7 @@ export class ErrorLog {
     this.closeButton.style.top = '4px';
     this.closeButton.style.right = '8px';
     this.closeButton.style.cursor = 'pointer';
-    this.closeButton.style.fontSize = '14px';
+    this.closeButton.style.fontSize = '18px';
     this.closeButton.style.color = 'white';
     this.closeButton.style.userSelect = 'none';
     
@@ -79,6 +80,18 @@ export class ErrorLog {
       this.isExpanded = false;
       this.updateStyle();
     });
+
+    // Create "No warnings or errors" message
+    this.noErrorsMessage = document.createElement('div');
+    this.noErrorsMessage.textContent = 'No warnings or errors, looks good to me';
+    this.noErrorsMessage.style.padding = '8px';
+    this.noErrorsMessage.style.color = '#aaa';
+    this.noErrorsMessage.style.fontStyle = 'italic';
+    this.noErrorsMessage.style.display = 'block'; // Show by default
+    
+    if (this.errorLogDiv) {
+      this.errorLogDiv.appendChild(this.noErrorsMessage);
+    }
 
     // Apply initial styles based on config
     this.updateStyle();
@@ -136,6 +149,11 @@ export class ErrorLog {
       if (this.errorCountBadge) {
         this.errorCountBadge.style.display = 'none';
       }
+
+      // Show/hide no errors message based on error count
+      if (this.noErrorsMessage) {
+        this.noErrorsMessage.style.display = this.errorCount === 0 ? 'block' : 'none';
+      }
     } else {
       // Collapsed: shrink into a small circle at the bottom left.
       // Reset styles first to avoid conflicts
@@ -170,6 +188,11 @@ export class ErrorLog {
         this.errorCountBadge.style.display = 'block';
         this.errorCountBadge.textContent = this.errorCount.toString();
       }
+
+      // Hide no errors message in collapsed state
+      if (this.noErrorsMessage) {
+        this.noErrorsMessage.style.display = 'none';
+      }
     }
   }
 
@@ -178,6 +201,11 @@ export class ErrorLog {
    */
   public addError(msg: string, errorInfo: ErrorInfo): void {
     this.errorCount++;
+    
+    // Hide the "No warnings or errors" message when errors exist
+    if (this.noErrorsMessage) {
+      this.noErrorsMessage.style.display = 'none';
+    }
     
     // Generate a unique ID for this error
     const errorId = `error-${Date.now()}-${this.errorCount}`;
@@ -207,7 +235,7 @@ export class ErrorLog {
         viewSourceBtn.textContent = 'View Source';
         viewSourceBtn.style.marginLeft = '8px';
         viewSourceBtn.style.fontSize = '10px';
-        viewSourceBtn.style.padding = '2px 4px';
+        viewSourceBtn.style.padding = '4px 6px';
         viewSourceBtn.style.backgroundColor = '#555';
         viewSourceBtn.style.color = 'white';
         viewSourceBtn.style.border = 'none';
@@ -226,7 +254,7 @@ export class ErrorLog {
         fixWithAIBtn.textContent = 'Fix with AI';
         fixWithAIBtn.style.marginLeft = '8px';
         fixWithAIBtn.style.fontSize = '10px';
-        fixWithAIBtn.style.padding = '2px 4px';
+        fixWithAIBtn.style.padding = '4px 6px';
         fixWithAIBtn.style.backgroundColor = '#4a76c7';
         fixWithAIBtn.style.color = 'white';
         fixWithAIBtn.style.border = 'none';
@@ -334,6 +362,7 @@ export class ErrorLog {
     this.errorList = null;
     this.errorCountBadge = null;
     this.closeButton = null;
+    this.noErrorsMessage = null;
     
     // Clear source map
     errorSourceMap.clear();

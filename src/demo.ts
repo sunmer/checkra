@@ -11,19 +11,17 @@ export const setupDemo = () => {
       renderErrorLogDiv: true,
       startCollapsed: true
     });
-    
+
     // Set up button event listeners
     setupButtonListeners();
-    
+
   } catch (error) {
     console.error(error);
   }
 };
 
-/**
- * Set up all button event listeners for the demo
- */
 const setupButtonListeners = () => {
+  // Existing button listeners...
   document.getElementById('warn-btn')?.addEventListener('click', handleWarnClick);
   document.getElementById('error-btn')?.addEventListener('click', handleErrorClick);
   document.getElementById('reference-error-btn')?.addEventListener('click', handleReferenceErrorClick);
@@ -33,6 +31,11 @@ const setupButtonListeners = () => {
   document.getElementById('group-btn')?.addEventListener('click', handleGroupClick);
   document.getElementById('groupEnd-btn')?.addEventListener('click', handleGroupEndClick);
   document.getElementById('nested-error-btn')?.addEventListener('click', handleNestedErrorClick);
+  
+  // New configuration error button listeners
+  document.getElementById('env-config-error-btn')?.addEventListener('click', handleEnvConfigErrorClick);
+  document.getElementById('cors-config-error-btn')?.addEventListener('click', handleCorsConfigErrorClick);
+  document.getElementById('csp-error-btn')?.addEventListener('click', handleCspErrorClick);
 };
 
 /**
@@ -42,7 +45,7 @@ const handleWarnClick = () => {
   // Warning from using a deprecated method
   const obj = {};
   Object.defineProperty(obj, 'prop', {
-    get: function() {
+    get: function () {
       console.warn('Property "prop" is deprecated and will be removed in future versions');
       return 'deprecated value';
     }
@@ -179,5 +182,79 @@ const performThirdLevelOperation = () => {
   nonExistentFunction();
 };
 
+/**
+ * Handler for the environment variable configuration error button click
+ */
+const handleEnvConfigErrorClick = () => {
+  console.log('Checking for required environment variables...');
+  try {
+    // Simulate accessing an undefined environment variable
+    // In a real app, this would be something like process.env.API_KEY or import.meta.env.VITE_API_URL
+    const apiUrl = window.__ENV__ && window.__ENV__.API_URL;
+
+    if (!apiUrl) {
+      throw new Error('Environment configuration error: Required environment variable API_URL is not defined. Check your .env file and build configuration.');
+    }
+
+    // Try to use the API URL, which will fail
+    fetch(apiUrl + '/data')
+      .then(response => response.json())
+      .catch(err => {
+        console.error('Failed to fetch data:', err);
+      });
+  } catch (error) {
+    console.error('Environment configuration error:', error);
+  }
+};
+
+/**
+  * Handler for the CORS configuration error button click
+  */
+const handleCorsConfigErrorClick = () => {
+  console.log('Attempting to fetch data from a misconfigured API endpoint...');
+
+  // Create a URL that will trigger a CORS error
+  // This simulates a common frontend configuration issue where CORS is not properly set up
+  const apiUrl = 'https://example.com/api/data';
+
+  fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ test: 'data' })
+  })
+    .then(response => response.json())
+    .catch(error => {
+      console.error('CORS configuration error:', error);
+      console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
+    });
+};
+
+/**
+* Handler for the CSP (Content Security Policy) error button click
+*/
+const handleCspErrorClick = () => {
+  console.log('Attempting to execute dynamically created inline script...');
+
+  try {
+    // Create a script element dynamically (this would be blocked by CSP with default-src 'self')
+    const scriptElement = document.createElement('script');
+    scriptElement.textContent = 'console.log("This script execution would be blocked by CSP")';
+    document.body.appendChild(scriptElement);
+
+    // Also try to load an external script (would be blocked by CSP if not allowed)
+    const externalScript = document.createElement('script');
+    externalScript.src = 'https://cdn.example.com/script.js';
+    externalScript.onerror = (e) => {
+      console.error('Content Security Policy error: Failed to load external script:', e);
+      console.error('This indicates a CSP configuration issue. Your Content-Security-Policy needs to allow this script source.');
+    };
+    document.body.appendChild(externalScript);
+  } catch (error) {
+    console.error('Content Security Policy error:', error);
+  }
+};
+
 // Deprecated legacy export that was mentioned in the original file
-export const demo = () => {};
+export const demo = () => { };
