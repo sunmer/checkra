@@ -11,10 +11,10 @@ export const setupDemo = () => {
       renderErrorLogDiv: true,
       startCollapsed: true
     });
-    
+
     // Set up button event listeners
     setupButtonListeners();
-    
+
   } catch (error) {
     console.error(error);
   }
@@ -37,19 +37,19 @@ const setupButtonListeners = () => {
 
 /**
  * Handler for the warning button click
- */
-const handleWarnClick = () => {
-  // Warning from using a deprecated method
-  const obj = {};
-  Object.defineProperty(obj, 'prop', {
-    get: function() {
-      console.warn('Property "prop" is deprecated and will be removed in future versions');
-      return 'deprecated value';
-    }
-  });
-  const value = obj.prop;
-  console.log('Retrieved value:', value);
-};
+ */const handleWarnClick = () => {const obj = { newProp: "non-deprecated value" // Use a new property name
+  };const value = obj.newProp; // Access the new property
+  console.log("Retrieved value:", value);};
+
+
+
+
+
+
+
+
+
+
 
 /**
  * Handler for the error button click
