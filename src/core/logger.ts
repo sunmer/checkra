@@ -62,6 +62,28 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
         break;
       }
     }
+    
+    // Add stack trace information for non-Error warnings
+    if (!errorInfo.fileName && !errorInfo.stack) {
+      const stack = new Error().stack;
+      if (stack) {
+        // Parse the stack to get file and line information
+        const stackLines = stack.split('\n');
+        // Skip the first line (Error message) and the second line (this function)
+        for (let i = 2; i < stackLines.length; i++) {
+          const line = stackLines[i];
+          const match = line.match(/at\s+.*\s+\((.*):(\d+):(\d+)\)/);
+          if (match) {
+            errorInfo.fileName = match[1];
+            errorInfo.lineNumber = parseInt(match[2], 10);
+            errorInfo.columnNumber = parseInt(match[3], 10);
+            errorInfo.stack = stack;
+            break;
+          }
+        }
+      }
+    }
+    
     if (errorLog) {
       errorLog.addError(msg, errorInfo);
     }
@@ -80,6 +102,28 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
         break;
       }
     }
+    
+    // Add stack trace information for non-Error errors
+    if (!errorInfo.fileName && !errorInfo.stack) {
+      const stack = new Error().stack;
+      if (stack) {
+        // Parse the stack to get file and line information
+        const stackLines = stack.split('\n');
+        // Skip the first line (Error message) and the second line (this function)
+        for (let i = 2; i < stackLines.length; i++) {
+          const line = stackLines[i];
+          const match = line.match(/at\s+.*\s+\((.*):(\d+):(\d+)\)/);
+          if (match) {
+            errorInfo.fileName = match[1];
+            errorInfo.lineNumber = parseInt(match[2], 10);
+            errorInfo.columnNumber = parseInt(match[3], 10);
+            errorInfo.stack = stack;
+            break;
+          }
+        }
+      }
+    }
+    
     if (errorLog) {
       errorLog.addError(msg, errorInfo);
     }
