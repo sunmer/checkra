@@ -2,6 +2,7 @@ import { escapeHTML, createCloseButton } from './utils';
 import { AIFixResponse, ErrorInfo } from '../types';
 import { sourceCodeService } from '../services/source-code-service';
 import { fileService } from '../services/file-service'; // Import the FileService
+import { cleanCodeExample, copyToClipboard } from '../utils/code-utils';
 
 /**
  * Class for managing the content viewer for displaying AI fixes and other content.
@@ -306,7 +307,7 @@ export class ContentViewer {
     if (!this.codeExampleContent) return;
 
     // Clean up the code example using the fileService
-    const cleanCode = fileService.cleanCodeExample(codeExample);
+    const cleanCode = cleanCodeExample(codeExample);
 
     // Check if we have original source to compare against
     const originalSource = this.currentResponse.originalSource;
@@ -412,8 +413,8 @@ export class ContentViewer {
       this.showStatusMessage('File access denied or cancelled.', 'warning');
       // Optionally copy to clipboard as fallback
       if (this.currentResponse.codeExample) {
-         const cleanCode = fileService.cleanCodeExample(this.currentResponse.codeExample);
-         await fileService.copyToClipboard(cleanCode);
+         const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
+         await copyToClipboard(cleanCode);
          this.showStatusMessage('Fix copied to clipboard.', 'info');
       }
       return;
@@ -423,7 +424,7 @@ export class ContentViewer {
       // Read the original file content
       const file = await fileHandle.getFile();
       const originalFileContent = await file.text();
-      const cleanCode = fileService.cleanCodeExample(this.currentResponse.codeExample);
+      const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
 
       // --- Fetch the original source snippet (code context) ---
       let originalSourceSnippet = '';
@@ -460,7 +461,7 @@ export class ContentViewer {
         setTimeout(() => this.hide(), 2000);
       } else {
         // If the fix wasn't applied to the file, try to copy it to clipboard
-        await fileService.copyToClipboard(cleanCode);
+        await copyToClipboard(cleanCode);
         this.showStatusMessage('Could not apply fix directly. Fix copied to clipboard instead.', 'warning');
       }
     } catch (error) {
@@ -472,8 +473,8 @@ export class ContentViewer {
 
       // Try to copy to clipboard as fallback
       if (this.currentResponse.codeExample) {
-        const cleanCode = fileService.cleanCodeExample(this.currentResponse.codeExample);
-        await fileService.copyToClipboard(cleanCode);
+        const cleanCode = cleanCodeExample(this.currentResponse.codeExample);
+        await copyToClipboard(cleanCode);
         this.showStatusMessage('Fix copied to clipboard as fallback.', 'info');
       }
     }
