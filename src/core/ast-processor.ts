@@ -188,13 +188,12 @@ export class AstProcessor {
         // Generate the updated file content
         statusCallback?.('Generating updated code from AST...', 'info');
         const output = generate(ast, {
-          retainLines: true,
           concise: false,
           compact: false,
           jsescOption: {
             minimal: true
           },
-          minified: false
+          minified: false,
         }, originalFileContent);
 
         // Write the updated content back to the file
@@ -570,13 +569,12 @@ export class AstProcessor {
       // Generate and write the updated file
       statusCallback?.('Generating updated code from AST...', 'info');
       const output = generate(ast, {
-        retainLines: true,
         concise: false,
         compact: false,
         jsescOption: {
           minimal: true
         },
-        minified: false
+        minified: false,
       }, originalFileContent);
 
       statusCallback?.('Writing updated content to file...', 'info');

@@ -14,12 +14,10 @@ export const setupDemo = () => {
 
     // Set up button event listeners
     setupButtonListeners();
-
   } catch (error) {
     console.error(error);
   }
 };
-
 const setupButtonListeners = () => {
   // Existing button listeners...
   document.getElementById('warn-btn')?.addEventListener('click', handleWarnClick);
@@ -31,7 +29,7 @@ const setupButtonListeners = () => {
   document.getElementById('group-btn')?.addEventListener('click', handleGroupClick);
   document.getElementById('groupEnd-btn')?.addEventListener('click', handleGroupEndClick);
   document.getElementById('nested-error-btn')?.addEventListener('click', handleNestedErrorClick);
-  
+
   // New configuration error button listeners
   document.getElementById('env-config-error-btn')?.addEventListener('click', handleEnvConfigErrorClick);
   document.getElementById('cors-config-error-btn')?.addEventListener('click', handleCorsConfigErrorClick);
@@ -83,12 +81,12 @@ const handleReferenceErrorClick = () => {
  * Handler for the type error button click
  */
 const handleTypeErrorClick = () => {
-  // TypeError: calling a method on the wrong type
   try {
     const num = 42;
-    num.toUpperCase(); // Numbers don't have toUpperCase method
+    const upperCaseNum = String(num).toUpperCase(); // Convert num to string first
+    console.log(upperCaseNum);
   } catch (error) {
-    console.error('Type error caught:', error);
+    console.error("Type error caught:", error);
   }
 };
 
@@ -191,17 +189,14 @@ const handleEnvConfigErrorClick = () => {
     // Simulate accessing an undefined environment variable
     // In a real app, this would be something like process.env.API_KEY or import.meta.env.VITE_API_URL
     const apiUrl = window.__ENV__ && window.__ENV__.API_URL;
-
     if (!apiUrl) {
       throw new Error('Environment configuration error: Required environment variable API_URL is not defined. Check your .env file and build configuration.');
     }
 
     // Try to use the API URL, which will fail
-    fetch(apiUrl + '/data')
-      .then(response => response.json())
-      .catch(err => {
-        console.error('Failed to fetch data:', err);
-      });
+    fetch(apiUrl + '/data').then(response => response.json()).catch(err => {
+      console.error('Failed to fetch data:', err);
+    });
   } catch (error) {
     console.error('Environment configuration error:', error);
   }
@@ -216,19 +211,18 @@ const handleCorsConfigErrorClick = () => {
   // Create a URL that will trigger a CORS error
   // This simulates a common frontend configuration issue where CORS is not properly set up
   const apiUrl = 'https://example.com/api/data';
-
   fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ test: 'data' })
-  })
-    .then(response => response.json())
-    .catch(error => {
-      console.error('CORS configuration error:', error);
-      console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
-    });
+    body: JSON.stringify({
+      test: 'data'
+    })
+  }).then(response => response.json()).catch(error => {
+    console.error('CORS configuration error:', error);
+    console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
+  });
 };
 
 /**
@@ -236,7 +230,6 @@ const handleCorsConfigErrorClick = () => {
 */
 const handleCspErrorClick = () => {
   console.log('Attempting to execute dynamically created inline script...');
-
   try {
     // Create a script element dynamically (this would be blocked by CSP with default-src 'self')
     const scriptElement = document.createElement('script');
@@ -246,7 +239,7 @@ const handleCspErrorClick = () => {
     // Also try to load an external script (would be blocked by CSP if not allowed)
     const externalScript = document.createElement('script');
     externalScript.src = 'https://cdn.example.com/script.js';
-    externalScript.onerror = (e) => {
+    externalScript.onerror = e => {
       console.error('Content Security Policy error: Failed to load external script:', e);
       console.error('This indicates a CSP configuration issue. Your Content-Security-Policy needs to allow this script source.');
     };
@@ -257,4 +250,4 @@ const handleCspErrorClick = () => {
 };
 
 // Deprecated legacy export that was mentioned in the original file
-export const demo = () => { };
+export const demo = () => {};
