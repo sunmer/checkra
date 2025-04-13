@@ -137,8 +137,6 @@ export class AstProcessor {
           declaredNodes,
           errorInfo,
           errorName,
-          existingIdentifiers,
-          callGraph,
           statusCallback
         );
       }
@@ -152,8 +150,6 @@ export class AstProcessor {
         parsedNodes,
         errorName,
         existingIdentifiers,
-        callGraph,
-        errorNodePath,
         errorContainingFunction,
         statusCallback
       );
@@ -458,8 +454,6 @@ export class AstProcessor {
     declaredNodes: t.Statement[],
     errorInfo: ErrorInfo,
     errorName: string | null,
-    existingIdentifiers: Set<string>,
-    callGraph: Map<string, Set<string>>,
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<boolean> {
     // If we have an error name, filter for only the relevant declarations
@@ -610,8 +604,6 @@ export class AstProcessor {
     newNodes: t.Statement[],
     errorName: string | null,
     existingIdentifiers: Set<string>,
-    callGraph: Map<string, Set<string>>,
-    errorNodePath: NodePath | null,
     errorContainingFunction: NodePath | null,
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): {
