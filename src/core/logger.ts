@@ -3,6 +3,7 @@ import { defaultOptions } from '../config';
 import { ErrorLog, errorSourceMap } from '../ui/error-log';
 import { tooltip } from '../ui/tooltip';
 import { sourceViewer } from '../ui/source-viewer';
+import { feedbackViewer } from '../ui/feedback-viewer';
 import { formatError, extractErrorInfo } from './error-handler';
 
 /**
@@ -47,6 +48,8 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
     tooltip.create();
     // Initialize source viewer
     sourceViewer.create();
+    // Initialize feedback viewer
+    feedbackViewer.create();
     // Initialize error log
     errorLog = new ErrorLog(config, originalStyle);
   }
@@ -172,6 +175,7 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
       if (config.renderErrorLogDiv) {
         tooltip.destroy();
         sourceViewer.destroy();
+        feedbackViewer.destroy();
       }
     }
   };

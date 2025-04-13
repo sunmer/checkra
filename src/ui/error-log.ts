@@ -4,6 +4,8 @@ import { tooltip } from './tooltip';
 import { sourceViewer } from './source-viewer';
 import { fetchAIFix } from '../services/ai-service';
 import { fileService } from '../services/file-service';
+import { screenCapture } from './screen-capture';
+import { feedbackViewer } from './feedback-viewer';
 
 // Create a centralized source map that can be imported by other files
 export const errorSourceMap = new Map<string, ErrorInfo>();
@@ -26,6 +28,7 @@ export class ErrorLog {
   private config: LoggerOptions;
   private clickListener: (() => void) | null = null;
   private noErrorsMessage: HTMLElement | null = null;
+  private feedbackButton: HTMLSpanElement | null = null;
 
   /**
    * Creates a new ErrorLog instance.
@@ -186,15 +189,59 @@ export class ErrorLog {
 
     // Create "No warnings or errors" message
     this.noErrorsMessage = document.createElement('div');
-    this.noErrorsMessage.textContent = 'No warnings or errors, looks good to me';
+    this.noErrorsMessage.textContent = 'No warnings or errors.';
     this.noErrorsMessage.style.padding = '8px';
     this.noErrorsMessage.style.color = '#aaa';
-    this.noErrorsMessage.style.fontStyle = 'italic';
     this.noErrorsMessage.style.display = 'block'; // Show by default
     
     if (this.errorLogDiv) {
       this.errorLogDiv.appendChild(this.noErrorsMessage);
     }
+
+    // Create Feedback button (?)
+    this.feedbackButton = document.createElement('span');
+    this.feedbackButton.id = 'feedback-log';
+    this.feedbackButton.textContent = '?';
+    this.feedbackButton.title = 'Send Feedback';
+    this.feedbackButton.style.position = 'fixed';
+    this.feedbackButton.style.bottom = '10px';
+    this.feedbackButton.style.left = '50px';
+    this.feedbackButton.style.width = '30px';
+    this.feedbackButton.style.height = '30px';
+    this.feedbackButton.style.borderRadius = '50%';
+    this.feedbackButton.style.backgroundColor = 'rgba(0, 100, 255, 0.8)';
+    this.feedbackButton.style.color = 'white';
+    this.feedbackButton.style.display = 'flex';
+    this.feedbackButton.style.alignItems = 'center';
+    this.feedbackButton.style.justifyContent = 'center';
+    this.feedbackButton.style.fontSize = '16px';
+    this.feedbackButton.style.fontWeight = 'bold';
+    this.feedbackButton.style.cursor = 'pointer';
+    this.feedbackButton.style.zIndex = '1000';
+    this.feedbackButton.style.userSelect = 'none';
+
+    this.feedbackButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log('[Feedback] Button clicked, starting screen capture...');
+      screenCapture.startCapture((imageDataUrl) => {
+        // Log: Callback executed
+        console.log('[Feedback] Screen capture callback executed.');
+        console.log('[Feedback] Image data URL received:', imageDataUrl ? imageDataUrl.substring(0, 50) + '...' : 'null');
+
+        if (imageDataUrl) {
+          console.log('[Feedback] Image data URL is valid. Showing input area...');
+          try {
+            feedbackViewer.showInputArea(imageDataUrl);
+            console.log('[Feedback] Feedback input area shown.');
+          } catch (viewerError) {
+             console.error('[Feedback] Error showing feedback input area:', viewerError);
+          }
+        } else {
+          console.warn('[Feedback] Screen capture cancelled or failed. No image data received.');
+          // alert('Screen capture failed or was cancelled.');
+        }
+      });
+    });
 
     // Apply initial styles based on config
     this.updateStyle();
@@ -220,6 +267,9 @@ export class ErrorLog {
         if (this.settingsView) {
           document.body.appendChild(this.settingsView);
         }
+        if (this.feedbackButton) {
+          document.body.appendChild(this.feedbackButton);
+        }
       });
     } else {
       if (this.errorLogDiv) {
@@ -227,6 +277,9 @@ export class ErrorLog {
       }
       if (this.settingsView) {
         document.body.appendChild(this.settingsView);
+      }
+      if (this.feedbackButton) {
+        document.body.appendChild(this.feedbackButton);
       }
     }
   }
@@ -378,6 +431,13 @@ export class ErrorLog {
       if (this.noErrorsMessage) {
         this.noErrorsMessage.style.display = 'none';
       }
+    }
+
+    // The feedback button has fixed positioning, so it doesn't need
+    // to change based on the error log's expanded/collapsed state.
+    // Ensure it remains visible if it was created.
+    if (this.feedbackButton) {
+      this.feedbackButton.style.display = 'flex';
     }
   }
 
@@ -534,6 +594,15 @@ export class ErrorLog {
     // Remove settings view from DOM
     if (this.settingsView && this.settingsView.parentNode) {
       this.settingsView.parentNode.removeChild(this.settingsView);
+    }
+
+    // Remove feedback button and its listener
+    if (this.feedbackButton) {
+      this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
+      if (this.feedbackButton.parentNode) {
+        this.feedbackButton.parentNode.removeChild(this.feedbackButton);
+      }
+      this.feedbackButton = null;
     }
 
     // Nullify references
