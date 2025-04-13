@@ -83,7 +83,6 @@ const handleReferenceErrorClick = () => {
 const handleTypeErrorClick = () => {
   try {
     const num = 42;
-    const upperCaseNum = String(num).toUpperCase(); // Convert num to string first
     console.log(upperCaseNum);
   } catch (error) {
     console.error("Type error caught:", error);
