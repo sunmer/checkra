@@ -83,6 +83,7 @@ const handleReferenceErrorClick = () => {
 const handleTypeErrorClick = () => {
   try {
     const num = 42;
+    const upperCaseNum = num.toString().toUpperCase(); // Declare and initialize upperCaseNum
     console.log(upperCaseNum);
   } catch (error) {
     console.error("Type error caught:", error);
@@ -174,8 +175,7 @@ const performSecondLevelOperation = () => {
  * This function executes normally but then calls a non-existent function
  */
 const performThirdLevelOperation = () => {
-  console.log('Nested error example - about to call non-existent function');
-  // Call a non-existent function - this will cause a ReferenceError
+  console.log("Nested error example - about to call non-existent function");
   nonExistentFunction();
 };
 
@@ -249,4 +249,7 @@ const handleCspErrorClick = () => {
 };
 
 // Deprecated legacy export that was mentioned in the original file
+const nonExistentFunction = () => {
+  console.log("This function now exists!");
+};
 export const demo = () => {};
