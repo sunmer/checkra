@@ -456,7 +456,7 @@ export class FileService {
           return false;
       }
 
-      // Determine the path needed for directoryHandle.getFileHandle()
+      // Determine the path needed for getFileHandleRecursive()
       // It should be relative to the directoryHandle itself.
       let pathForGetHandle: string;
       if (directoryHandle.name === 'src' && projectRelativePath.startsWith('src/')) {
@@ -465,35 +465,31 @@ export class FileService {
           // Fallback or handle cases where the selected directory isn't 'src'
           // This might need adjustment based on expected directory structures
           pathForGetHandle = projectRelativePath;
-          statusCallback?.(`Selected directory is "${directoryHandle.name}", using path "${pathForGetHandle}". Ensure this is correct.`, 'warning');
+          statusCallback?.(`Selected directory is "${directoryHandle.name}", using path "${pathForGetHandle}" relative to it. Ensure this is correct.`, 'warning');
       }
+      // Ensure no leading slash, as getFileHandleRecursive handles normalization
+      pathForGetHandle = pathForGetHandle.replace(/^\/+/, '');
 
-      // --- Debugging Logs ---
-      // console.log('[Debug] Directory Handle Name:', directoryHandle.name);
-      // console.log('[Debug] Project Relative Path:', projectRelativePath);
-      // console.log('[Debug] Calculated Path for getFileHandle:', pathForGetHandle);
-      // --- End Debugging Logs ---
-
-      // --- Get file handle ---
+      // --- Get file handle using the recursive helper ---
       let fileHandle: FileSystemFileHandle;
       try {
-        statusCallback?.(`Attempting to access file: ${pathForGetHandle} within ${directoryHandle.name}`, 'info');
+        statusCallback?.(`Attempting to access file recursively: ${pathForGetHandle} within ${directoryHandle.name}`, 'info');
         // Re-verify permission just before access (might be redundant but safe)
-        if (await directoryHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
-           statusCallback?.(`Write permission denied for directory ${directoryHandle.name}.`, 'error');
-           return false;
+        if (await this.verifyOrRequestPermission(directoryHandle, statusCallback)) { // Use helper for permissions
+           // --- Use the recursive helper function ---
+           fileHandle = await this.getFileHandleRecursive(directoryHandle, pathForGetHandle);
+           // -----------------------------------------
+           statusCallback?.(`Successfully accessed file handle for: ${fileHandle.name}`, 'info');
+        } else {
+             statusCallback?.(`Write permission denied for directory ${directoryHandle.name}.`, 'error');
+             return false;
         }
-        fileHandle = await directoryHandle.getFileHandle(pathForGetHandle, { create: false });
-        statusCallback?.(`Successfully accessed file handle for: ${fileHandle.name}`, 'info');
+
       } catch (error) {
         let errorMsg = error instanceof Error ? error.message : String(error);
-        if (error instanceof Error && error.name === 'NotFoundError') {
-            errorMsg = `File not found at path "${pathForGetHandle}" inside "${directoryHandle.name}". Check if the selected directory is correct.`;
-        } else {
-            errorMsg = `Failed to get file handle for "${pathForGetHandle}" in "${directoryHandle.name}": ${errorMsg}`;
-        }
+        // Error messages from getFileHandleRecursive are already quite descriptive
         statusCallback?.(errorMsg, 'error');
-        console.error(`Error getting file handle for ${pathForGetHandle} in ${directoryHandle.name}`, error);
+        console.error(`Error getting file handle via getFileHandleRecursive for ${pathForGetHandle} in ${directoryHandle.name}`, error);
         return false;
       }
       // --- File handle obtained ---
@@ -595,6 +591,71 @@ export class FileService {
     await copyToClipboard(cleanedNewCodeSnippet);
     statusCallback?.('Code fix copied to clipboard.', 'warning');
     return false;
+  }
+
+  /**
+   * Asynchronously retrieves a FileSystemFileHandle for a given path relative
+   * to a base directory handle, traversing subdirectories as needed.
+   * (Moved from ai-service.ts)
+   *
+   * @param baseDirHandle The FileSystemDirectoryHandle for the root directory (e.g., 'src').
+   * @param relativePath The path to the file relative to the base directory (e.g., 'ui/screen-capture.ts' or 'demo.ts').
+   * @returns A Promise that resolves with the FileSystemFileHandle if found.
+   * @throws An error if the path is invalid, or if any directory/file along the path doesn't exist or access is denied.
+   */
+  private async getFileHandleRecursive(
+      baseDirHandle: FileSystemDirectoryHandle,
+      relativePath: string
+  ): Promise<FileSystemFileHandle> {
+      // Normalize path: remove leading/trailing slashes and ensure consistent separators
+      const normalizedPath = relativePath.replace(/^\/+|\/+$/g, '');
+      const pathParts = normalizedPath.split('/').filter(part => part !== ''); // Split and remove empty parts like double slashes //
+
+      if (pathParts.length === 0) {
+          throw new Error("Relative path cannot be empty or just slashes.");
+      }
+
+      let currentDirHandle = baseDirHandle;
+      const fileName = pathParts.pop(); // Get the file name (last part)
+
+      if (!fileName) {
+           throw new Error(`Invalid relative path: "${relativePath}" - must include a filename.`);
+      }
+
+      // Traverse the directory parts (if any)
+      for (const dirName of pathParts) {
+          if (!dirName) continue; // Should not happen with filter, but safety check
+          try {
+              // console.debug(`[FileAccess] Getting directory handle for: ${dirName} within ${currentDirHandle.name}`);
+              currentDirHandle = await currentDirHandle.getDirectoryHandle(dirName);
+          } catch (error: any) {
+              console.error(`[FileAccess] Error getting directory handle for "${dirName}" in path "${normalizedPath}":`, error);
+              if (error.name === 'NotFoundError') {
+                   throw new Error(`Directory not found: "${dirName}" in path "${normalizedPath}" relative to "${baseDirHandle.name}"`);
+              } else if (error.name === 'TypeMismatchError') {
+                   throw new Error(`"${dirName}" is a file, not a directory, in path "${normalizedPath}"`);
+              } else {
+                   throw new Error(`Failed to access directory "${dirName}" in path "${normalizedPath}": ${error.message}`);
+              }
+          }
+      }
+
+      // Get the file handle from the final directory (which might be the baseDirHandle if no subdirs)
+      try {
+          // console.debug(`[FileAccess] Getting file handle for: ${fileName} within ${currentDirHandle.name}`);
+          const fileHandle = await currentDirHandle.getFileHandle(fileName);
+          // console.debug(`[FileAccess] Successfully got file handle for: ${relativePath}`);
+          return fileHandle;
+      } catch (error: any) {
+          console.error(`[FileAccess] Error getting file handle for "${fileName}" in "${currentDirHandle.name}":`, error);
+          if (error.name === 'NotFoundError') {
+              throw new Error(`File not found: "${fileName}" in path "${normalizedPath}" relative to "${baseDirHandle.name}"`);
+          } else if (error.name === 'TypeMismatchError') {
+              throw new Error(`"${fileName}" is a directory, not a file, in path "${normalizedPath}"`);
+          } else {
+              throw new Error(`Failed to access file "${fileName}" in path "${normalizedPath}": ${error.message}`);
+          }
+      }
   }
 }
 

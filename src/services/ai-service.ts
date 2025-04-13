@@ -1,6 +1,7 @@
 import Settings from '../settings';
 import { ErrorInfo, AIFixResponse } from '../types';
 import { contentViewer } from '../ui/content-viewer';
+import { feedbackViewer } from '../ui/feedback-viewer';
 import { AIFixCache } from './ai-cache-service';
 import { parseMarkdown } from './markdown-parser';
 import { sourceCodeService } from '../services/source-code-service';
@@ -124,3 +125,54 @@ function processMarkdownBuffer(buffer: string, markdownData: any): void {
     contentViewer.updateCodeExample(parsedData.codeExample);
   }
 }
+
+/**
+ * Sends feedback (including a screenshot and optional prompt) to the backend.
+ */
+export const sendFeedback = async (imageDataUrl: string, promptText: string): Promise<void> => {
+  // Note: feedbackViewer UI should be in 'sending' state before this is called
+  try {
+    const response = await fetch(`${Settings.API_URL}/suggest/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: imageDataUrl,
+        prompt: promptText, // Include the prompt text
+        // Add other context if needed:
+        // url: window.location.href,
+        // userAgent: navigator.userAgent,
+        // timestamp: new Date().toISOString(),
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      // Throw error to be caught below
+      throw new Error(`Feedback request failed: ${response.status} ${response.statusText}`);
+    }
+
+    // Signal viewer to clear "Sending..." message and prepare for stream
+    feedbackViewer.prepareForStream();
+
+    // Stream the response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        console.log("Feedback stream complete");
+        feedbackViewer.finalizeResponse(); // Signal end of stream
+        break;
+      }
+
+      const chunk = decoder.decode(value, { stream: true });
+      // console.log("Feedback chunk:", chunk); // Optional: keep for debugging
+      feedbackViewer.updateResponse(chunk); // Update viewer with raw chunk
+    }
+
+  } catch (error) {
+    console.error("Error sending feedback:", error);
+    // Display error in the feedback viewer
+    feedbackViewer.showError(error instanceof Error ? error.message : String(error));
+  }
+};

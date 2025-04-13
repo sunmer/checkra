@@ -69,11 +69,11 @@ const handleErrorClick = () => {
  * Handler for the reference error button click
  */
 const handleReferenceErrorClick = () => {
-  // ReferenceError: trying to access an undefined variable
   try {
-    console.log(undefinedVariable); // Variable doesn't exist
+    const undefinedVariable = "This is a defined variable"; // Define the variable
+    console.log(undefinedVariable);
   } catch (error) {
-    console.error('Reference error caught:', error);
+    console.error("Reference error caught:", error);
   }
 };
 
