@@ -31,7 +31,7 @@ const setupButtonListeners = () => {
   document.getElementById('group-btn')?.addEventListener('click', handleGroupClick);
   document.getElementById('groupEnd-btn')?.addEventListener('click', handleGroupEndClick);
   document.getElementById('nested-error-btn')?.addEventListener('click', handleNestedErrorClick);
-  
+
   // New configuration error button listeners
   document.getElementById('env-config-error-btn')?.addEventListener('click', handleEnvConfigErrorClick);
   document.getElementById('cors-config-error-btn')?.addEventListener('click', handleCorsConfigErrorClick);
@@ -81,16 +81,16 @@ const handleReferenceErrorClick = () => {
 
 /**
  * Handler for the type error button click
- */
-const handleTypeErrorClick = () => {
-  // TypeError: calling a method on the wrong type
-  try {
-    const num = 42;
-    num.toUpperCase(); // Numbers don't have toUpperCase method
-  } catch (error) {
-    console.error('Type error caught:', error);
-  }
-};
+ */const handleTypeErrorClick = () => {try {const num = 42;String(num).toUpperCase(); // Convert num to string before calling toUpperCase
+  } catch (error) {console.error("Type error caught:", error);}};
+
+
+
+
+
+
+
+
 
 /**
  * Handler for the syntax error button click
@@ -175,12 +175,12 @@ const performSecondLevelOperation = () => {
 /**
  * Third level function that will be called by performSecondLevelOperation
  * This function executes normally but then calls a non-existent function
- */
-const performThirdLevelOperation = () => {
-  console.log('Nested error example - about to call non-existent function');
-  // Call a non-existent function - this will cause a ReferenceError
-  nonExistentFunction();
-};
+ */const performThirdLevelOperation = () => {console.log("Nested error example - about to call non-existent function");nonExistentFunction();};
+
+
+
+
+
 
 /**
  * Handler for the environment variable configuration error button click
@@ -197,11 +197,11 @@ const handleEnvConfigErrorClick = () => {
     }
 
     // Try to use the API URL, which will fail
-    fetch(apiUrl + '/data')
-      .then(response => response.json())
-      .catch(err => {
-        console.error('Failed to fetch data:', err);
-      });
+    fetch(apiUrl + '/data').
+    then((response) => response.json()).
+    catch((err) => {
+      console.error('Failed to fetch data:', err);
+    });
   } catch (error) {
     console.error('Environment configuration error:', error);
   }
@@ -223,12 +223,12 @@ const handleCorsConfigErrorClick = () => {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ test: 'data' })
-  })
-    .then(response => response.json())
-    .catch(error => {
-      console.error('CORS configuration error:', error);
-      console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
-    });
+  }).
+  then((response) => response.json()).
+  catch((error) => {
+    console.error('CORS configuration error:', error);
+    console.error('This error indicates a CORS configuration issue. The server needs to include appropriate Access-Control-Allow-Origin headers.');
+  });
 };
 
 /**
@@ -257,4 +257,4 @@ const handleCspErrorClick = () => {
 };
 
 // Deprecated legacy export that was mentioned in the original file
-export const demo = () => { };
+const nonExistentFunction = () => {console.log("This function now exists!");};export const demo = () => {};
