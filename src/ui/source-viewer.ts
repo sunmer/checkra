@@ -2,8 +2,6 @@ import { ErrorInfo } from '../types';
 import { createCloseButton } from './utils';
 import { tooltip } from './tooltip';
 import { sourceCodeService } from '../services/source-code-service';
-import { fileService } from '../services/file-service';
-import { contentViewer } from './content-viewer';
 
 /**
  * Class for managing the source code viewer functionality.
@@ -11,7 +9,6 @@ import { contentViewer } from './content-viewer';
 export class SourceViewer {
   private element: HTMLDivElement | null = null;
   private outsideClickHandler: (e: MouseEvent) => void;
-  private currentErrorInfo: ErrorInfo | null = null;
 
   constructor() {
     // Handler for outside clicks
@@ -102,7 +99,6 @@ export class SourceViewer {
     if (this.element) {
       this.element.style.display = 'none';
     }
-    this.currentErrorInfo = null;
   }
   
   /**
@@ -116,7 +112,6 @@ export class SourceViewer {
       this.element.parentNode.removeChild(this.element);
       this.element = null;
     }
-    this.currentErrorInfo = null;
   }
 }
 

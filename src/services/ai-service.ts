@@ -89,7 +89,7 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
 
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
-        console.log("Received chunk:", chunk.length, "bytes");
+        console.log(chunk);
 
         // Process markdown as it comes in
         processMarkdownBuffer(buffer, markdownData);
