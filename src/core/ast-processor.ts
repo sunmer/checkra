@@ -56,7 +56,18 @@ export class AstProcessor {
       // Find the node containing the error
       let errorNodePath: NodePath | null = null;
       let errorContainingFunction: NodePath | null = null;
+      let errorContainingClass: NodePath | null = null;
       let errorLineBlockPaths: NodePath[] = [];
+      
+      // Track error context information
+      const errorContext = {
+        inClass: false,
+        className: '',
+        inMethod: false,
+        methodName: '',
+        isStatic: false,
+        isThisReference: false
+      };
 
       traverse(ast, {
         enter: (path) => {
@@ -68,6 +79,34 @@ export class AstProcessor {
           // Collect all nodes containing the error line
           if (lineHint >= startLine && lineHint <= endLine) {
             errorLineBlockPaths.push(path);
+
+            // Check if error is within a class declaration
+            if (path.isClassDeclaration() || path.isClassExpression()) {
+              errorContainingClass = path;
+              errorContext.inClass = true;
+              
+              if (path.node.id && t.isIdentifier(path.node.id)) {
+                errorContext.className = path.node.id.name;
+              } else if (path.parent && t.isVariableDeclarator(path.parent) && 
+                         t.isIdentifier(path.parent.id)) {
+                errorContext.className = path.parent.id.name;
+              }
+            }
+
+            // Check if error is within a class method
+            if ((path.isClassMethod() || path.isClassProperty()) && errorContext.inClass) {
+              errorContext.inMethod = true;
+              errorContext.isStatic = !!path.node.static;
+              
+              if (t.isIdentifier(path.node.key)) {
+                errorContext.methodName = path.node.key.name;
+              }
+            }
+
+            // Specifically look for 'this' references within the error context
+            if (path.isThisExpression() && errorContext.inClass) {
+              errorContext.isThisReference = true;
+            }
 
             // Specifically look for the function containing the error
             if ((path.isFunctionDeclaration() ||
@@ -89,8 +128,12 @@ export class AstProcessor {
         }
       });
 
-      // Analyze function call graph
-      const callGraph = this.analyzeCallGraph(ast);
+      // Log the error context for debugging
+      if (errorContext.inClass) {
+        statusCallback?.(`Error occurs within class "${errorContext.className}"${
+          errorContext.inMethod ? ` in ${errorContext.isStatic ? 'static ' : ''}method "${errorContext.methodName}"` : ''
+        }`, 'info');
+      }
 
       // --- 3. Parse the new code snippet into AST nodes ---
       // Try a more robust approach to parsing the new code
@@ -104,6 +147,26 @@ export class AstProcessor {
           // All parsing attempts failed
           statusCallback?.('Failed to parse the new code snippet. Trying alternative approach...', 'warning');
 
+          // Try to detect if this is a class method or property
+          const isClassMemberCode = this.isLikelyClassMember(newCodeSnippet);
+          
+          if (isClassMemberCode && errorContext.inClass) {
+            statusCallback?.('Attempting to parse as class member...', 'info');
+            const classMemberResult = await this.applyClassMemberFix(
+              fileHandle,
+              originalFileContent,
+              errorContext.className,
+              newCodeSnippet,
+              errorInfo,
+              errorContext.isStatic,
+              statusCallback
+            );
+            
+            if (classMemberResult) {
+              return true; // Class member fix was successful
+            }
+          }
+
           // Try one more time with a custom approach for the specific error type
           if (errorName) {
             const customFixResult = await this.applyCustomFix(
@@ -112,6 +175,7 @@ export class AstProcessor {
               errorName,
               newCodeSnippet,
               errorInfo,
+              errorContext,
               statusCallback
             );
 
@@ -137,6 +201,7 @@ export class AstProcessor {
           declaredNodes,
           errorInfo,
           errorName,
+          errorContext,
           statusCallback
         );
       }
@@ -145,16 +210,18 @@ export class AstProcessor {
       statusCallback?.(`Successfully parsed ${parsedNodes.length} AST nodes from new code.`, 'info');
 
       // -- 4. Determine which parts of the new code are needed --
-      const { nodesToAdd, nodesToReplace } = this.identifyNeededNodes(
+      const { nodesToAdd, nodesToReplace, classMembersToAdd } = this.identifyNeededNodes(
         ast,
         parsedNodes,
         errorName,
         existingIdentifiers,
         errorContainingFunction,
+        errorContainingClass,
+        errorContext,
         statusCallback
       );
 
-      if (nodesToAdd.length === 0 && nodesToReplace.size === 0) {
+      if (nodesToAdd.length === 0 && nodesToReplace.size === 0 && classMembersToAdd.length === 0) {
         statusCallback?.('No unique declarations to add or replace were identified.', 'warning');
         await copyToClipboard(newCodeSnippet);
         statusCallback?.('Code fix copied to clipboard.', 'warning');
@@ -182,7 +249,37 @@ export class AstProcessor {
         additionsMade = await this.addNewNodes(ast, nodesToAdd, errorInfo, statusCallback);
       }
 
-      const anyChangesMade = replacementsMade > 0 || additionsMade > 0;
+      // Handle class member additions
+      let classMemberAdditionsMade = 0;
+      if (classMembersToAdd.length > 0 && errorContainingClass) {
+        // Split class members by type
+        const methodsToAdd = classMembersToAdd.filter(m => t.isClassMethod(m)) as t.ClassMethod[];
+        const propertiesToAdd = classMembersToAdd.filter(m => t.isClassProperty(m)) as t.ClassProperty[];
+        
+        // Add methods if any
+        if (methodsToAdd.length > 0) {
+          classMemberAdditionsMade += await this.addClassMembers(
+            ast,
+            errorContainingClass,
+            methodsToAdd,
+            errorInfo,
+            statusCallback
+          );
+        }
+        
+        // Add properties if any
+        if (propertiesToAdd.length > 0) {
+          classMemberAdditionsMade += await this.addClassMembers(
+            ast,
+            errorContainingClass,
+            propertiesToAdd,
+            errorInfo,
+            statusCallback
+          );
+        }
+      }
+
+      const anyChangesMade = replacementsMade > 0 || additionsMade > 0 || classMemberAdditionsMade > 0;
 
       if (anyChangesMade) {
         // Generate the updated file content
@@ -203,7 +300,7 @@ export class AstProcessor {
         await writable.close();
 
         statusCallback?.(
-          `Code fix successfully applied! (${replacementsMade} replacements, ${additionsMade} additions)`,
+          `Code fix successfully applied! (${replacementsMade} replacements, ${additionsMade} additions, ${classMemberAdditionsMade} class member additions)`,
           'success'
         );
         return true;
@@ -218,6 +315,7 @@ export class AstProcessor {
             errorName,
             newCodeSnippet,
             errorInfo,
+            errorContext,
             statusCallback
           );
 
@@ -247,6 +345,14 @@ export class AstProcessor {
           errorName,
           newCodeSnippet,
           errorInfo,
+          {
+            inClass: false,
+            className: '',
+            inMethod: false,
+            methodName: '',
+            isStatic: false,
+            isThisReference: false
+          },
           statusCallback
         );
 
@@ -258,6 +364,228 @@ export class AstProcessor {
       // Clipboard as final resort
       await copyToClipboard(newCodeSnippet);
       statusCallback?.('New code copied to clipboard due to error.', 'warning');
+      return false;
+    }
+  }
+
+  /**
+   * Checks if the code looks like a class member (method or property)
+   */
+  private isLikelyClassMember(code: string): boolean {
+    // Check for method pattern - name(params) { ... }
+    const methodPattern = /^\s*(?:static\s+)?(?:async\s+)?(?:get\s+|set\s+)?[a-zA-Z_$][\w$]*\s*\([^)]*\)\s*{/;
+    if (methodPattern.test(code)) {
+      return true;
+    }
+
+    // Check for property pattern - name = value;
+    const propertyPattern = /^\s*(?:static\s+)?[a-zA-Z_$][\w$]*\s*=\s*[^;]+;/;
+    if (propertyPattern.test(code)) {
+      return true;
+    }
+
+    // Check for TypeScript property pattern - name: type;
+    const tsPropertyPattern = /^\s*(?:static\s+)?[a-zA-Z_$][\w$]*\s*:\s*[^;]+;/;
+    if (tsPropertyPattern.test(code)) {
+      return true;
+    }
+
+    // Check for field pattern - name;
+    const fieldPattern = /^\s*(?:static\s+)?[a-zA-Z_$][\w$]*\s*;/;
+    return fieldPattern.test(code);
+  }
+
+  /**
+   * Add class members to a class declaration
+   */
+  private async addClassMembers(
+    ast: parser.ParseResult<t.File>,
+    classPath: NodePath,
+    membersToAdd: t.ClassMethod[] | t.ClassProperty[],
+    errorInfo: ErrorInfo,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<number> {
+    let additionsMade = 0;
+    
+    try {
+      // Get the class node
+      const classNode = classPath.node as t.ClassDeclaration | t.ClassExpression;
+      
+      if (!classNode.body || !t.isClassBody(classNode.body)) {
+        statusCallback?.('Invalid class node structure for adding members.', 'warning');
+        return 0;
+      }
+      
+      // Get the class body and current members
+      const classBody = classNode.body;
+      
+      // Group members by type for better organization
+      const constructors: t.ClassMethod[] = [];
+      const staticMethods: t.ClassMethod[] = [];
+      const instanceMethods: t.ClassMethod[] = [];
+      const staticProperties: t.ClassProperty[] = [];
+      const instanceProperties: t.ClassProperty[] = [];
+      
+      // Categorize members to add
+      for (const member of membersToAdd) {
+        if (t.isClassMethod(member)) {
+          if (member.kind === 'constructor') {
+            constructors.push(member);
+          } else if (member.static) {
+            staticMethods.push(member);
+          } else {
+            instanceMethods.push(member);
+          }
+        } else if (t.isClassProperty(member)) {
+          if (member.static) {
+            staticProperties.push(member);
+          } else {
+            instanceProperties.push(member);
+          }
+        }
+      }
+      
+      // For optimal organization, we'll group by type when adding:
+      // 1. First constructor (if there isn't one already)
+      // 2. Static properties
+      // 3. Instance properties
+      // 4. Static methods
+      // 5. Instance methods
+      
+      // Find insertion points for each type
+      const hasConstructor = classBody.body.some(m => 
+        t.isClassMethod(m) && m.kind === 'constructor'
+      );
+      
+      // Add constructor if needed and none exists
+      if (constructors.length > 0 && !hasConstructor) {
+        classBody.body.unshift(...constructors);
+        additionsMade += constructors.length;
+        statusCallback?.(`Added ${constructors.length} constructor(s).`, 'info');
+      }
+      
+      // Add static properties after constructor or at the beginning
+      if (staticProperties.length > 0) {
+        const insertPos = hasConstructor ? 1 : 0;
+        classBody.body.splice(insertPos, 0, ...staticProperties);
+        additionsMade += staticProperties.length;
+        statusCallback?.(`Added ${staticProperties.length} static properties.`, 'info');
+      }
+      
+      // Add instance properties after static properties or after constructor
+      if (instanceProperties.length > 0) {
+        // Find the last property or the constructor
+        let propertyInsertPos = classBody.body.length;
+        const lastPropertyIndex = classBody.body.findIndex((m, idx, arr) => {
+          return t.isClassProperty(m) && (idx === arr.length - 1 || !t.isClassProperty(arr[idx + 1]));
+        });
+        
+        if (lastPropertyIndex !== -1) {
+          propertyInsertPos = lastPropertyIndex + 1;
+        } else if (hasConstructor || constructors.length > 0) {
+          // After constructor
+          propertyInsertPos = classBody.body.findIndex(m => 
+            t.isClassMethod(m) && m.kind === 'constructor'
+          ) + 1;
+        } else if (staticProperties.length > 0) {
+          // After static properties
+          propertyInsertPos = staticProperties.length;
+        } else {
+          // At beginning
+          propertyInsertPos = 0;
+        }
+        
+        classBody.body.splice(propertyInsertPos, 0, ...instanceProperties);
+        additionsMade += instanceProperties.length;
+        statusCallback?.(`Added ${instanceProperties.length} instance properties.`, 'info');
+      }
+      
+      // Add static methods - put them after all properties
+      if (staticMethods.length > 0) {
+        // Find position after all properties
+        const lastPropertyIndex = classBody.body.findIndex((m, idx, arr) => {
+          return t.isClassProperty(m) && (idx === arr.length - 1 || !t.isClassProperty(arr[idx + 1]));
+        });
+        
+        const methodInsertPos = lastPropertyIndex !== -1 ? lastPropertyIndex + 1 : classBody.body.length;
+        classBody.body.splice(methodInsertPos, 0, ...staticMethods);
+        additionsMade += staticMethods.length;
+        statusCallback?.(`Added ${staticMethods.length} static methods.`, 'info');
+      }
+      
+      // Add instance methods at the end
+      if (instanceMethods.length > 0) {
+        classBody.body.push(...instanceMethods);
+        additionsMade += instanceMethods.length;
+        statusCallback?.(`Added ${instanceMethods.length} instance methods.`, 'info');
+      }
+      
+    } catch (error) {
+      statusCallback?.(
+        `Error adding class members: ${error instanceof Error ? error.message : String(error)}`,
+        'error'
+      );
+      console.error("Class member addition error:", error);
+    }
+    
+    return additionsMade;
+  }
+
+  /**
+   * Special handler for adding class members when the AST parsing approach fails
+   */
+  private async applyClassMemberFix(
+    fileHandle: FileSystemFileHandle,
+    originalFileContent: string,
+    className: string,
+    newCodeSnippet: string,
+    errorInfo: ErrorInfo,
+    isStatic: boolean,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): Promise<boolean> {
+    statusCallback?.(`Attempting to add class member to "${className}" class...`, 'info');
+    
+    // Create a regex pattern to find the class declaration
+    const classPattern = new RegExp(`class\\s+${className}\\s*{([\\s\\S]*?)}`, 'g');
+    const match = classPattern.exec(originalFileContent);
+    
+    if (!match) {
+      statusCallback?.(`Could not find class "${className}" in the file.`, 'warning');
+      return false;
+    }
+    
+    // Get the class body content and position
+    const classBodyContent = match[1];
+    const classStartPos = match.index;
+    const classBodyStartPos = classStartPos + match[0].indexOf('{') + 1;
+    const classBodyEndPos = classStartPos + match[0].lastIndexOf('}');
+    
+    // Clean up the new code snippet (remove trailing semicolons if needed)
+    let cleanMemberCode = newCodeSnippet.trim();
+    if (!cleanMemberCode.endsWith(';') && !cleanMemberCode.endsWith('}')) {
+      cleanMemberCode += ';';
+    }
+    
+    // Determine a good insertion point within the class body
+    // For simplicity, we'll insert at the end of the class body
+    const updatedContent = 
+      originalFileContent.slice(0, classBodyEndPos) + 
+      '\n  ' + cleanMemberCode + '\n' + 
+      originalFileContent.slice(classBodyEndPos);
+    
+    try {
+      // Write the updated content
+      const writable = await fileHandle.createWritable();
+      await writable.write(updatedContent);
+      await writable.close();
+      
+      statusCallback?.(`Successfully added new ${isStatic ? 'static ' : ''}member to class "${className}".`, 'success');
+      return true;
+    } catch (error) {
+      statusCallback?.(
+        `Error writing file: ${error instanceof Error ? error.message : String(error)}`,
+        'error'
+      );
       return false;
     }
   }
@@ -315,12 +643,129 @@ export class AstProcessor {
         parsedNodes = [t.expressionStatement(expressionNode)];
         parseError = null; // Clear error since we succeeded
       } catch (expressionError) {
-        // Keep the original error since both approaches failed
-        statusCallback?.(`Also failed to parse as expression: ${expressionError instanceof Error ? expressionError.message : String(expressionError)}`, 'warning');
+        // Try parsing as a class method or property
+        try {
+          statusCallback?.('Attempting to parse as class member...', 'info');
+          
+          // Try as class method
+          const methodCode = `class Temp { ${code} }`;
+          const classAst = parser.parse(methodCode, {
+            plugins: ['typescript', 'jsx', 'classProperties']
+          });
+          
+          // Extract the class member
+          let classMember: any = null;
+          traverse(classAst, {
+            ClassBody(path) {
+              if (path.node.body.length > 0) {
+                classMember = path.node.body[0] as t.ClassMethod | t.ClassProperty;
+                path.stop();
+              }
+            }
+          });
+          
+          if (classMember) {
+            // We successfully parsed a class member, but we need to convert it to a statement
+            // for compatibility with the existing code flow
+            if (t.isClassMethod(classMember)) {
+              if (classMember.kind === 'method') {
+                const func = t.functionExpression(
+                  classMember.key.type === 'Identifier' ? t.identifier(classMember.key.name) : null,
+                  classMember.params.map(param => {
+                    // Extract the parameter from TSParameterProperty if needed
+                    if (t.isTSParameterProperty(param)) {
+                      return param.parameter;
+                    }
+                    return param;
+                  }),
+                  classMember.body,
+                  classMember.generator,
+                  classMember.async
+                );
+                parsedNodes = [t.expressionStatement(func)];
+              } else if (classMember.kind === 'get' || classMember.kind === 'set') {
+                // Handle getters/setters - convert to object methods
+                const obj = t.objectExpression([
+                  t.objectMethod(
+                    classMember.kind,
+                    classMember.key,
+                    classMember.params.map(param => {
+                      // Extract the parameter from TSParameterProperty if needed
+                      if (t.isTSParameterProperty(param)) {
+                        return param.parameter;
+                      }
+                      return param;
+                    }),
+                    classMember.body
+                  )
+                ]);
+                parsedNodes = [t.expressionStatement(obj)];
+              }
+            } else if (t.isClassProperty(classMember)) {
+              // Convert class property to variable declaration
+              const varName = classMember.key.type === 'Identifier' ? classMember.key.name : 'tempVar';
+              parsedNodes = [
+                t.variableDeclaration('const', [
+                  t.variableDeclarator(
+                    t.identifier(varName),
+                    classMember.value || t.identifier('undefined')
+                  )
+                ])
+              ];
+            }
+            
+            parseError = null; // Clear error since we succeeded
+          } else {
+            throw new Error('Failed to extract class member');
+          }
+        } catch (classMemberError) {
+          // Keep the original error since all approaches failed
+          statusCallback?.(`Failed to parse as class member: ${classMemberError instanceof Error ? classMemberError.message : String(classMemberError)}`, 'warning');
+        }
       }
     }
 
     return { parsedNodes, parseError };
+  }
+
+  /**
+   * Parse class members from a code snippet
+   */
+  private parseClassMembers(
+    code: string,
+    statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
+  ): { members: Array<t.ClassMethod | t.ClassProperty>, error: Error | null } {
+    let members: Array<t.ClassMethod | t.ClassProperty> = [];
+    let error: Error | null = null;
+
+    try {
+      // Wrap the code in a class declaration to parse
+      const classCode = `class Temp { ${code} }`;
+      
+      // Parse the class
+      const classAst = parser.parse(classCode, {
+        plugins: ['typescript', 'jsx', 'classProperties']
+      });
+      
+      // Extract members from class body
+      traverse(classAst, {
+        ClassBody(path) {
+          members = path.node.body as Array<t.ClassMethod | t.ClassProperty>;
+          path.stop();
+        }
+      });
+      
+      if (members.length === 0) {
+        statusCallback?.('No valid class members found in code.', 'warning');
+      } else {
+        statusCallback?.(`Successfully parsed ${members.length} class members.`, 'info');
+      }
+    } catch (parseError) {
+      error = parseError instanceof Error ? parseError : new Error(String(parseError));
+      statusCallback?.(`Error parsing class members: ${error.message}`, 'warning');
+    }
+    
+    return { members, error };
   }
 
   /**
@@ -332,6 +777,77 @@ export class AstProcessor {
   ): { declaredNodes: t.Statement[], declareError: Error | null } {
     const declaredNodes: t.Statement[] = [];
     let declareError: Error | null = null;
+
+    // Check if this looks like a class member
+    if (this.isLikelyClassMember(code)) {
+      try {
+        statusCallback?.('Attempting to parse as class member...', 'info');
+        const { members, error } = this.parseClassMembers(code, statusCallback);
+        
+        if (!error && members.length > 0) {
+          // Convert class members to appropriate statements for compatibility
+          for (const member of members) {
+            if (t.isClassMethod(member) && member.kind === 'method') {
+              // Convert to function declaration/expression
+              if (t.isIdentifier(member.key)) {
+                const funcDecl = t.functionDeclaration(
+                  t.identifier(member.key.name),
+                  member.params.map(param => {
+                    // Extract the parameter from TSParameterProperty if needed
+                    if (t.isTSParameterProperty(param)) {
+                      return param.parameter;
+                    }
+                    return param;
+                  }),
+                  member.body,
+                  member.generator,
+                  member.async
+                );
+                declaredNodes.push(funcDecl);
+              } else {
+                // Anonymous method, use expression
+                const funcExpr = t.functionExpression(
+                  null,
+                  member.params.map(param => {
+                    // Extract the parameter from TSParameterProperty if needed
+                    if (t.isTSParameterProperty(param)) {
+                      return param.parameter;
+                    }
+                    return param;
+                  }),
+                  member.body,
+                  member.generator,
+                  member.async
+                );
+                declaredNodes.push(t.expressionStatement(funcExpr));
+              }
+            } else if (t.isClassProperty(member)) {
+              // Convert to variable declaration
+              if (t.isIdentifier(member.key)) {
+                const varDecl = t.variableDeclaration('const', [
+                  t.variableDeclarator(
+                    t.identifier(member.key.name),
+                    member.value || t.identifier('undefined')
+                  )
+                ]);
+                declaredNodes.push(varDecl);
+              } else {
+                // Skip non-identifier properties
+                statusCallback?.('Skipping non-identifier class property.', 'warning');
+              }
+            }
+          }
+          
+          // If we successfully parsed class members, return early
+          if (declaredNodes.length > 0) {
+            return { declaredNodes, declareError: null };
+          }
+        }
+      } catch (error) {
+        // Just log and continue with normal parsing
+        console.error('Error parsing as class member:', error);
+      }
+    }
 
     // Split the code into potential separate declarations
     const lines = code.split('\n');
@@ -374,10 +890,13 @@ export class AstProcessor {
       const isClassDeclaration = /^\s*class\s+\w+/.test(currentDeclaration.trim());
       const isInterfaceDeclaration = /^\s*interface\s+\w+/.test(currentDeclaration.trim());
       const isTypeDeclaration = /^\s*type\s+\w+/.test(currentDeclaration.trim());
+      const isClassMethod = /^\s*(?:async\s+)?(?:static\s+)?(?:get\s+|set\s+)?[a-zA-Z_$][\w$]*\s*\([^)]*\)\s*{/.test(currentDeclaration.trim());
+      const isClassProperty = /^\s*(?:static\s+)?[a-zA-Z_$][\w$]*\s*(?::|=)/.test(currentDeclaration.trim());
 
       const isPotentialDeclaration = isExportStatement || isConstOrLetOrVar ||
         isFunctionDeclaration || isClassDeclaration ||
-        isInterfaceDeclaration || isTypeDeclaration;
+        isInterfaceDeclaration || isTypeDeclaration ||
+        isClassMethod || isClassProperty;
 
       // If we detected a declaration boundary and braces are balanced, try to parse it
       if (isPotentialDeclaration && braceCount <= 0 && currentDeclaration.trim().length > 0) {
@@ -427,10 +946,15 @@ export class AstProcessor {
     const patterns = [
       /(?:ReferenceError|TypeError):\s+(\w+)\s+is not defined/i,
       /Cannot read (?:property|properties) '(\w+)' of/i,
+      /Property '(\w+)' does not exist on type/i,
       /(\w+) is not a function/i,
       /Identifier '(\w+)' has already been declared/i,
       /(\w+) is not recognized/i,
-      /cannot find name '(\w+)'/i
+      /cannot find name '(\w+)'/i,
+      /Class '(\w+)' does not implement/i,
+      /'(\w+)'\s+is declared but/i,
+      /this.(\w+) is undefined/i,
+      /Property '(\w+)' is missing in type/i
     ];
 
     for (const pattern of patterns) {
@@ -453,8 +977,112 @@ export class AstProcessor {
     declaredNodes: t.Statement[],
     errorInfo: ErrorInfo,
     errorName: string | null,
+    errorContext: { 
+      inClass: boolean, 
+      className: string, 
+      inMethod: boolean, 
+      methodName: string,
+      isStatic: boolean,
+      isThisReference: boolean
+    },
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<boolean> {
+    // Check if we're dealing with a class-related fix
+    if (errorContext.inClass) {
+      statusCallback?.(`Checking for class-related fixes for "${errorContext.className}"...`, 'info');
+      
+      // Extract class members from the new code
+      const classMembers: Array<t.ClassMethod | t.ClassProperty> = [];
+      const nonClassNodes: t.Statement[] = [];
+      
+      // For each node, try to determine if it should be a class member
+      for (const node of declaredNodes) {
+        if (this.isNodeLikelyClassMember(node, errorContext)) {
+          // Try to convert to class member
+          const converted = this.convertToClassMember(node, errorContext.isStatic);
+          if (converted) {
+            classMembers.push(converted);
+          } else {
+            nonClassNodes.push(node);
+          }
+        } else {
+          nonClassNodes.push(node);
+        }
+      }
+      
+      // If we found class members, try to add them to the class
+      if (classMembers.length > 0) {
+        statusCallback?.(`Found ${classMembers.length} potential class members.`, 'info');
+        
+        // Find the class declaration
+        let classPath: NodePath | null = null;
+        traverse(ast, {
+          ClassDeclaration(path) {
+            if (path.node.id && t.isIdentifier(path.node.id) && 
+                path.node.id.name === errorContext.className) {
+              classPath = path;
+              path.stop();
+            }
+          },
+          ClassExpression(path) {
+            // Handle class expressions assigned to variables
+            if (path.parent && 
+                t.isVariableDeclarator(path.parent) && 
+                t.isIdentifier(path.parent.id) && 
+                path.parent.id.name === errorContext.className) {
+              classPath = path;
+              path.stop();
+            }
+          }
+        });
+        
+        if (classPath) {
+          // Add the class members
+          const methods = classMembers.filter(m => t.isClassMethod(m)) as t.ClassMethod[];
+          const properties = classMembers.filter(m => t.isClassProperty(m)) as t.ClassProperty[];
+          
+          let totalAdditions = 0;
+          if (methods.length > 0) {
+            totalAdditions += await this.addClassMembers(ast, classPath, methods, errorInfo, statusCallback);
+          }
+          if (properties.length > 0) {
+            totalAdditions += await this.addClassMembers(ast, classPath, properties, errorInfo, statusCallback);
+          }
+          
+          if (totalAdditions > 0) {
+            // Generate and write the updated file
+            statusCallback?.('Generating updated code from AST...', 'info');
+            const output = generate(ast, {
+              concise: false,
+              compact: false,
+              jsescOption: {
+                minimal: true
+              },
+              minified: false,
+            }, originalFileContent);
+
+            statusCallback?.('Writing updated content to file...', 'info');
+            const writable = await fileHandle.createWritable();
+            await writable.write(output.code);
+            await writable.close();
+
+            statusCallback?.(
+              `Code fix successfully applied! (${totalAdditions} class members added)`,
+              'success'
+            );
+            return true;
+          }
+        } else {
+          statusCallback?.(`Could not find class "${errorContext.className}" in AST.`, 'warning');
+        }
+      }
+      
+      // Continue with non-class nodes if we have any, or if class member approach failed
+      if (nonClassNodes.length > 0) {
+        declaredNodes = nonClassNodes;
+      }
+    }
+
     // If we have an error name, filter for only the relevant declarations
     let relevantNodes: t.Statement[] = [];
 
@@ -595,6 +1223,135 @@ export class AstProcessor {
   }
 
   /**
+   * Check if a node is likely to be a class member
+   */
+  private isNodeLikelyClassMember(
+    node: t.Node,
+    errorContext: { 
+      inClass: boolean, 
+      className: string, 
+      inMethod: boolean, 
+      methodName: string,
+      isStatic: boolean,
+      isThisReference: boolean
+    }
+  ): boolean {
+    // Function declarations that match error context
+    if (t.isFunctionDeclaration(node) && 
+        errorContext.inMethod && 
+        node.id && 
+        node.id.name === errorContext.methodName) {
+      return true;
+    }
+    
+    // Variable declarations that could be properties
+    if (t.isVariableDeclaration(node) && 
+        node.declarations.length === 1 && 
+        t.isIdentifier(node.declarations[0].id)) {
+      
+      // Check if the variable has the same name as the error
+      const varName = node.declarations[0].id.name;
+      
+      // Uses 'this' reference - good indicator it's a class member
+      let usesThis = false;
+      traverse(t.file(t.program([node])), {
+        ThisExpression() {
+          usesThis = true;
+        }
+      });
+      
+      if (usesThis) {
+        return true;
+      }
+      
+      // Check if variable is referenced with 'this.' in the error
+      if (errorContext.isThisReference) {
+        return true;
+      }
+    }
+    
+    // Function expressions or arrow functions assigned to variables
+    if (t.isVariableDeclaration(node) && 
+        node.declarations.length === 1 && 
+        t.isIdentifier(node.declarations[0].id) && 
+        (t.isFunctionExpression(node.declarations[0].init) || 
+         t.isArrowFunctionExpression(node.declarations[0].init))) {
+      
+      // Check if this function has the same name as a method in the error
+      const funcName = node.declarations[0].id.name;
+      if (errorContext.inMethod && funcName === errorContext.methodName) {
+        return true;
+      }
+      
+      // Check for this references
+      let usesThis = false;
+      traverse(t.file(t.program([node])), {
+        ThisExpression() {
+          usesThis = true;
+        }
+      });
+      
+      if (usesThis) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Convert a regular node to a class member if possible
+   */
+  private convertToClassMember(
+    node: t.Node, 
+    isStatic: boolean
+  ): t.ClassMethod | t.ClassProperty | null {
+    if (t.isFunctionDeclaration(node) && node.id) {
+      // Convert function declaration to class method
+      return t.classMethod(
+        'method',
+        node.id,
+        node.params,
+        node.body,
+        isStatic,
+        node.async,
+        node.generator
+      );
+    }
+    
+    if (t.isVariableDeclaration(node) && 
+        node.declarations.length === 1 && 
+        t.isIdentifier(node.declarations[0].id)) {
+      
+      // If it's a function expression or arrow, convert to method
+      const init = node.declarations[0].init;
+      if (init && (t.isFunctionExpression(init) || t.isArrowFunctionExpression(init))) {
+        return t.classMethod(
+          'method',
+          node.declarations[0].id,
+          init.params,
+          t.isBlockStatement(init.body) ? init.body : t.blockStatement([t.returnStatement(init.body)]),
+          isStatic,
+          init.async,
+          'generator' in init ? init.generator : false
+        );
+      }
+      
+      // Otherwise convert to class property
+      return t.classProperty(
+        node.declarations[0].id,
+        node.declarations[0].init || undefined,
+        null,  // No type annotation
+        [],    // No decorators
+        false, // Not computed
+        isStatic
+      );
+    }
+    
+    return null;
+  }
+
+  /**
    * Identify which nodes from the new code are needed to fix the error
    */
   private identifyNeededNodes(
@@ -603,13 +1360,57 @@ export class AstProcessor {
     errorName: string | null,
     existingIdentifiers: Set<string>,
     errorContainingFunction: NodePath | null,
+    errorContainingClass: NodePath | null,
+    errorContext: { 
+      inClass: boolean, 
+      className: string, 
+      inMethod: boolean, 
+      methodName: string,
+      isStatic: boolean,
+      isThisReference: boolean
+    },
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): {
     nodesToAdd: t.Statement[],
-    nodesToReplace: Map<NodePath, t.Statement>
+    nodesToReplace: Map<NodePath, t.Statement>,
+    classMembersToAdd: Array<t.ClassMethod | t.ClassProperty>
   } {
     const nodesToAdd: t.Statement[] = [];
     const nodesToReplace = new Map<NodePath, t.Statement>();
+    const classMembersToAdd: Array<t.ClassMethod | t.ClassProperty> = [];
+    
+    // First, identify if any nodes should be added as class members
+    if (errorContext.inClass) {
+      statusCallback?.(`Looking for class members for "${errorContext.className}"...`, 'info');
+      
+      // Check for class members in the new code
+      for (const node of newNodes) {
+        // First try to parse as class member directly
+        const { members, error } = this.parseClassMembers(this.generateCodeForNode(node), statusCallback);
+        
+        if (!error && members.length > 0) {
+          members.forEach(member => classMembersToAdd.push(member));
+          continue; // Skip regular node processing
+        }
+        
+        // If not a direct class member, check if can be converted
+        if (this.isNodeLikelyClassMember(node, errorContext)) {
+          const classMember = this.convertToClassMember(node, errorContext.isStatic);
+          if (classMember) {
+            classMembersToAdd.push(classMember);
+            continue; // Skip regular node processing
+          }
+        }
+        
+        // If we get here, process as regular node
+      }
+      
+      if (classMembersToAdd.length > 0) {
+        statusCallback?.(`Found ${classMembersToAdd.length} class members to add.`, 'info');
+        // If we found class members, we could return early and skip other node processing,
+        // but let's continue to handle any non-class nodes that might also be needed
+      }
+    }
 
     // If we have an error name, prioritize nodes that define that identifier
     if (errorName) {
@@ -654,7 +1455,7 @@ export class AstProcessor {
           }
 
           // We found and handled the error identifier, no need to check more
-          return { nodesToAdd, nodesToReplace };
+          return { nodesToAdd, nodesToReplace, classMembersToAdd };
         }
       }
 
@@ -704,14 +1505,14 @@ export class AstProcessor {
     }
 
     // If we haven't found anything yet, use a broader approach
-    if (nodesToAdd.length === 0 && nodesToReplace.size === 0) {
+    if (nodesToAdd.length === 0 && nodesToReplace.size === 0 && classMembersToAdd.length === 0) {
       // Identify missing vs. existing declarations
       for (const node of newNodes) {
         const nodeName = this.extractNodeName(node);
 
         if (!nodeName) {
           // Anonymous declarations, add if they seem relevant
-          if (this.isNodeRelevantToError(node, errorName, errorContainingFunction)) {
+          if (this.isNodeRelevantToError(node, errorName, errorContainingFunction, errorContainingClass)) {
             nodesToAdd.push(node);
           }
           continue;
@@ -748,14 +1549,14 @@ export class AstProcessor {
           }
         } else {
           // New declaration, add if it seems relevant
-          if (this.isNodeRelevantToError(node, errorName, errorContainingFunction)) {
+          if (this.isNodeRelevantToError(node, errorName, errorContainingFunction, errorContainingClass)) {
             nodesToAdd.push(node);
           }
         }
       }
     }
 
-    return { nodesToAdd, nodesToReplace };
+    return { nodesToAdd, nodesToReplace, classMembersToAdd };
   }
 
   /**
@@ -764,10 +1565,11 @@ export class AstProcessor {
   private isNodeRelevantToError(
     node: t.Node,
     errorName: string | null,
-    errorContainingFunction: NodePath | null
+    errorContainingFunction: NodePath | null,
+    errorContainingClass: NodePath | null
   ): boolean {
     // Without error context, consider all nodes relevant
-    if (!errorName && !errorContainingFunction) {
+    if (!errorName && !errorContainingFunction && !errorContainingClass) {
       return true;
     }
 
@@ -795,6 +1597,16 @@ export class AstProcessor {
         t.isArrowFunctionExpression(node))) {
       // You could implement structural similarity analysis here
       // For now, consider all functions potentially relevant
+      return true;
+    }
+    
+    // Check if this node is related to the error-containing class
+    if (errorContainingClass && 
+      (t.isClassDeclaration(node) || 
+       t.isClassExpression(node) || 
+       t.isClassMethod(node) || 
+       t.isClassProperty(node))) {
+      // Class-related nodes are relevant when error is in a class
       return true;
     }
 
@@ -829,6 +1641,7 @@ export class AstProcessor {
 
     // Categorize nodes by type
     const exportNodes: t.Statement[] = [];
+    const classNodes: t.Statement[] = [];
     const functionNodes: t.Statement[] = [];
     const varNodes: t.Statement[] = [];
     const otherNodes: t.Statement[] = [];
@@ -836,6 +1649,8 @@ export class AstProcessor {
     for (const node of nodesToAdd) {
       if (t.isExportDeclaration(node)) {
         exportNodes.push(node);
+      } else if (t.isClassDeclaration(node) || t.isClassExpression(node)) {
+        classNodes.push(node);
       } else if (t.isFunctionDeclaration(node)) {
         functionNodes.push(node);
       } else if (t.isVariableDeclaration(node)) {
@@ -858,6 +1673,15 @@ export class AstProcessor {
         }
       }
 
+      // Find a good position for class declarations
+      let classInsertIndex = -1;
+      for (let i = 0; i < program.node.body.length; i++) {
+        if (t.isClassDeclaration(program.node.body[i])) {
+          classInsertIndex = i;
+          // Don't break - find the last one
+        }
+      }
+      
       // Find a good position for function declarations
       let functionInsertIndex = -1;
       for (let i = 0; i < program.node.body.length; i++) {
@@ -879,8 +1703,11 @@ export class AstProcessor {
 
       // Determine insert positions based on above analysis
       const exportInsertIndex = lastExportIndex !== -1 ? lastExportIndex + 1 : program.node.body.length;
+      const classInsertPos = classInsertIndex !== -1 ? classInsertIndex + 1 : 
+                             (exportInsertIndex > 0 ? exportInsertIndex : 0);
       const functionInsertPos = functionInsertIndex !== -1 ? functionInsertIndex + 1 :
-        (exportInsertIndex > 0 ? exportInsertIndex : 0);
+                                (classInsertPos > 0 ? classInsertPos : 
+                                (exportInsertIndex > 0 ? exportInsertIndex : 0));
       const varInsertPos = functionInsertPos;
 
       // Try to insert near the error line if possible
@@ -911,6 +1738,13 @@ export class AstProcessor {
         program.node.body.splice(exportInsertIndex, 0, ...exportNodes);
         additionsMade += exportNodes.length;
         statusCallback?.(`Added ${exportNodes.length} export declarations.`, 'info');
+      }
+      
+      // Insert classes at class position
+      if (classNodes.length > 0) {
+        program.node.body.splice(classInsertPos, 0, ...classNodes);
+        additionsMade += classNodes.length;
+        statusCallback?.(`Added ${classNodes.length} class declarations.`, 'info');
       }
 
       // Insert functions at function position
@@ -953,9 +1787,85 @@ export class AstProcessor {
     errorName: string,
     newCodeSnippet: string,
     errorInfo: ErrorInfo,
+    errorContext: { 
+      inClass: boolean, 
+      className: string, 
+      inMethod: boolean, 
+      methodName: string,
+      isStatic: boolean,
+      isThisReference: boolean
+    },
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<boolean> {
     statusCallback?.(`Attempting custom fix for "${errorName}" error...`, 'info');
+
+    // Handle class-related errors with special case
+    if (errorContext.inClass) {
+      // Check if this looks like a class method or property
+      if (this.isLikelyClassMember(newCodeSnippet)) {
+        return await this.applyClassMemberFix(
+          fileHandle,
+          originalFileContent,
+          errorContext.className,
+          newCodeSnippet,
+          errorInfo,
+          errorContext.isStatic,
+          statusCallback
+        );
+      }
+      
+      // If the issue is a "this" reference, may need to add a property to the constructor
+      if (errorContext.isThisReference) {
+        statusCallback?.(`Attempting to add property "${errorName}" to constructor...`, 'info');
+        
+        // Look for a pattern to add to constructor
+        const constructorPattern = new RegExp(`constructor\\s*\\([^)]*\\)\\s*{([\\s\\S]*?)}`, 'i');
+        const classPattern = new RegExp(`class\\s+${errorContext.className}\\s*{([\\s\\S]*?)}`, 'g');
+        
+        const classMatch = classPattern.exec(originalFileContent);
+        if (classMatch) {
+          const classBody = classMatch[1];
+          const constructorMatch = constructorPattern.exec(classBody);
+          
+          if (constructorMatch) {
+            // Constructor exists, add property initialization to it
+            const constructorBody = constructorMatch[1];
+            const constructorEnd = constructorMatch.index + constructorMatch[0].length - 1; // Position of closing }
+            const propertyInit = `\n    this.${errorName} = ${errorName};\n  `;
+            
+            // Calculate the full position in the original content
+            const classStartPos = classMatch.index;
+            const constructorFullPos = classStartPos + classBody.indexOf('constructor');
+            const constructorBodyEndPos = constructorFullPos + constructorEnd;
+            
+            // Insert the property initialization before the constructor closing bracket
+            const updatedContent = 
+              originalFileContent.slice(0, constructorBodyEndPos) + 
+              propertyInit + 
+              originalFileContent.slice(constructorBodyEndPos);
+            
+            // Write the updated content
+            try {
+              const writable = await fileHandle.createWritable();
+              await writable.write(updatedContent);
+              await writable.close();
+              
+              statusCallback?.(`Successfully added "${errorName}" property initialization to constructor.`, 'success');
+              return true;
+            } catch (writeError) {
+              statusCallback?.(
+                `Error writing file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+                'error'
+              );
+              return false;
+            }
+          } else {
+            // No constructor, could try to add one but let's skip for now
+            statusCallback?.(`No constructor found in class "${errorContext.className}".`, 'warning');
+          }
+        }
+      }
+    }
 
     // Look for patterns in the new code related to the error name
     const errorNamePattern = new RegExp(`(const|let|var|function)\\s+${errorName}\\s*=\\s*[^;]+`, 'i');
@@ -1102,9 +2012,72 @@ export class AstProcessor {
     errorName: string,
     newCodeSnippet: string,
     errorInfo: ErrorInfo,
+    errorContext: { 
+      inClass: boolean, 
+      className: string, 
+      inMethod: boolean, 
+      methodName: string,
+      isStatic: boolean,
+      isThisReference: boolean
+    },
     statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void
   ): Promise<boolean> {
     statusCallback?.(`Applying fallback fix for "${errorName}"...`, 'info');
+
+    // Check if we're dealing with a class-related error
+    if (errorContext.inClass) {
+      // Try adding as class property/method first
+      if (this.isLikelyClassMember(newCodeSnippet)) {
+        return await this.applyClassMemberFix(
+          fileHandle,
+          originalFileContent,
+          errorContext.className,
+          newCodeSnippet,
+          errorInfo,
+          errorContext.isStatic,
+          statusCallback
+        );
+      }
+      
+      // If it's a this.property reference, try to add it to the class
+      if (errorContext.isThisReference) {
+        const classPattern = new RegExp(`class\\s+${errorContext.className}\\s*{([\\s\\S]*?)}`, 'g');
+        const classMatch = classPattern.exec(originalFileContent);
+        
+        if (classMatch) {
+          const classEndPos = classMatch.index + classMatch[0].lastIndexOf('}');
+          
+          // Create a stub property
+          const propertyDecl = `
+  // Auto-added property
+  ${errorContext.isStatic ? 'static ' : ''}${errorName} = ${errorContext.isStatic ? 
+             'function() { console.log("Static stub method"); }' : 
+             'undefined'};
+`;
+          
+          // Insert the property before the class closing bracket
+          const updatedContent = 
+            originalFileContent.slice(0, classEndPos) + 
+            propertyDecl + 
+            originalFileContent.slice(classEndPos);
+          
+          try {
+            const writable = await fileHandle.createWritable();
+            await writable.write(updatedContent);
+            await writable.close();
+            
+            statusCallback?.(`Added fallback ${errorContext.isStatic ? 'static ' : ''}property "${errorName}" to class "${errorContext.className}".`, 'success');
+            return true;
+          } catch (writeError) {
+            statusCallback?.(
+              `Error writing file: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+              'error'
+            );
+            return false;
+          }
+        }
+      }
+    }
 
     // Create a minimal declaration for the missing identifier
     let minimalDeclaration: string;
@@ -1170,6 +2143,18 @@ const ${errorName} = () => {
       t.isIdentifier(node.declarations[0].id)) {
       return node.declarations[0].id.name;
     }
+    
+    if (t.isClassDeclaration(node) && node.id) {
+      return node.id.name;
+    }
+    
+    if (t.isClassMethod(node) && t.isIdentifier(node.key)) {
+      return node.key.name;
+    }
+    
+    if (t.isClassProperty(node) && t.isIdentifier(node.key)) {
+      return node.key.name;
+    }
 
     if (t.isExportNamedDeclaration(node) && node.declaration) {
       return this.extractNodeName(node.declaration);
@@ -1209,6 +2194,36 @@ const ${errorName} = () => {
           (t.isFunctionExpression(path.node.init) || t.isArrowFunctionExpression(path.node.init))) {
           callGraph.set(path.node.id.name, new Set());
         }
+      },
+      ClassMethod: (path) => {
+        if (t.isIdentifier(path.node.key)) {
+          // Create an entry for the class method, prefixed with class name if available
+          let methodName = path.node.key.name;
+          let className = '';
+          
+          // Try to get class name from parent
+          // Use type assertion to fix TypeScript error about 'parent' property
+          const parentPath = path.parentPath;
+          const grandparentPath = parentPath?.parentPath;
+          
+          if (parentPath && t.isClassBody(parentPath.node) &&
+              grandparentPath && 
+              (t.isClassDeclaration(grandparentPath.node) || 
+               t.isClassExpression(grandparentPath.node))) {
+            if (t.isClassDeclaration(grandparentPath.node) && 
+                grandparentPath.node.id && 
+                t.isIdentifier(grandparentPath.node.id)) {
+              className = grandparentPath.node.id.name;
+            } else if (t.isClassExpression(grandparentPath.node) && 
+                      grandparentPath.node.id && 
+                      t.isIdentifier(grandparentPath.node.id)) {
+              className = grandparentPath.node.id.name;
+            }
+          }
+          
+          const fullMethodName = className ? `${className}.${methodName}` : methodName;
+          callGraph.set(fullMethodName, new Set());
+        }
       }
     });
 
@@ -1222,6 +2237,20 @@ const ${errorName} = () => {
           if (callerFunction && callGraph.has(callerFunction) && callGraph.has(calleeName)) {
             callGraph.get(callerFunction)?.add(calleeName);
           }
+        } else if (t.isMemberExpression(path.node.callee) && 
+                  t.isIdentifier(path.node.callee.property)) {
+          // Handle method calls like obj.method() or this.method()
+          const methodName = path.node.callee.property.name;
+          const callerFunction = this.findEnclosingFunctionName(path);
+          
+          if (callerFunction && callGraph.has(callerFunction)) {
+            // Check for class.method format in the call graph
+            for (const key of callGraph.keys()) {
+              if (key.endsWith(`.${methodName}`)) {
+                callGraph.get(callerFunction)?.add(key);
+              }
+            }
+          }
         }
       }
     });
@@ -1234,8 +2263,17 @@ const ${errorName} = () => {
    */
   private findEnclosingFunctionName(path: NodePath): string | null {
     let currentPath = path;
+    let className: string | null = null;
+    
     while (currentPath.parentPath) {
       currentPath = currentPath.parentPath;
+      
+      // Check for class context
+      if ((t.isClassDeclaration(currentPath.node) || t.isClassExpression(currentPath.node)) && 
+          currentPath.node.id && 
+          t.isIdentifier(currentPath.node.id)) {
+        className = currentPath.node.id.name;
+      }
 
       if (t.isFunctionDeclaration(currentPath.node) && currentPath.node.id) {
         return currentPath.node.id.name;
@@ -1245,6 +2283,14 @@ const ${errorName} = () => {
         t.isIdentifier(currentPath.node.id) &&
         (t.isFunctionExpression(currentPath.node.init) || t.isArrowFunctionExpression(currentPath.node.init))) {
         return currentPath.node.id.name;
+      }
+      
+      if (t.isClassMethod(currentPath.node) && t.isIdentifier(currentPath.node.key)) {
+        const methodName = currentPath.node.key.name;
+        if (className) {
+          return `${className}.${methodName}`;
+        }
+        return methodName;
       }
     }
 
@@ -1274,6 +2320,17 @@ const ${errorName} = () => {
       ClassDeclaration(path) {
         if (path.node.id && t.isIdentifier(path.node.id)) {
           identifiers.add(path.node.id.name);
+        }
+      },
+      // Check class methods and properties
+      ClassMethod(path) {
+        if (t.isIdentifier(path.node.key)) {
+          identifiers.add(path.node.key.name);
+        }
+      },
+      ClassProperty(path) {
+        if (t.isIdentifier(path.node.key)) {
+          identifiers.add(path.node.key.name);
         }
       },
       // Check export named declarations
