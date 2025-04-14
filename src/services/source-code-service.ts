@@ -1,7 +1,7 @@
 import { ErrorInfo } from '../types';
 import { escapeHTML } from '../ui/utils';
 import * as parser from '@babel/parser';
-import traverse, { NodePath } from '@babel/traverse';
+import traverse from '@babel/traverse';
 
 /**
  * Interface for source code information
@@ -147,7 +147,7 @@ export class SourceCodeService {
    */
   public generateSourceCodeHTML(result: SourceCodeResult): string {
     let sourceHTML = '<div style="position:relative;">';
-    sourceHTML += `<h3 style="margin-top:0;color:#ccc;">${result.fileName} (Lines ${result.startLine + 1}-${result.endLine})</h3>`; // Show line range
+    sourceHTML += `<h3 style="margin-top:0;color:#ccc;font-weight: normal;">${result.fileName}</h3>`; // Show line range
     sourceHTML += '<pre style="margin:0;padding-bottom:20px;"><code>';
 
     // Use result.startLine and result.endLine which now define the context range

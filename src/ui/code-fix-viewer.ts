@@ -134,7 +134,7 @@ export class CodeFixViewer {
       <div id="code-example-section">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Code Fix</h4>
-          <button id="apply-fix-button" style="background-color:#0e639c;color:white;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;font-size:14px;margin-left:10px;">Apply Fix</button>
+          <button id="apply-fix-button" style="background-color:#0e639c;color:white;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;font-size:14px;margin-left:10px;">Apply fix</button>
         </div>
         <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Generating code fix...</code></pre>
       </div>

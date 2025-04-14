@@ -17,7 +17,6 @@ export class FloatingMenu {
   private floatingMenuDiv: HTMLElement | null = null;
   private errorList: HTMLUListElement | null = null;
   private errorCountBadge: HTMLSpanElement | null = null;
-  private closeButton: HTMLSpanElement | null = null;
   private settingsButton: HTMLSpanElement | null = null;
   private settingsView: HTMLDivElement | null = null;
   private settingsCloseButton: HTMLSpanElement | null = null;
@@ -29,7 +28,7 @@ export class FloatingMenu {
   private noErrorsMessage: HTMLElement | null = null;
   private feedbackButton: HTMLSpanElement | null = null;
   private bottomContainer: HTMLDivElement | null = null;
-  private collapsedErrorBadge: HTMLDivElement | null = null;
+  private errorButton: HTMLDivElement | null = null;
   private collapseTimeoutId: number | null = null;
 
   /**
@@ -67,8 +66,9 @@ export class FloatingMenu {
     this.bottomContainer.style.position = 'fixed';
     this.bottomContainer.style.bottom = '10px';
     this.bottomContainer.style.left = '10px';
-    this.bottomContainer.style.boxShadow = '2px 2px 3px #a0a0a0';
-    this.bottomContainer.style.backgroundColor = 'rgb(15 28 55 / 80%)'; // Semi-transparent dark
+    this.bottomContainer.style.boxShadow = '2px 2px 5px rgba(0, 0, 0, 0.4)'; // Slightly darker shadow
+    // Replace solid background with a gradient for a glossy effect
+    this.bottomContainer.style.background = 'linear-gradient(to bottom, rgba(45, 55, 75, 0.9), rgba(25, 35, 55, 0.95))';
     this.bottomContainer.style.borderRadius = '20px'; // Rounded corners
     this.bottomContainer.style.padding = '6px 12px';
     this.bottomContainer.style.display = 'flex'; // Use flexbox for layout
@@ -78,28 +78,32 @@ export class FloatingMenu {
     this.bottomContainer.style.display = 'none'; // Initially hidden
 
     // Create collapsed error badge (red circle)
-    this.collapsedErrorBadge = document.createElement('div');
-    this.collapsedErrorBadge.style.width = '30px';
-    this.collapsedErrorBadge.style.height = '30px';
-    this.collapsedErrorBadge.style.borderRadius = '50%';
-    this.collapsedErrorBadge.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
-    this.collapsedErrorBadge.style.position = 'relative'; // For positioning the count badge
-    this.collapsedErrorBadge.style.cursor = 'pointer';
-    this.collapsedErrorBadge.style.display = 'flex'; // Center content
-    this.collapsedErrorBadge.style.alignItems = 'center'; // Center content
-    this.collapsedErrorBadge.style.justifyContent = 'center'; // Center content
-    this.collapsedErrorBadge.title = 'Show Errors';
-    this.collapsedErrorBadge.id = 'show-error-viewer';
+    this.errorButton = document.createElement('div');
+    this.errorButton.style.width = '30px';
+    this.errorButton.style.height = '30px';
+    this.errorButton.style.borderRadius = '50%';
+    // Slightly lighter red and less transparent
+    this.errorButton.style.boxShadow = 'rgba(0, 0, 0, 0.5) 0px -1px 3px';
+    this.errorButton.style.backgroundColor = 'rgba(255, 15, 61, 0.85)';
+    this.errorButton.style.border = '2px solid rgb(52 63 84 / 80%)';
+    this.errorButton.style.position = 'relative'; // For positioning the count badge
+    this.errorButton.style.cursor = 'pointer';
+    this.errorButton.style.display = 'flex'; // Center content
+    this.errorButton.style.alignItems = 'center'; // Center content
+    this.errorButton.style.justifyContent = 'center'; // Center content
+    // Add a subtle shadow to make it look like a button
+    this.errorButton.title = 'Show Errors';
+    this.errorButton.id = 'show-error-viewer';
 
     // ADDED: Hover listener to the collapsed error badge to expand the log
-    this.collapsedErrorBadge.addEventListener('mouseenter', () => {
-        // Clear collapse timeout if mouse moves quickly back to trigger
-        if (this.collapseTimeoutId) {
-            clearTimeout(this.collapseTimeoutId);
-            this.collapseTimeoutId = null;
-        }
-        this.isExpanded = true;
-        this.updateStyle();
+    this.errorButton.addEventListener('mouseenter', () => {
+      // Clear collapse timeout if mouse moves quickly back to trigger
+      if (this.collapseTimeoutId) {
+        clearTimeout(this.collapseTimeoutId);
+        this.collapseTimeoutId = null;
+      }
+      this.isExpanded = true;
+      this.updateStyle();
     });
 
     // Create error count badge INSIDE the collapsed badge
@@ -111,98 +115,98 @@ export class FloatingMenu {
     this.errorCountBadge.style.fontSize = '12px'; // Match old collapsed style
     this.errorCountBadge.style.userSelect = 'none';
 
-    if (this.collapsedErrorBadge) {
-      this.collapsedErrorBadge.appendChild(this.errorCountBadge);
-      this.bottomContainer.appendChild(this.collapsedErrorBadge); // Add badge to container
+    if (this.errorButton) {
+      this.errorButton.appendChild(this.errorCountBadge);
+      this.bottomContainer.appendChild(this.errorButton); // Add badge to container
     }
 
     // Modify mouse leave listener for the expanded container
     if (this.floatingMenuDiv) {
-        // Add mouseenter listener to clear timeout if user returns
-        this.floatingMenuDiv.addEventListener('mouseenter', () => {
-            if (this.collapseTimeoutId) {
-                clearTimeout(this.collapseTimeoutId);
-                this.collapseTimeoutId = null;
-            }
-        });
+      // Add mouseenter listener to clear timeout if user returns
+      this.floatingMenuDiv.addEventListener('mouseenter', () => {
+        if (this.collapseTimeoutId) {
+          console.log('[FloatingMenu] Mouse re-entered expanded menu, clearing collapse timer.');
+          clearTimeout(this.collapseTimeoutId);
+          this.collapseTimeoutId = null;
+        }
+      });
 
-        this.floatingMenuDiv.addEventListener('mouseleave', (e: MouseEvent) => {
-            // Clear any existing timeout first in case of rapid movements
-            if (this.collapseTimeoutId) {
-                clearTimeout(this.collapseTimeoutId);
-                this.collapseTimeoutId = null;
-            }
+      this.floatingMenuDiv.addEventListener('mouseleave', (_e: MouseEvent) => {
+        // Clear any existing timeout first in case of rapid movements
+        if (this.collapseTimeoutId) {
+          clearTimeout(this.collapseTimeoutId);
+        }
 
-            // Don't collapse if settings view is open
-            if (this.settingsView?.style.display !== 'none') {
-                return;
-            }
+        // Don't collapse if settings view is open
+        if (this.settingsView?.style.display !== 'none') {
+          console.log('[FloatingMenu] Mouse left, but settings view is open. Not starting collapse timer.');
+          return;
+        }
 
-            const menuRect = this.floatingMenuDiv?.getBoundingClientRect();
-            if (!menuRect) return; // Should not happen if element exists
+        // Start collapse timer (1 second delay)
+        console.log('[FloatingMenu] Mouse left expanded menu, starting 1s collapse timer.');
+        this.collapseTimeoutId = window.setTimeout(() => {
+          // Check again if settings opened during the timeout, if it's still expanded,
+          // and if the mouse is NOT currently over the trigger area OR the expanded menu itself.
+          const isHoveringTrigger = this.bottomContainer?.matches(':hover');
+          const isHoveringExpandedMenu = this.floatingMenuDiv?.matches(':hover'); // Check if mouse returned to expanded menu
 
-            // Check if mouse left upwards
-            if (e.clientY < menuRect.top) {
-                // Moved up - collapse immediately
-                console.log('[FloatingMenu] Mouse left upwards, collapsing.');
-                this.isExpanded = false;
-                this.updateStyle();
-            } else {
-                // Moved down, left, or right - collapse after a delay
-                console.log('[FloatingMenu] Mouse left downwards/sideways, starting collapse timer.');
-                this.collapseTimeoutId = window.setTimeout(() => {
-                    // Check again if settings opened during the timeout or mouse returned
-                    if (this.settingsView?.style.display === 'none' && this.isExpanded) {
-                         // Check if mouse is currently over the trigger area - if so, don't collapse
-                         const isHoveringTrigger = this.bottomContainer?.matches(':hover');
-                         if (!isHoveringTrigger) {
-                            console.log('[FloatingMenu] Collapse timer finished, collapsing.');
-                            this.isExpanded = false;
-                            this.updateStyle();
-                         } else {
-                            console.log('[FloatingMenu] Collapse timer finished, but mouse is back over trigger. Aborting collapse.');
-                         }
-                    }
-                    this.collapseTimeoutId = null; // Clear the ID after execution/check
-                }, 500); // 500ms delay
-            }
-        });
+          if (
+            this.settingsView?.style.display === 'none' &&
+            this.isExpanded &&
+            !isHoveringTrigger &&
+            !isHoveringExpandedMenu // Don't collapse if mouse is back over the expanded menu
+          ) {
+            console.log('[FloatingMenu] Collapse timer finished, collapsing.');
+            this.isExpanded = false;
+            this.updateStyle();
+          } else {
+            console.log('[FloatingMenu] Collapse timer finished, but conditions not met (settings open, mouse back over trigger/menu, or no longer expanded). Aborting collapse.');
+          }
+          this.collapseTimeoutId = null; // Clear the ID after execution/check
+        }, 500);
+      });
     }
-
-    // Create a close button for the expanded state
-    this.closeButton = document.createElement('span');
-    this.closeButton.textContent = '×';
-    this.closeButton.style.position = 'absolute';
-    this.closeButton.style.top = '4px';
-    this.closeButton.style.right = '8px';
-    this.closeButton.style.cursor = 'pointer';
-    this.closeButton.style.fontSize = '18px';
-    this.closeButton.style.color = 'white';
-    this.closeButton.style.userSelect = 'none';
-    
-    this.closeButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.isExpanded = false;
-      this.updateStyle();
-      this.hideSettingsView();
-    });
 
     // Create settings button (⚙)
     this.settingsButton = document.createElement('span');
+    this.settingsButton.id = 'show-settings-viewer'; // Give it an ID
     this.settingsButton.textContent = '⚙';
     this.settingsButton.title = 'Settings';
-    this.settingsButton.style.position = 'absolute';
-    this.settingsButton.style.top = '28px';
-    this.settingsButton.style.right = '8px';
+    // Remove absolute positioning
+    // this.settingsButton.style.position = 'absolute';
+    // this.settingsButton.style.top = '28px';
+    // this.settingsButton.style.right = '8px';
     this.settingsButton.style.cursor = 'pointer';
-    this.settingsButton.style.fontSize = '14px';
+    // Make it look like the other buttons
+    this.settingsButton.style.width = '10px';
+    this.settingsButton.style.height = '10px';
+    this.settingsButton.style.borderRadius = '50%';
     this.settingsButton.style.color = 'white';
+    this.settingsButton.style.display = 'flex'; // Use flex for centering
+    this.settingsButton.style.alignItems = 'center';
+    this.settingsButton.style.justifyContent = 'center';
+    this.settingsButton.style.fontSize = '16px'; // Match feedback button size
+    this.settingsButton.style.fontWeight = 'bold'; // Match feedback button weight
     this.settingsButton.style.userSelect = 'none';
-    this.settingsButton.style.display = 'none';
+    // Add similar background/border/shadow
+    this.settingsButton.style.boxShadow = 'rgba(0, 0, 0, 0.5) 0px -1px 1px';
+    this.settingsButton.style.backgroundColor = 'rgba(100, 110, 130, 0.85)'; // Greyish background
+    this.settingsButton.style.border = '2px solid rgb(52 63 84 / 80%)';
+    // this.settingsButton.style.display = 'none'; // No longer initially hidden
 
     this.settingsButton.addEventListener('click', (e) => {
       e.stopPropagation();
       this.toggleSettingsView();
+    });
+
+    // Add mouseenter listener to settings button to clear collapse timeout
+    this.settingsButton.addEventListener('mouseenter', () => {
+      if (this.collapseTimeoutId) {
+        console.log('[FloatingMenu] Mouse entered settings button, clearing collapse timer.');
+        clearTimeout(this.collapseTimeoutId);
+        this.collapseTimeoutId = null;
+      }
     });
 
     // Create settings view
@@ -289,29 +293,42 @@ export class FloatingMenu {
     this.noErrorsMessage.style.padding = '8px';
     this.noErrorsMessage.style.color = '#aaa';
     this.noErrorsMessage.style.display = 'block'; // Show by default
-    
+
     if (this.floatingMenuDiv) {
       this.floatingMenuDiv.appendChild(this.noErrorsMessage);
     }
 
-    // Create Feedback button (?)
+    // Create Feedback button (?) -> Now SVG
     this.feedbackButton = document.createElement('span');
     this.feedbackButton.id = 'show-feedback-viewer';
-    this.feedbackButton.textContent = '?';
-    this.feedbackButton.title = 'Get feedback';
-    this.feedbackButton.style.width = '30px';
-    this.feedbackButton.style.height = '30px';
+    // Set innerHTML WITHOUT width/height attributes in the <svg> tag
+    this.feedbackButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+    <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+    <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+    <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+    <circle cx="12" cy="12" r="4"/> <!-- Increased radius from 3 to 4 -->
+    <path d="m16 16-1.5-1.5"/> <!-- Adjusted handle path slightly -->
+  </svg>`;
+    this.feedbackButton.title = 'Get feedback on design';
+    this.feedbackButton.style.width = '30px'; // Keep button size
+    this.feedbackButton.style.height = '30px'; // Keep button size
     this.feedbackButton.style.borderRadius = '50%';
-    this.feedbackButton.style.backgroundColor = 'rgba(0, 100, 255, 0.8)';
     this.feedbackButton.style.color = 'white';
     this.feedbackButton.style.display = 'flex';
     this.feedbackButton.style.alignItems = 'center';
     this.feedbackButton.style.justifyContent = 'center';
-    this.feedbackButton.style.fontSize = '16px';
-    this.feedbackButton.style.fontWeight = 'bold';
     this.feedbackButton.style.cursor = 'pointer';
-    this.feedbackButton.style.zIndex = '1000';
+    this.feedbackButton.style.boxShadow = 'rgba(0, 0, 0, 0.5) 0px -1px 1px';
+    this.feedbackButton.style.backgroundColor = 'rgba(20, 120, 255, 0.85)';
+    this.feedbackButton.style.border = '2px solid rgb(52 63 84 / 80%)';
     this.feedbackButton.style.userSelect = 'none';
+
+    const svgElement = this.feedbackButton.querySelector('svg');
+    if (svgElement) {
+      svgElement.style.width = '18px';
+      svgElement.style.height = '18px';
+    }
 
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -327,7 +344,7 @@ export class FloatingMenu {
             feedbackViewer.showInputArea(imageDataUrl);
             console.log('[Feedback] Feedback input area shown.');
           } catch (viewerError) {
-             console.error('[Feedback] Error showing feedback input area:', viewerError);
+            console.error('[Feedback] Error showing feedback input area:', viewerError);
           }
         } else {
           console.warn('[Feedback] Screen capture cancelled or failed. No image data received.');
@@ -338,16 +355,21 @@ export class FloatingMenu {
 
     // Add mouseenter listener to feedback button to clear collapse timeout
     this.feedbackButton.addEventListener('mouseenter', () => {
-        if (this.collapseTimeoutId) {
-            console.log('[FloatingMenu] Mouse entered feedback button, clearing collapse timer.');
-            clearTimeout(this.collapseTimeoutId);
-            this.collapseTimeoutId = null;
-        }
+      if (this.collapseTimeoutId) {
+        console.log('[FloatingMenu] Mouse entered feedback button, clearing collapse timer.');
+        clearTimeout(this.collapseTimeoutId);
+        this.collapseTimeoutId = null;
+      }
     });
 
     // Add feedback button to the bottom container
     if (this.bottomContainer && this.feedbackButton) {
       this.bottomContainer.appendChild(this.feedbackButton);
+    }
+
+    // Add settings button to the bottom container AFTER feedback button
+    if (this.bottomContainer && this.settingsButton) {
+      this.bottomContainer.appendChild(this.settingsButton);
     }
 
     // Apply initial styles based on config
@@ -435,22 +457,22 @@ export class FloatingMenu {
   /** Show the settings view */
   private showSettingsView(): void {
     if (this.settingsView && this.settingsStatus) {
-        this.settingsView.style.display = 'block';
+      this.settingsView.style.display = 'block';
 
-        // Get the current directory name from the file service
-        // *** NOTE: Assumes fileService has a method like this ***
-        // *** You might need to implement getCurrentDirectoryName() in file-service.ts ***
-        const currentDirName = fileService.getCurrentDirectoryName(); // Or however you get the name
+      // Get the current directory name from the file service
+      // *** NOTE: Assumes fileService has a method like this ***
+      // *** You might need to implement getCurrentDirectoryName() in file-service.ts ***
+      const currentDirName = fileService.getCurrentDirectoryName(); // Or however you get the name
 
-        if (currentDirName) {
-            // Display the current directory name
-            this.settingsStatus.textContent = `Access granted to: ${currentDirName}`;
-            this.settingsStatus.style.color = '#98c379'; // Use success color
-        } else {
-            // Display message indicating no access
-            this.settingsStatus.textContent = 'No directory access granted.';
-            this.settingsStatus.style.color = '#999'; // Default info color
-        }
+      if (currentDirName) {
+        // Display the current directory name
+        this.settingsStatus.textContent = `Access granted to: ${currentDirName}`;
+        this.settingsStatus.style.color = '#98c379'; // Use success color
+      } else {
+        // Display message indicating no access
+        this.settingsStatus.textContent = 'No directory access granted.';
+        this.settingsStatus.style.color = '#999'; // Default info color
+      }
     }
     // We no longer need the initial call to showSettingsStatus here,
     // as we are setting the status directly based on current access.
@@ -490,21 +512,22 @@ export class FloatingMenu {
         this.errorList.style.display = 'block';
       }
 
-      if (this.closeButton && !this.floatingMenuDiv.contains(this.closeButton)) {
-        this.floatingMenuDiv.appendChild(this.closeButton);
-      }
-
-      if (this.settingsButton && !this.floatingMenuDiv.contains(this.settingsButton)) {
-        this.floatingMenuDiv.appendChild(this.settingsButton);
-      }
+      // REMOVED: No longer adding settings button to expanded view
+      // if (this.settingsButton && !this.floatingMenuDiv.contains(this.settingsButton)) {
+      //   this.floatingMenuDiv.appendChild(this.settingsButton);
+      // }
 
       if (this.settingsView && !this.floatingMenuDiv.contains(this.settingsView)) {
-        this.floatingMenuDiv.appendChild(this.settingsView);
+        // NOTE: Settings VIEW still needs to be appended somewhere.
+        // Appending to body might be better if it's modal-like.
+        // Let's keep it appended to the body during creation instead.
+        // document.body.appendChild(this.settingsView); // Moved to create()
       }
 
-      if (this.settingsButton) {
-        this.settingsButton.style.display = 'inline-block';
-      }
+      // REMOVED: Settings button display is handled by bottomContainer visibility now
+      // if (this.settingsButton) {
+      //   this.settingsButton.style.display = 'inline-block';
+      // }
 
       // Show/hide no errors message based on error count
       if (this.noErrorsMessage) {
@@ -535,12 +558,12 @@ export class FloatingMenu {
    */
   public addError(msg: string, errorInfo: ErrorInfo): void {
     this.errorCount++;
-    
+
     // Hide the "No warnings or errors" message when errors exist
     if (this.noErrorsMessage) {
       this.noErrorsMessage.style.display = 'none';
     }
-    
+
     // Generate a unique ID for this error
     const errorId = `error-${Date.now()}-${this.errorCount}`;
     errorSourceMap.set(errorId, errorInfo);
@@ -626,7 +649,7 @@ export class FloatingMenu {
 
       // Only append actions container if it actually contains buttons
       if (actionsContainer.hasChildNodes()) {
-          li.appendChild(actionsContainer); // Append the actions container last
+        li.appendChild(actionsContainer); // Append the actions container last
       }
 
       // Style for the list item
@@ -692,18 +715,17 @@ export class FloatingMenu {
   public destroy(): void {
     // Clear any pending timeout
     if (this.collapseTimeoutId) {
-        clearTimeout(this.collapseTimeoutId);
-        this.collapseTimeoutId = null;
+      clearTimeout(this.collapseTimeoutId);
+      this.collapseTimeoutId = null;
     }
 
     // Remove event listeners (cloning)
-    if (this.closeButton) this.closeButton.replaceWith(this.closeButton.cloneNode(true));
     if (this.settingsButton) this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
     if (this.settingsView) this.settingsView.replaceWith(this.settingsView.cloneNode(true));
     if (this.bottomContainer) this.bottomContainer.replaceWith(this.bottomContainer.cloneNode(true)); // Still clone container itself if needed
     if (this.floatingMenuDiv) this.floatingMenuDiv.replaceWith(this.floatingMenuDiv.cloneNode(true)); // Clones to remove mouseenter/mouseleave
     if (this.feedbackButton) this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true)); // Clones to remove click/mouseenter
-    if (this.collapsedErrorBadge) this.collapsedErrorBadge.replaceWith(this.collapsedErrorBadge.cloneNode(true)); // Clones to remove mouseenter
+    if (this.errorButton) this.errorButton.replaceWith(this.errorButton.cloneNode(true)); // Clones to remove mouseenter
 
     // Remove tooltip event listeners from all error message spans
     if (this.errorList) {
@@ -712,7 +734,7 @@ export class FloatingMenu {
       });
       // Also remove listeners from source/AI buttons within list items if added dynamically
       this.errorList.querySelectorAll('li button').forEach(button => {
-          button.replaceWith(button.cloneNode(true));
+        button.replaceWith(button.cloneNode(true));
       });
     }
 
@@ -726,14 +748,13 @@ export class FloatingMenu {
     }
     // Remove the bottom container from the DOM (already cloned/replaced)
     if (this.bottomContainer?.parentNode) {
-        this.bottomContainer.parentNode.removeChild(this.bottomContainer);
+      this.bottomContainer.parentNode.removeChild(this.bottomContainer);
     }
 
     // Nullify references
     this.floatingMenuDiv = null;
     this.errorList = null;
     this.errorCountBadge = null;
-    this.closeButton = null;
     this.settingsButton = null;
     this.settingsView = null;
     this.settingsCloseButton = null;
@@ -741,7 +762,7 @@ export class FloatingMenu {
     this.noErrorsMessage = null;
     this.feedbackButton = null;
     this.bottomContainer = null;
-    this.collapsedErrorBadge = null;
+    this.errorButton = null;
     this.originalStyle = {};
     errorSourceMap.clear();
     this.collapseTimeoutId = null;

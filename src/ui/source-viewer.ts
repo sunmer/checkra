@@ -42,7 +42,6 @@ export class SourceViewer {
     this.element.style.maxWidth = '80%';
     this.element.style.maxHeight = '80%';
     this.element.style.overflowY = 'auto';
-    this.element.style.fontFamily = 'monospace';
     this.element.style.fontSize = '12px';
     this.element.style.display = 'none';
 
