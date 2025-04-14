@@ -66,7 +66,7 @@ export class FloatingMenu {
     this.bottomContainer.style.position = 'fixed';
     this.bottomContainer.style.bottom = '10px';
     this.bottomContainer.style.left = '10px';
-    this.bottomContainer.style.boxShadow = '2px 2px 5px rgba(0, 0, 0, 0.4)'; // Slightly darker shadow
+    this.bottomContainer.style.boxShadow = '2px 2px 3px rgba(0, 0, 0, 0.4)'; // Slightly darker shadow
     // Replace solid background with a gradient for a glossy effect
     this.bottomContainer.style.background = 'linear-gradient(to bottom, rgba(45, 55, 75, 0.9), rgba(25, 35, 55, 0.95))';
     this.bottomContainer.style.borderRadius = '20px'; // Rounded corners

@@ -128,41 +128,20 @@ class ScreenCapture {
         if (width > 5 && height > 5) { // Only capture if selection is reasonably sized
             console.log('[ScreenCapture] Selection size is valid, attempting html2canvas capture...');
             try {
+                // Pass the calculated rectangle coordinates directly to html2canvas
                 const canvas = await html2canvas(document.body, {
-                    x: window.scrollX,
-                    y: window.scrollY,
-                    width: document.documentElement.scrollWidth,
-                    height: document.documentElement.scrollHeight,
+                    x: x + window.scrollX, // Source X relative to document top-left
+                    y: y + window.scrollY, // Source Y relative to document top-left
+                    width: width,          // Width of the selection
+                    height: height,         // Height of the selection
                     useCORS: true,
                     logging: true // Keep logging enabled for now
                 });
-                console.log('[ScreenCapture] html2canvas capture successful.');
+                console.log('[ScreenCapture] html2canvas capture successful (directly captured selection).');
 
-                // Create a new canvas to draw the cropped section
-                const croppedCanvas = document.createElement('canvas');
-                croppedCanvas.width = width;
-                croppedCanvas.height = height;
-                const ctx = croppedCanvas.getContext('2d');
-
-                if (ctx) {
-                    console.log('[ScreenCapture] Cropping captured canvas...');
-                    // Draw the captured portion onto the new canvas
-                    ctx.drawImage(
-                        canvas,
-                        x + window.scrollX, // Source X (from full body capture)
-                        y + window.scrollY, // Source Y
-                        width,       // Source Width
-                        height,      // Source Height
-                        0,           // Destination X (on cropped canvas)
-                        0,           // Destination Y
-                        width,       // Destination Width
-                        height       // Destination Height
-                    );
-                    imageDataUrl = croppedCanvas.toDataURL('image/png');
-                    console.log('[ScreenCapture] Cropping complete, generated image data URL.');
-                } else {
-                     console.error('[ScreenCapture] Failed to get 2D context for cropping.');
-                }
+                // The canvas returned by html2canvas is already the cropped size
+                imageDataUrl = canvas.toDataURL('image/png');
+                console.log('[ScreenCapture] Generated image data URL from directly captured canvas.');
 
             } catch (error) {
                 console.error('[ScreenCapture] html2canvas capture failed:', error);

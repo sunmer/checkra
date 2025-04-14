@@ -1,7 +1,6 @@
 import { createCloseButton, escapeHTML } from './utils';
-import { fetchFeedback } from '../services/ai-service'; // Import sendFeedback here
-// Assuming a markdown parser exists or we display raw text
-// import { parseMarkdown } from '../services/markdown-parser';
+import { fetchFeedback } from '../services/ai-service';
+import { marked } from 'marked'; 
 
 /**
  * Class for managing the feedback response viewer modal.
@@ -15,6 +14,7 @@ export class FeedbackViewer {
     private responseContentElement: HTMLElement | null = null;
     private outsideClickHandler: (e: MouseEvent) => void;
     private currentImageDataUrl: string | null = null; // Store image data
+    private accumulatedResponseText: string = ''; // <-- Add accumulator for raw text
 
     constructor() {
         this.outsideClickHandler = (e: MouseEvent) => {
@@ -70,7 +70,7 @@ export class FeedbackViewer {
         imageTitle.style.paddingBottom = '4px';
         this.capturedImageElement = document.createElement('img');
         this.capturedImageElement.style.maxWidth = '100%';
-        this.capturedImageElement.style.maxHeight = '200px'; // Limit image preview height
+        this.capturedImageElement.style.maxHeight = '400px'; // Increased max height for larger preview
         this.capturedImageElement.style.border = '1px solid #444';
         this.capturedImageElement.style.marginBottom = '15px';
         this.capturedImageElement.style.display = 'none'; // Hide initially
@@ -163,7 +163,8 @@ export class FeedbackViewer {
         this.promptTextarea.disabled = false;
         this.submitButton.disabled = false;
         this.submitButton.textContent = 'Get Feedback';
-        this.responseContentElement.textContent = '';
+        this.responseContentElement.innerHTML = ''; // <-- Use innerHTML
+        this.accumulatedResponseText = ''; // <-- Reset accumulator
         this.responseContentElement.style.display = 'none';
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: none'); // Hide response title
 
@@ -197,7 +198,9 @@ export class FeedbackViewer {
         this.promptTextarea.disabled = true;
         this.submitButton.disabled = true;
         this.submitButton.textContent = 'Sending...';
+        // Use textContent for the initial loading message, as it's not markdown
         this.responseContentElement.textContent = '⏳ Sending feedback and waiting for response...';
+        this.accumulatedResponseText = ''; // Clear accumulator before new request
         this.responseContentElement.style.display = 'block';
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;'); // Show response title
 
@@ -208,26 +211,36 @@ export class FeedbackViewer {
     // Called by ai-service when stream starts
     public prepareForStream(): void {
          if (this.responseContentElement) {
-             // Clear the "Sending..." message
-             this.responseContentElement.textContent = '';
+             // Clear the "Sending..." message using innerHTML
+             this.responseContentElement.innerHTML = '';
+             this.accumulatedResponseText = ''; // Ensure accumulator is clear
          }
     }
 
     public updateResponse(chunk: string): void {
         if (this.responseContentElement) {
             // If it was showing the initial "Sending..." message, clear it first
-            if (this.responseContentElement.textContent?.startsWith('⏳')) {
-                 this.responseContentElement.textContent = '';
+            // (prepareForStream should handle this, but double-check doesn't hurt)
+            if (this.accumulatedResponseText === '' && this.responseContentElement.textContent?.startsWith('⏳')) {
+                 this.responseContentElement.innerHTML = '';
             }
-            this.responseContentElement.textContent += chunk;
+            // Append raw chunk to accumulator
+            this.accumulatedResponseText += chunk;
+            // Parse the entire accumulated text and render as HTML
+            // Note: marked.parse() is synchronous in v4+
+            this.responseContentElement.innerHTML = marked.parse(this.accumulatedResponseText) as string;
+            // Scroll to bottom
             this.element?.scrollTo(0, this.element.scrollHeight);
         }
     }
 
      public finalizeResponse(): void {
-        if (this.responseContentElement && this.responseContentElement.textContent === '') {
+        // Check the accumulated raw text for emptiness
+        if (this.responseContentElement && this.accumulatedResponseText === '') {
+             // Use textContent for simple messages
              this.responseContentElement.textContent = 'Received empty response.';
         }
+        // No need to parse again here if updateResponse parses every time
         console.log("Feedback stream finalized in viewer.");
      }
 
@@ -237,11 +250,14 @@ export class FeedbackViewer {
         this.element.style.display = 'block'; // Ensure visible
         const errorMessage = error instanceof Error ? error.message : String(error);
 
-        // Clear any loading message first
-        this.responseContentElement.textContent = '';
+        // Clear any loading message or previous content
+        this.responseContentElement.innerHTML = ''; // <-- Use innerHTML
+        this.accumulatedResponseText = ''; // <-- Reset accumulator
+
         // Show response title if hidden
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
 
+        // Render error message using innerHTML, escaping the dynamic part
         this.responseContentElement.innerHTML = `<div style="color:#ff6b6b; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
 
         // Re-enable input fields on error
@@ -259,7 +275,10 @@ export class FeedbackViewer {
             this.currentImageDataUrl = null;
             if (this.capturedImageElement) this.capturedImageElement.src = '';
             if (this.promptTextarea) this.promptTextarea.value = '';
-            if (this.responseContentElement) this.responseContentElement.textContent = '';
+            if (this.responseContentElement) {
+                 this.responseContentElement.innerHTML = ''; // <-- Use innerHTML
+            }
+            this.accumulatedResponseText = ''; // <-- Reset accumulator
         }
     }
 
