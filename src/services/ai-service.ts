@@ -1,6 +1,6 @@
 import Settings from '../settings';
 import { ErrorInfo, AIFixResponse } from '../types';
-import { contentViewer } from '../ui/content-viewer';
+import { codeFixViewer } from '../ui/code-fix-viewer';
 import { feedbackViewer } from '../ui/feedback-viewer';
 import { AIFixCache } from './ai-cache-service';
 import { parseMarkdown } from './markdown-parser';
@@ -8,11 +8,11 @@ import { sourceCodeService } from '../services/source-code-service';
 /**
  * Fetches an AI-generated fix for an error.
  */
-export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
+export const fetchCodeFix = async (errorInfo: ErrorInfo): Promise<void> => {
   try {
     // Show loading state
-    contentViewer.showLoading();
-    contentViewer.initStreamStructure(errorInfo);
+    codeFixViewer.showLoading();
+    codeFixViewer.initStreamStructure(errorInfo);
 
     // Check if we have a cached fix for this error
     const cache = AIFixCache.getInstance();
@@ -22,19 +22,19 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
       console.log("Using cached AI fix");
 
       // Initialize the structure just like with a new request
-      contentViewer.initStreamStructure(errorInfo);
+      codeFixViewer.initStreamStructure(errorInfo);
 
       // Use the cached response
       if (cachedFix.issue) {
-        contentViewer.updateIssue(cachedFix.issue);
+        codeFixViewer.updateIssue(cachedFix.issue);
       }
 
       if (cachedFix.fix && Array.isArray(cachedFix.fix)) {
-        contentViewer.updateFix(cachedFix.fix);
+        codeFixViewer.updateFix(cachedFix.fix);
       }
 
       if (cachedFix.codeExample) {
-        contentViewer.updateCodeExample(cachedFix.codeExample);
+        codeFixViewer.updateCodeExample(cachedFix.codeExample);
       }
 
       return;
@@ -98,7 +98,7 @@ export const fetchAIFix = async (errorInfo: ErrorInfo): Promise<void> => {
     }
   } catch (error) {
     console.error("Error in fetchAIFix:", error);
-    contentViewer.showError(error instanceof Error ? error.message : String(error));
+    codeFixViewer.showError(error instanceof Error ? error.message : String(error));
   }
 };
 
@@ -112,24 +112,24 @@ function processMarkdownBuffer(buffer: string, markdownData: any): void {
   // Update UI with any new content
   if (parsedData.issue && parsedData.issue !== markdownData.issue) {
     markdownData.issue = parsedData.issue;
-    contentViewer.updateIssue(parsedData.issue);
+    codeFixViewer.updateIssue(parsedData.issue);
   }
 
   if (parsedData.fix && JSON.stringify(parsedData.fix) !== JSON.stringify(markdownData.fix)) {
     markdownData.fix = parsedData.fix;
-    contentViewer.updateFix(parsedData.fix);
+    codeFixViewer.updateFix(parsedData.fix);
   }
 
   if (parsedData.codeExample && parsedData.codeExample !== markdownData.codeExample) {
     markdownData.codeExample = parsedData.codeExample;
-    contentViewer.updateCodeExample(parsedData.codeExample);
+    codeFixViewer.updateCodeExample(parsedData.codeExample);
   }
 }
 
 /**
  * Sends feedback (including a screenshot and optional prompt) to the backend.
  */
-export const sendFeedback = async (imageDataUrl: string, promptText: string): Promise<void> => {
+export const fetchFeedback = async (imageDataUrl: string, promptText: string): Promise<void> => {
   // Note: feedbackViewer UI should be in 'sending' state before this is called
   try {
     const response = await fetch(`${Settings.API_URL}/suggest/feedback`, {
@@ -137,11 +137,7 @@ export const sendFeedback = async (imageDataUrl: string, promptText: string): Pr
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         image: imageDataUrl,
-        prompt: promptText, // Include the prompt text
-        // Add other context if needed:
-        // url: window.location.href,
-        // userAgent: navigator.userAgent,
-        // timestamp: new Date().toISOString(),
+        prompt: promptText
       }),
     });
 

@@ -1,6 +1,6 @@
 import { LoggerOptions, Logger, ErrorInfo } from '../types';
 import { defaultOptions } from '../config';
-import { ErrorLog, errorSourceMap } from '../ui/error-log';
+import { FloatingMenu, errorSourceMap } from '../ui/floating-menu';
 import { tooltip } from '../ui/tooltip';
 import { sourceViewer } from '../ui/source-viewer';
 import { feedbackViewer } from '../ui/feedback-viewer';
@@ -20,7 +20,7 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
   // Store the original style config to ensure we can fully restore it
   const originalStyle = { ...config.style };
   const errors: string[] = [];
-  let errorLog: ErrorLog | null = null;
+  let errorLog: FloatingMenu | null = null;
 
   // Save original console methods
   const originalConsoleError = console.error;
@@ -51,7 +51,7 @@ export function initLogger(options?: LoggerOptions): Logger & { cleanup: () => v
     // Initialize feedback viewer
     feedbackViewer.create();
     // Initialize error log
-    errorLog = new ErrorLog(config, originalStyle);
+    errorLog = new FloatingMenu(config, originalStyle);
   }
 
   // Override console.warn

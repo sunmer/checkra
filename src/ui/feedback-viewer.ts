@@ -1,5 +1,5 @@
 import { createCloseButton, escapeHTML } from './utils';
-import { sendFeedback } from '../services/ai-service'; // Import sendFeedback here
+import { fetchFeedback } from '../services/ai-service'; // Import sendFeedback here
 // Assuming a markdown parser exists or we display raw text
 // import { parseMarkdown } from '../services/markdown-parser';
 
@@ -122,6 +122,7 @@ export class FeedbackViewer {
         this.submitButton.style.borderRadius = '3px';
         this.submitButton.style.cursor = 'pointer';
         this.submitButton.style.fontSize = '13px';
+        this.submitButton.style.marginBottom = '20px';
         this.submitButton.addEventListener('click', this.handleSubmit);
         contentWrapper.appendChild(this.submitButton);
 
@@ -203,7 +204,7 @@ export class FeedbackViewer {
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;'); // Show response title
 
         // Call the service function
-        sendFeedback(this.currentImageDataUrl, promptText);
+        fetchFeedback(this.currentImageDataUrl, promptText);
     };
 
     // Called by ai-service when stream starts
@@ -229,12 +230,6 @@ export class FeedbackViewer {
         if (this.responseContentElement && this.responseContentElement.textContent === '') {
              this.responseContentElement.textContent = 'Received empty response.';
         }
-        // Re-enable input? Or assume user will close. Let's keep it disabled.
-        // if (this.promptTextarea) this.promptTextarea.disabled = false;
-        // if (this.submitButton) {
-        //     this.submitButton.disabled = false;
-        //     this.submitButton.textContent = 'Send Feedback';
-        // }
         console.log("Feedback stream finalized in viewer.");
      }
 

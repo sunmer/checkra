@@ -67,7 +67,6 @@ import { initLogger } from 'advanced-frontend-logger';
 
 const logger = initLogger({
   renderErrorLogDiv: true,
-  errorLogDivId: 'custom-error-log',
   style: {
     position: 'fixed',
     bottom: '10px',
@@ -121,7 +120,6 @@ document.body.appendChild(sourceElement);
 ```javascript
 const defaultOptions = {
   renderErrorLogDiv: true,
-  errorLogDivId: 'error-log',
   style: {
     position: 'fixed',
     bottom: '0',
