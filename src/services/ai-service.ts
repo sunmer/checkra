@@ -167,7 +167,7 @@ export const fetchFeedback = async (imageDataUrl: string, promptText: string): P
     }
 
   } catch (error) {
-    console.error("Error sending feedback:", error);
+    console.error("Error getting feedback:", error);
     // Display error in the feedback viewer
     feedbackViewer.showError(error instanceof Error ? error.message : String(error));
   }

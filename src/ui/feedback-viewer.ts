@@ -25,28 +25,11 @@ function injectFeedbackViewerStyles(): void {
 #feedback-response-content pre {
     margin-top: 0.3em;
     margin-bottom: 0.3em;
-    margin-block-start: 0;
-    margin-block-end: 0;
-}
-
-#feedback-response-content ul,
-#feedback-response-content ol, {
-    margin-top: -20px !important;
 }
 
 #feedback-response-content li {
-    margin-top: -20px !important;
+    margin--bottom: 0.1em;
     margin-bottom: 0.1em;
-}
-
-#feedback-response-content li > p {
-    margin-top: -10px;
-    margin-bottom: 0;
-    margin-block-start: 0;
-    margin-block-end: 0;
-}
-
-#feedback-response-content h1 {
 }
 
 #feedback-response-content h1,
@@ -57,9 +40,8 @@ function injectFeedbackViewerStyles(): void {
 #feedback-response-content h6 {
     margin-bottom: 0.3em;
     color: #fff;
-    margin-top: -10px;
 }
-    `;
+`;
 
     const styleElement = document.createElement('style');
     styleElement.id = styleId;
@@ -229,7 +211,7 @@ export class FeedbackViewer {
         responseTitle.style.display = 'none'; // Hide initially
         this.responseContentElement = document.createElement('div');
         this.responseContentElement.id = 'feedback-response-content';
-        this.responseContentElement.style.whiteSpace = 'pre-wrap'; // Crucial for markdown line breaks
+        //this.responseContentElement.style.whiteSpace = 'pre-wrap'; // Crucial for markdown line breaks
         this.responseContentElement.style.wordWrap = 'break-word'; // Ensure long lines wrap
         this.responseContentElement.style.fontFamily = 'inherit'; // Inherit from modal
         this.responseContentElement.style.fontSize = '13px';
@@ -291,7 +273,7 @@ export class FeedbackViewer {
         this.promptTextarea.disabled = true;
         this.submitButton.disabled = true;
         this.submitButtonTextSpan.textContent = 'Sending...';
-        this.responseContentElement.textContent = '⏳ Sending feedback and waiting for response...';
+        this.responseContentElement.textContent = '⏳ Getting feedback...';
         this.accumulatedResponseText = '';
         this.responseContentElement.style.display = 'block';
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
