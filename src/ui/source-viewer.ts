@@ -1,5 +1,4 @@
 import { ErrorInfo } from '../types';
-import { createCloseButton } from './utils';
 import { tooltip } from './tooltip';
 import { sourceCodeService } from '../services/source-code-service';
 
@@ -44,12 +43,6 @@ export class SourceViewer {
     this.element.style.overflowY = 'auto';
     this.element.style.fontSize = '12px';
     this.element.style.display = 'none';
-
-    // Add close button
-    const closeButton = createCloseButton(() => {
-      this.hide();
-    });
-    this.element.appendChild(closeButton);
     document.body.appendChild(this.element);
     
     // Set up event listener for clicks outside the element
@@ -77,12 +70,6 @@ export class SourceViewer {
         // Generate HTML using the service
         const sourceHTML = sourceCodeService.generateSourceCodeHTML(sourceResult);
         this.element!.innerHTML = sourceHTML;
-        
-        // Re-add close button
-        const closeButton = createCloseButton(() => {
-          this.hide();
-        });
-        this.element!.appendChild(closeButton);
       }
     } catch (error) {
       this.element!.innerHTML = `<div>Error loading source: ${error instanceof Error ? error.message : String(error)}</div>`;

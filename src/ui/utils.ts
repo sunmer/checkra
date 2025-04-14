@@ -43,21 +43,3 @@ export const escapeHTML = (str: string): string => {
 export const truncateText = (text: string, maxLength: number = 100): string => {
   return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
 };
-
-/**
- * Creates a close button element.
- */
-export const createCloseButton = (onClick: () => void): HTMLSpanElement => {
-  const closeButton = document.createElement('span');
-  closeButton.textContent = '×';
-  closeButton.style.position = 'absolute';
-  closeButton.style.top = '10px';
-  closeButton.style.right = '15px';
-  closeButton.style.cursor = 'pointer';
-  closeButton.style.fontSize = '24px';
-  closeButton.style.fontWeight = 'bold';
-  closeButton.style.color = '#999';
-  closeButton.style.userSelect = 'none';
-  closeButton.addEventListener('click', onClick);
-  return closeButton;
-};

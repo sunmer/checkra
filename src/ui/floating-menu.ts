@@ -19,7 +19,6 @@ export class FloatingMenu {
   private errorCountBadge: HTMLSpanElement | null = null;
   private settingsButton: HTMLSpanElement | null = null;
   private settingsView: HTMLDivElement | null = null;
-  private settingsCloseButton: HTMLSpanElement | null = null;
   private settingsStatus: HTMLParagraphElement | null = null;
   private isExpanded: boolean = false;
   private errorCount: number = 0;
@@ -30,6 +29,7 @@ export class FloatingMenu {
   private bottomContainer: HTMLDivElement | null = null;
   private errorButton: HTMLDivElement | null = null;
   private collapseTimeoutId: number | null = null;
+  private settingsOutsideClickHandler: ((event: MouseEvent) => void) | null = null;
 
   /**
    * Creates a new FloatingMenu instance.
@@ -67,7 +67,7 @@ export class FloatingMenu {
     this.bottomContainer.style.left = '10px';
     this.bottomContainer.style.boxShadow = '2px 2px 3px rgba(0, 0, 0, 0.4)'; // Slightly darker shadow
     // Replace solid background with a gradient for a glossy effect
-    this.bottomContainer.style.background = 'linear-gradient(to bottom, rgba(45, 55, 75, 0.9), rgba(25, 35, 55, 0.95))';
+    this.bottomContainer.style.background = 'linear-gradient(to bottom, rgba(35, 45, 75, 0.9), rgba(29, 38, 55, 0.95))';
     this.bottomContainer.style.borderRadius = '20px'; // Rounded corners
     this.bottomContainer.style.padding = '6px 12px';
     this.bottomContainer.style.display = 'flex'; // Use flexbox for layout
@@ -218,7 +218,6 @@ export class FloatingMenu {
     this.settingsView.style.border = '1px solid #444';
     this.settingsView.style.borderRadius = '5px';
     this.settingsView.style.padding = '20px';
-    this.settingsView.style.paddingTop = '40px';
     this.settingsView.style.zIndex = '1050';
     this.settingsView.style.display = 'none';
     this.settingsView.style.color = '#abb2bf';
@@ -230,20 +229,6 @@ export class FloatingMenu {
     this.settingsView.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
 
     this.settingsView.addEventListener('click', (e) => e.stopPropagation());
-
-    // Create close button for settings view
-    this.settingsCloseButton = document.createElement('span');
-    this.settingsCloseButton.textContent = '×';
-    this.settingsCloseButton.style.position = 'absolute';
-    this.settingsCloseButton.style.top = '10px';
-    this.settingsCloseButton.style.right = '15px';
-    this.settingsCloseButton.style.fontSize = '24px';
-    this.settingsCloseButton.style.color = '#abb2bf';
-    this.settingsCloseButton.style.cursor = 'pointer';
-    this.settingsCloseButton.style.fontWeight = 'bold';
-    this.settingsCloseButton.style.lineHeight = '1';
-    this.settingsCloseButton.addEventListener('click', () => this.hideSettingsView());
-    this.settingsView.appendChild(this.settingsCloseButton);
 
     // Settings content
     const settingsTitle = document.createElement('h3');
@@ -458,30 +443,54 @@ export class FloatingMenu {
     if (this.settingsView && this.settingsStatus) {
       this.settingsView.style.display = 'block';
 
-      // Get the current directory name from the file service
-      // *** NOTE: Assumes fileService has a method like this ***
-      // *** You might need to implement getCurrentDirectoryName() in file-service.ts ***
-      const currentDirName = fileService.getCurrentDirectoryName(); // Or however you get the name
+      // Get the current directory name
+      const currentDirName = fileService.getCurrentDirectoryName();
 
       if (currentDirName) {
-        // Display the current directory name
         this.settingsStatus.textContent = `Access granted to: ${currentDirName}`;
-        this.settingsStatus.style.color = '#98c379'; // Use success color
+        this.settingsStatus.style.color = '#98c379';
       } else {
-        // Display message indicating no access
         this.settingsStatus.textContent = 'No directory access granted.';
-        this.settingsStatus.style.color = '#999'; // Default info color
+        this.settingsStatus.style.color = '#999';
       }
+
+      // --- Add click outside listener ---
+      // Define the handler (if not already defined)
+      if (!this.settingsOutsideClickHandler) {
+        this.settingsOutsideClickHandler = (event: MouseEvent) => {
+          // Check if the click is outside the settingsView element
+          if (this.settingsView &&
+              this.settingsView.style.display !== 'none' && // Only act if visible
+              event.target instanceof Node && // Ensure target is a Node
+              !this.settingsView.contains(event.target) && // Click is outside the view
+              event.target !== this.settingsButton) { // Click is not the settings button itself
+            console.log('[FloatingMenu] Click detected outside settings view. Closing.');
+            this.hideSettingsView();
+          }
+        };
+      }
+      // Add the listener (use setTimeout to avoid capturing the click that opened it)
+      setTimeout(() => {
+        console.log('[FloatingMenu] Adding document listener for settings click outside.');
+        document.addEventListener('mousedown', this.settingsOutsideClickHandler!);
+      }, 0);
+      // --- End add click outside listener ---
     }
-    // We no longer need the initial call to showSettingsStatus here,
-    // as we are setting the status directly based on current access.
-    // this.showSettingsStatus('', 'info');
   }
 
   /** Hide the settings view */
   private hideSettingsView(): void {
-    if (this.settingsView) this.settingsView.style.display = 'none';
-    // Optional: Clear status when hiding? Or leave it for next open? Let's leave it.
+    if (this.settingsView) {
+        this.settingsView.style.display = 'none';
+    }
+    // --- Remove click outside listener ---
+    if (this.settingsOutsideClickHandler) {
+      console.log('[FloatingMenu] Removing document listener for settings click outside.');
+      document.removeEventListener('mousedown', this.settingsOutsideClickHandler);
+      // Optional: Nullify the handler reference if you want it recreated each time
+      // this.settingsOutsideClickHandler = null;
+    }
+    // --- End remove click outside listener ---
   }
 
   /**
@@ -756,7 +765,6 @@ export class FloatingMenu {
     this.errorCountBadge = null;
     this.settingsButton = null;
     this.settingsView = null;
-    this.settingsCloseButton = null;
     this.settingsStatus = null;
     this.noErrorsMessage = null;
     this.feedbackButton = null;
@@ -765,5 +773,12 @@ export class FloatingMenu {
     this.originalStyle = {};
     errorSourceMap.clear();
     this.collapseTimeoutId = null;
+
+    // --- Ensure listener is removed on destroy ---
+    if (this.settingsOutsideClickHandler) {
+      document.removeEventListener('mousedown', this.settingsOutsideClickHandler);
+      this.settingsOutsideClickHandler = null;
+    }
+    // --- End ensure listener removal ---
   }
 }

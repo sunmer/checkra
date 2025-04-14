@@ -147,8 +147,18 @@ export class SourceCodeService {
    */
   public generateSourceCodeHTML(result: SourceCodeResult): string {
     let sourceHTML = '<div style="position:relative;">';
-    sourceHTML += `<h3 style="margin-top:0;color:#ccc;font-weight: normal;">${result.fileName}</h3>`; // Show line range
-    sourceHTML += '<pre style="margin:0;padding-bottom:20px;"><code>';
+
+    // --- Error Message as H3 at the Top ---
+    if (result.message && result.lineNumber) {
+        // Use h3, adjust font size and margin
+        sourceHTML += `<h3 style="color:#ff6b6b; margin-top:0; margin-bottom:15px; font-size:14px; font-weight:bold;">Error on line ${result.lineNumber}: ${escapeHTML(result.message)}</h3>`;
+    } else if (result.message) {
+        sourceHTML += `<h3 style="color:#ff6b6b; margin-top:0; margin-bottom:15px; font-size:14px; font-weight:bold;">Error: ${escapeHTML(result.message)}</h3>`;
+    }
+    // --- End Error Message ---
+
+    // Code Block
+    sourceHTML += '<pre style="margin:0;padding-bottom:5px;"><code>'; // Reduced padding-bottom
 
     // Use result.startLine and result.endLine which now define the context range
     for (let i = result.startLine; i < result.endLine; i++) {
@@ -165,13 +175,13 @@ export class SourceCodeService {
 
     sourceHTML += '</code></pre>';
 
-    // Add error message below the code block
-    if (result.message && result.lineNumber) {
-        sourceHTML += `<div style="color:#ff6b6b;margin-top:10px; padding-left: 50px;">Error on line ${result.lineNumber}: ${escapeHTML(result.message)}</div>`;
-    } else if (result.message) {
-        sourceHTML += `<div style="color:#ff6b6b;margin-top:10px;">Error: ${escapeHTML(result.message)}</div>`;
-    }
+    // --- File Name as Paragraph Below Code ---
+    // Use p tag, keep original styles, add top margin
+    sourceHTML += `<p style="margin-top:10px; margin-bottom: 0; color:#ccc; font-weight: normal; font-size: 12px;">${result.fileName}</p>`;
+    // --- End File Name ---
 
+
+    sourceHTML += '</div>'; // Close the main relative div
 
     return sourceHTML;
   }
