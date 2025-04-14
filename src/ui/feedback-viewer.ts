@@ -1,6 +1,73 @@
-import { createCloseButton, escapeHTML } from './utils';
+import { escapeHTML } from './utils';
 import { fetchFeedback } from '../services/ai-service';
 import { marked } from 'marked'; 
+
+// Flag to track if styles have been injected
+let feedbackViewerStylesInjected = false;
+
+/**
+ * Injects CSS rules for tighter spacing within the feedback response area.
+ */
+function injectFeedbackViewerStyles(): void {
+    if (feedbackViewerStylesInjected) return;
+
+    const styleId = 'feedback-viewer-styles';
+    if (document.getElementById(styleId)) {
+        feedbackViewerStylesInjected = true; // Already exists somehow
+        return;
+    }
+
+    const css = `
+#feedback-response-content p,
+#feedback-response-content ul,
+#feedback-response-content ol,
+#feedback-response-content blockquote,
+#feedback-response-content pre {
+    margin-top: 0.3em;
+    margin-bottom: 0.3em;
+    margin-block-start: 0;
+    margin-block-end: 0;
+}
+
+#feedback-response-content ul,
+#feedback-response-content ol, {
+    margin-top: -20px !important;
+}
+
+#feedback-response-content li {
+    margin-top: -20px !important;
+    margin-bottom: 0.1em;
+}
+
+#feedback-response-content li > p {
+    margin-top: -10px;
+    margin-bottom: 0;
+    margin-block-start: 0;
+    margin-block-end: 0;
+}
+
+#feedback-response-content h1 {
+}
+
+#feedback-response-content h1,
+#feedback-response-content h2,
+#feedback-response-content h3,
+#feedback-response-content h4,
+#feedback-response-content h5,
+#feedback-response-content h6 {
+    margin-bottom: 0.3em;
+    color: #fff;
+    margin-top: -10px;
+}
+    `;
+
+    const styleElement = document.createElement('style');
+    styleElement.id = styleId;
+    styleElement.textContent = css;
+    document.head.appendChild(styleElement);
+    feedbackViewerStylesInjected = true;
+    console.log('[FeedbackViewer] Injected custom styles for response content.');
+}
 
 /**
  * Class for managing the feedback response viewer modal.
@@ -31,6 +98,10 @@ export class FeedbackViewer {
     public create(): void {
         if (this.element) return;
 
+        // --- Inject styles if not already done ---
+        injectFeedbackViewerStyles();
+        // --- End style injection ---
+
         this.element = document.createElement('div');
         this.element.id = 'feedback-viewer';
 
@@ -52,10 +123,6 @@ export class FeedbackViewer {
         this.element.style.display = 'none';
         this.element.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'; // Use default UI font
         this.element.style.lineHeight = '1.5'; // Improve readability
-
-        // Add close button
-        const closeButton = createCloseButton(() => this.hide());
-        this.element.appendChild(closeButton);
 
         // Content structure
         const contentWrapper = document.createElement('div');
@@ -95,9 +162,7 @@ export class FeedbackViewer {
         this.promptTextarea.style.width = 'calc(100% - 16px)'; // Account for padding
         this.promptTextarea.style.padding = '8px';
         // Add padding-bottom to ensure text doesn't go under the button
-        this.promptTextarea.style.paddingBottom = '40px'; // Adjust as needed based on button height
-        // Removed marginBottom, handled by container
-        // this.promptTextarea.style.marginBottom = '5px';
+        this.promptTextarea.style.paddingBottom = '20px';
         this.promptTextarea.style.backgroundColor = '#2a2a2a';
         this.promptTextarea.style.color = '#d4d4d4';
         this.promptTextarea.style.border = '1px solid #555';
@@ -322,6 +387,13 @@ export class FeedbackViewer {
         this.responseContentElement = null;
         this.currentImageDataUrl = null;
         this.submitButtonTextSpan = null;
+
+        // Note: We don't typically remove the injected styles on destroy,
+        // as they are lightweight and might be needed if the viewer is recreated.
+        // If you absolutely wanted to remove them, you could do:
+        // const styleElement = document.getElementById('feedback-viewer-styles');
+        // if (styleElement) styleElement.remove();
+        // feedbackViewerStylesInjected = false; // Allow re-injection
     }
 }
 

@@ -1,4 +1,4 @@
-import { escapeHTML, createCloseButton } from './utils';
+import { escapeHTML } from './utils';
 import { AIFixResponse, ErrorInfo } from '../types';
 import { sourceCodeService } from '../services/source-code-service';
 import { fileService } from '../services/file-service'; // Import the FileService
@@ -56,12 +56,6 @@ export class CodeFixViewer {
       this.element.style.fontSize = '12px';
       this.element.style.display = 'none';
 
-      // Add close button
-      const closeButton = createCloseButton(() => {
-        this.hide();
-      });
-
-      this.element.appendChild(closeButton);
       document.body.appendChild(this.element);
 
       // Set up event listener for clicks outside the element
@@ -80,12 +74,6 @@ export class CodeFixViewer {
 
     // Clear existing content and add loading message
     element.innerHTML = '<div style="text-align:center;">Loading AI suggestion...</div>';
-
-    // Re-add close button
-    const closeButton = createCloseButton(() => {
-      this.hide();
-    });
-    element.appendChild(closeButton);
   }
 
   /**
@@ -96,12 +84,6 @@ export class CodeFixViewer {
     element.style.display = 'block';
     element.innerHTML = `<div style="color:#ff6b6b;">Error: ${error instanceof Error ? error.message : String(error)
       }</div>`;
-
-    // Re-add close button
-    const closeButton = createCloseButton(() => {
-      this.hide();
-    });
-    element.appendChild(closeButton);
   }
 
   /**
@@ -118,7 +100,7 @@ export class CodeFixViewer {
     // Initialize HTML structure
     const htmlContent = `
       <div id="issue-section" style="margin-bottom:15px;">
-        <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Issue</h4>
+        <h4 style="color:#6ab0ff;margin-bottom:5px;margin-top:0;font-size:14px;">Issue</h4>
         <p id="issue-content">Analyzing issue...</p>
       </div>
       <div id="fix-section" style="margin-bottom:15px;">
@@ -155,12 +137,6 @@ export class CodeFixViewer {
       this.applyButton.disabled = true;
       this.applyButton.style.opacity = '0.5';
     }
-
-    // Re-add close button
-    const closeButton = createCloseButton(() => {
-      this.hide();
-    });
-    element.appendChild(closeButton);
 
     // Reset current response
     this.currentResponse = {};
