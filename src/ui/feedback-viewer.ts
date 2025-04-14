@@ -42,7 +42,6 @@ export class FeedbackViewer {
         this.element.style.backgroundColor = '#1e1e1e'; // Match contentViewer
         this.element.style.color = '#d4d4d4';
         this.element.style.padding = '20px';
-        this.element.style.paddingTop = '40px'; // Space for close button
         this.element.style.borderRadius = '5px';
         this.element.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
         this.element.style.zIndex = '1002'; // Same as contentViewer
@@ -78,11 +77,10 @@ export class FeedbackViewer {
 
         // Prompt Input Area
         const promptTitle = document.createElement('h4');
-        promptTitle.textContent = 'Describe the issue or suggestion (optional)';
+        promptTitle.textContent = 'Describe what you need help with';
         promptTitle.style.color = '#88c0ff';
         promptTitle.style.marginBottom = '5px';
-        promptTitle.style.marginTop = '15px';
-        promptTitle.style.borderBottom = '1px solid #444';
+        promptTitle.style.marginTop = '5px';
         promptTitle.style.paddingBottom = '4px';
         contentWrapper.appendChild(promptTitle);
 
@@ -114,7 +112,7 @@ export class FeedbackViewer {
 
         // Submit Button
         this.submitButton = document.createElement('button');
-        this.submitButton.textContent = 'Send Feedback';
+        this.submitButton.textContent = 'Get Feedback';
         this.submitButton.style.padding = '8px 15px';
         this.submitButton.style.backgroundColor = '#007acc';
         this.submitButton.style.color = 'white';
@@ -164,7 +162,7 @@ export class FeedbackViewer {
         this.promptTextarea.value = '';
         this.promptTextarea.disabled = false;
         this.submitButton.disabled = false;
-        this.submitButton.textContent = 'Send Feedback';
+        this.submitButton.textContent = 'Get Feedback';
         this.responseContentElement.textContent = '';
         this.responseContentElement.style.display = 'none';
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: none'); // Hide response title
@@ -250,7 +248,7 @@ export class FeedbackViewer {
         if (this.promptTextarea) this.promptTextarea.disabled = false;
         if (this.submitButton) {
             this.submitButton.disabled = false;
-            this.submitButton.textContent = 'Send Feedback';
+            this.submitButton.textContent = 'Get Feedback';
         }
     }
 
