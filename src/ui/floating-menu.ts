@@ -21,7 +21,7 @@ export class FloatingMenu {
   private settingsView: HTMLDivElement | null = null;
   private settingsCloseButton: HTMLSpanElement | null = null;
   private settingsStatus: HTMLParagraphElement | null = null;
-  private isExpanded: boolean;
+  private isExpanded: boolean = true;
   private errorCount: number = 0;
   private originalStyle: Partial<CSSStyleDeclaration>;
   private config: LoggerOptions;
@@ -37,7 +37,6 @@ export class FloatingMenu {
   constructor(config: LoggerOptions, originalStyle: Partial<CSSStyleDeclaration>) {
     this.config = config;
     this.originalStyle = originalStyle;
-    this.isExpanded = !config.startCollapsed;
     this.create();
   }
 
