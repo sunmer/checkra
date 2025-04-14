@@ -127,18 +127,30 @@ function processMarkdownBuffer(buffer: string, markdownData: any): void {
 }
 
 /**
- * Sends feedback (including a screenshot and optional prompt) to the backend.
+ * Sends feedback (including optional screenshot, optional HTML, and optional prompt) to the backend.
  */
-export const fetchFeedback = async (imageDataUrl: string, promptText: string): Promise<void> => {
+export const fetchFeedback = async (
+    imageDataUrl: string | null,
+    promptText: string,
+    selectedHtml: string | null
+): Promise<void> => {
   // Note: feedbackViewer UI should be in 'sending' state before this is called
   try {
+    // Construct body conditionally based on available data
+    const requestBody: { image?: string | null; prompt: string; html?: string | null } = {
+        prompt: promptText,
+    };
+    if (imageDataUrl) {
+        requestBody.image = imageDataUrl;
+    }
+    if (selectedHtml) {
+        requestBody.html = selectedHtml;
+    }
+
     const response = await fetch(`${Settings.API_URL}/suggest/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image: imageDataUrl,
-        prompt: promptText
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok || !response.body) {
