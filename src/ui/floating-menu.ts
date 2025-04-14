@@ -21,7 +21,7 @@ export class FloatingMenu {
   private settingsView: HTMLDivElement | null = null;
   private settingsCloseButton: HTMLSpanElement | null = null;
   private settingsStatus: HTMLParagraphElement | null = null;
-  private isExpanded: boolean = true;
+  private isExpanded: boolean = false;
   private errorCount: number = 0;
   private originalStyle: Partial<CSSStyleDeclaration>;
   private config: LoggerOptions;
@@ -302,13 +302,13 @@ export class FloatingMenu {
     this.feedbackButton.id = 'show-feedback-viewer';
     // Set innerHTML WITHOUT width/height attributes in the <svg> tag
     this.feedbackButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-    <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-    <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-    <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-    <circle cx="12" cy="12" r="4"/> <!-- Increased radius from 3 to 4 -->
-    <path d="m16 16-1.5-1.5"/> <!-- Adjusted handle path slightly -->
-  </svg>`;
+      <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+      <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <circle cx="12" cy="12" r="4"/> <!-- Increased radius from 3 to 4 -->
+      <path d="m16 16-1.5-1.5"/> <!-- Adjusted handle path slightly -->
+    </svg>`;
     this.feedbackButton.title = 'Get feedback on design';
     this.feedbackButton.style.width = '30px'; // Keep button size
     this.feedbackButton.style.height = '30px'; // Keep button size
