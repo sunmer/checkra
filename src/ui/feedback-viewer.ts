@@ -63,6 +63,7 @@ export class FeedbackViewer {
     private responseContentElement: HTMLElement | null = null;
     private outsideClickHandler: (e: MouseEvent) => void;
     private currentImageDataUrl: string | null = null;
+    private currentSelectedHtml: string | null = null;
     private accumulatedResponseText: string = '';
 
     constructor() {
@@ -123,6 +124,16 @@ export class FeedbackViewer {
         this.capturedImageElement.style.border = '1px solid #444';
         this.capturedImageElement.style.marginBottom = '15px';
         this.capturedImageElement.style.display = 'none'; // Hide initially
+
+        // Add a small area to indicate HTML was captured (optional but helpful)
+        const htmlIndicator = document.createElement('p');
+        htmlIndicator.id = 'feedback-html-indicator';
+        htmlIndicator.textContent = 'Selected HTML structure captured.';
+        htmlIndicator.style.fontSize = '11px';
+        htmlIndicator.style.color = '#888';
+        htmlIndicator.style.marginTop = '-10px'; // Position below image
+        htmlIndicator.style.marginBottom = '15px';
+        htmlIndicator.style.display = 'none'; // Hide initially
 
         // Prompt Input Area
         const promptTitle = document.createElement('h4');
@@ -220,6 +231,8 @@ export class FeedbackViewer {
 
         contentWrapper.appendChild(imageTitle);
         contentWrapper.appendChild(this.capturedImageElement);
+        contentWrapper.appendChild(htmlIndicator);
+        contentWrapper.appendChild(promptTitle);
         contentWrapper.appendChild(responseTitle);
         contentWrapper.appendChild(this.responseContentElement);
         this.element.appendChild(contentWrapper);
@@ -228,11 +241,13 @@ export class FeedbackViewer {
         document.addEventListener('mousedown', this.outsideClickHandler);
     }
 
-    public showInputArea(imageDataUrl: string): void {
+    public showInputArea(imageDataUrl: string | null, selectedHtml: string | null): void {
         if (!this.element) this.create();
-        if (!this.element || !this.capturedImageElement || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan) return;
+        const htmlIndicatorElement = this.element?.querySelector<HTMLParagraphElement>('#feedback-html-indicator');
+        if (!this.element || !this.capturedImageElement || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !htmlIndicatorElement) return;
 
         this.currentImageDataUrl = imageDataUrl;
+        this.currentSelectedHtml = selectedHtml;
 
         // Reset state
         this.promptTextarea.value = '';
@@ -244,9 +259,21 @@ export class FeedbackViewer {
         this.responseContentElement.style.display = 'none';
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: none');
 
-        // Show image and input elements
-        this.capturedImageElement.src = imageDataUrl;
-        this.capturedImageElement.style.display = 'block';
+        // Show/hide image based on whether it was captured
+        if (imageDataUrl) {
+            this.capturedImageElement.src = imageDataUrl;
+            this.capturedImageElement.style.display = 'block';
+        } else {
+            this.capturedImageElement.style.display = 'none';
+        }
+
+        // Show/hide HTML indicator
+        if (selectedHtml) {
+            htmlIndicatorElement.style.display = 'block';
+        } else {
+            htmlIndicatorElement.style.display = 'none';
+        }
+
         this.promptTextarea.style.display = 'block';
         this.submitButton.style.display = 'flex';
 
@@ -263,11 +290,18 @@ export class FeedbackViewer {
     };
 
     private handleSubmit = (): void => {
-        if (!this.currentImageDataUrl || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan) return;
+        if (!this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan) return;
+        if (!this.currentImageDataUrl && !this.currentSelectedHtml) {
+             console.warn('[Feedback] Cannot submit feedback without captured image or HTML.');
+             this.showError('Could not capture image or HTML structure.');
+             return;
+        }
 
         const promptText = this.promptTextarea.value.trim();
 
         console.log('[Feedback] Submitting feedback...');
+        console.log('[Feedback] Image Data:', this.currentImageDataUrl ? 'Present' : 'Absent');
+        console.log('[Feedback] Selected HTML:', this.currentSelectedHtml ? 'Present' : 'Absent');
 
         // Disable inputs and show loading state
         this.promptTextarea.disabled = true;
@@ -278,8 +312,8 @@ export class FeedbackViewer {
         this.responseContentElement.style.display = 'block';
         this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
 
-        // Call the service function
-        fetchFeedback(this.currentImageDataUrl, promptText);
+        // Call the service function with all three arguments
+        fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
     };
 
     // Called by ai-service when stream starts
@@ -347,12 +381,16 @@ export class FeedbackViewer {
             this.element.style.display = 'none';
             // Clear sensitive data when hiding
             this.currentImageDataUrl = null;
+            this.currentSelectedHtml = null;
             if (this.capturedImageElement) this.capturedImageElement.src = '';
             if (this.promptTextarea) this.promptTextarea.value = '';
             if (this.responseContentElement) {
                  this.responseContentElement.innerHTML = '';
             }
             this.accumulatedResponseText = '';
+            // Hide HTML indicator
+            const htmlIndicatorElement = this.element?.querySelector<HTMLParagraphElement>('#feedback-html-indicator');
+            if (htmlIndicatorElement) htmlIndicatorElement.style.display = 'none';
         }
     }
 
@@ -368,6 +406,7 @@ export class FeedbackViewer {
         this.submitButton = null;
         this.responseContentElement = null;
         this.currentImageDataUrl = null;
+        this.currentSelectedHtml = null;
         this.submitButtonTextSpan = null;
 
         // Note: We don't typically remove the injected styles on destroy,

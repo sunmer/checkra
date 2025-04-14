@@ -317,22 +317,26 @@ export class FloatingMenu {
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('[Feedback] Button clicked, starting screen capture...');
-      screenCapture.startCapture((imageDataUrl) => {
+      screenCapture.startCapture((imageDataUrl, selectedHtml) => {
         // Log: Callback executed
         console.log('[Feedback] Screen capture callback executed.');
         console.log('[Feedback] Image data URL received:', imageDataUrl ? imageDataUrl.substring(0, 50) + '...' : 'null');
+        console.log('[Feedback] Selected HTML received:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
 
-        if (imageDataUrl) {
-          console.log('[Feedback] Image data URL is valid. Showing input area...');
+        // Pass both imageDataUrl and selectedHtml to the viewer
+        if (imageDataUrl || selectedHtml) { // Proceed if we got at least one piece of data
+          console.log('[Feedback] Data received. Showing input area...');
           try {
-            feedbackViewer.showInputArea(imageDataUrl);
+            // Pass both arguments to showInputArea
+            feedbackViewer.showInputArea(imageDataUrl, selectedHtml);
             console.log('[Feedback] Feedback input area shown.');
           } catch (viewerError) {
             console.error('[Feedback] Error showing feedback input area:', viewerError);
           }
         } else {
-          console.warn('[Feedback] Screen capture cancelled or failed. No image data received.');
-          // alert('Screen capture failed or was cancelled.');
+          console.warn('[Feedback] Screen capture cancelled or failed. No image data or HTML received.');
+          // Optionally show a message to the user
+          // alert('Screen capture failed, cancelled, or no element selected.');
         }
       });
     });
