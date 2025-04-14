@@ -14,15 +14,12 @@ export class FileService {
   private isInitialized = false; // Flag to prevent multiple initializations
   private initializationPromise: Promise<void> | null = null; // Promise resolves when init is done
 
-  constructor() {
+  constructor(statusCallback?: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void) {
     this.astProcessor = new AstProcessor();
-    // Start initialization immediately but store the promise
-    // Use a dedicated status callback or just console log for constructor init
-    this.initializationPromise = this.initialize( (msg, type) =>
-        console.log(`[FileService Init Status - ${type.toUpperCase()}]: ${msg}`)
-    ).catch(err => {
-        // Catch initialization errors here so they don't become unhandled rejections
-        console.error("[FileService] Initialization failed:", err);
+    // Start initialization, but don't block constructor
+    this.initializationPromise = this.initialize(statusCallback).catch(err => {
+        // Catch error here so it doesn't become an unhandled rejection if await ensureInitialized isn't called
+        console.error("[FileService] Initialization promise failed:", err);
         // isInitialized remains false
     });
   }
@@ -283,6 +280,19 @@ export class FileService {
       console.error(`[Debug][getProjectRelativePath] Error parsing fileName "${fileNameUrlOrPath}":`, error);
       return null;
     }
+  }
+
+  /**
+   * Returns the name of the currently selected and permission-granted directory.
+   * Returns null if no directory is selected or permissions are not granted.
+   */
+  public getCurrentDirectoryName(): string | null {
+    // Directly check the in-memory handle, which should be populated
+    // after successful initialization or selection/permission grant.
+    if (this.selectedDirectoryHandle) {
+      return this.selectedDirectoryHandle.name;
+    }
+    return null; // No handle currently active/cached
   }
 
   /**
@@ -660,4 +670,6 @@ export class FileService {
 }
 
 // Export singleton instance
-export const fileService = new FileService();
+export const fileService = new FileService( (msg, type) =>
+    console.log(`[FileService Init Status - ${type.toUpperCase()}]: ${msg}`)
+);

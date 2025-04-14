@@ -434,13 +434,33 @@ export class FloatingMenu {
 
   /** Show the settings view */
   private showSettingsView(): void {
-    if (this.settingsView) this.settingsView.style.display = 'block';
-    this.showSettingsStatus('', 'info');
+    if (this.settingsView && this.settingsStatus) {
+        this.settingsView.style.display = 'block';
+
+        // Get the current directory name from the file service
+        // *** NOTE: Assumes fileService has a method like this ***
+        // *** You might need to implement getCurrentDirectoryName() in file-service.ts ***
+        const currentDirName = fileService.getCurrentDirectoryName(); // Or however you get the name
+
+        if (currentDirName) {
+            // Display the current directory name
+            this.settingsStatus.textContent = `Access granted to: ${currentDirName}`;
+            this.settingsStatus.style.color = '#98c379'; // Use success color
+        } else {
+            // Display message indicating no access
+            this.settingsStatus.textContent = 'No directory access granted.';
+            this.settingsStatus.style.color = '#999'; // Default info color
+        }
+    }
+    // We no longer need the initial call to showSettingsStatus here,
+    // as we are setting the status directly based on current access.
+    // this.showSettingsStatus('', 'info');
   }
 
   /** Hide the settings view */
   private hideSettingsView(): void {
     if (this.settingsView) this.settingsView.style.display = 'none';
+    // Optional: Clear status when hiding? Or leave it for next open? Let's leave it.
   }
 
   /**
@@ -528,26 +548,45 @@ export class FloatingMenu {
     if (this.errorList) {
       const li = document.createElement('li');
 
-      // Create error message span (truncated)
+      // Create error message span (truncated) - Appended first
       const msgSpan = document.createElement('span');
       const truncatedMsg = truncateText(msg, this.config.maxMessageLength);
       msgSpan.textContent = truncatedMsg;
-      msgSpan.style.marginRight = '8px';
+      // msgSpan.style.marginRight = '8px'; // Space handled by fileInfo margin now
       msgSpan.classList.add('error-message');
-      li.appendChild(msgSpan);
+      // Allow message to take available space, pushing fileInfo/buttons right
+      msgSpan.style.flexGrow = '1';
+      msgSpan.style.wordBreak = 'break-word'; // Help with long words/paths
 
-      // Add source code link if filename exists
+      li.appendChild(msgSpan); // Append message span first
+
+      // Create and append file info span if filename exists (after message)
       if (errorInfo.fileName) {
         const fileInfo = document.createElement('span');
         fileInfo.textContent = `[${errorInfo.fileName.split('/').pop()}:${errorInfo.lineNumber || '?'}]`;
         fileInfo.style.color = '#aaa';
         fileInfo.style.fontSize = '10px';
-        li.appendChild(fileInfo);
+        fileInfo.style.marginLeft = '8px'; // Space between message and file info
+        fileInfo.style.marginRight = '8px'; // Space between file info and buttons
+        fileInfo.style.whiteSpace = 'nowrap'; // Prevent wrapping
+        fileInfo.style.flexShrink = '0'; // Prevent shrinking
 
+        li.appendChild(fileInfo); // Append file info second
+      }
+
+      // Create a container for buttons ONLY
+      const actionsContainer = document.createElement('div');
+      actionsContainer.style.display = 'flex';
+      actionsContainer.style.alignItems = 'center';
+      // actionsContainer.style.marginLeft = 'auto'; // No longer needed, msgSpan pushes it
+      actionsContainer.style.flexShrink = '0'; // Prevent shrinking
+
+      // Add buttons if filename exists
+      if (errorInfo.fileName) {
         // Create source code button
         const viewSourceBtn = document.createElement('button');
         viewSourceBtn.textContent = 'View Source';
-        viewSourceBtn.style.marginLeft = '8px';
+        viewSourceBtn.style.marginRight = '4px'; // Space between buttons
         viewSourceBtn.style.fontSize = '10px';
         viewSourceBtn.style.padding = '4px 6px';
         viewSourceBtn.style.backgroundColor = '#555';
@@ -555,18 +594,19 @@ export class FloatingMenu {
         viewSourceBtn.style.border = 'none';
         viewSourceBtn.style.borderRadius = '3px';
         viewSourceBtn.style.cursor = 'pointer';
+        viewSourceBtn.style.whiteSpace = 'nowrap'; // Prevent button text wrapping
 
         viewSourceBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.showSource(errorId);
         });
 
-        li.appendChild(viewSourceBtn);
+        actionsContainer.appendChild(viewSourceBtn); // Add to actions container
 
         // Create "Fix with AI" button
         const fixWithAIBtn = document.createElement('button');
         fixWithAIBtn.textContent = 'Fix with AI';
-        fixWithAIBtn.style.marginLeft = '8px';
+        // fixWithAIBtn.style.marginRight = '8px'; // No margin needed after last button
         fixWithAIBtn.style.fontSize = '10px';
         fixWithAIBtn.style.padding = '4px 6px';
         fixWithAIBtn.style.backgroundColor = '#4a76c7';
@@ -574,20 +614,30 @@ export class FloatingMenu {
         fixWithAIBtn.style.border = 'none';
         fixWithAIBtn.style.borderRadius = '3px';
         fixWithAIBtn.style.cursor = 'pointer';
+        fixWithAIBtn.style.whiteSpace = 'nowrap'; // Prevent button text wrapping
 
         fixWithAIBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.getCodeFix(errorId);
         });
 
-        li.appendChild(fixWithAIBtn);
+        actionsContainer.appendChild(fixWithAIBtn); // Add to actions container
+      }
+
+      // Only append actions container if it actually contains buttons
+      if (actionsContainer.hasChildNodes()) {
+          li.appendChild(actionsContainer); // Append the actions container last
       }
 
       // Style for the list item
-      li.style.marginBottom = '4px';
+      // li.style.marginBottom = '4px'; // Replaced by paddingBottom
+      li.style.paddingBottom = '4px'; // Space below the border
+      li.style.paddingTop = '4px'; // Space below the border
+      li.style.borderBottom = '1px solid rgba(223, 223, 223, 0.2)'; // Light grey bottom border
       li.style.cursor = 'pointer';
       li.style.display = 'flex';
-      li.style.alignItems = 'center';
+      li.style.alignItems = 'center'; // Vertically center items within the row
+      li.style.justifyContent = 'flex-start'; // Align items to the start
 
       // Store the full message as a data attribute
       li.dataset.fullMessage = msg;
@@ -650,10 +700,10 @@ export class FloatingMenu {
     if (this.closeButton) this.closeButton.replaceWith(this.closeButton.cloneNode(true));
     if (this.settingsButton) this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
     if (this.settingsView) this.settingsView.replaceWith(this.settingsView.cloneNode(true));
-    if (this.bottomContainer) this.bottomContainer.replaceWith(this.bottomContainer.cloneNode(true));
-    if (this.floatingMenuDiv) this.floatingMenuDiv.replaceWith(this.floatingMenuDiv.cloneNode(true));
-    if (this.feedbackButton) this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
-    if (this.collapsedErrorBadge) this.collapsedErrorBadge.replaceWith(this.collapsedErrorBadge.cloneNode(true));
+    if (this.bottomContainer) this.bottomContainer.replaceWith(this.bottomContainer.cloneNode(true)); // Still clone container itself if needed
+    if (this.floatingMenuDiv) this.floatingMenuDiv.replaceWith(this.floatingMenuDiv.cloneNode(true)); // Clones to remove mouseenter/mouseleave
+    if (this.feedbackButton) this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true)); // Clones to remove click/mouseenter
+    if (this.collapsedErrorBadge) this.collapsedErrorBadge.replaceWith(this.collapsedErrorBadge.cloneNode(true)); // Clones to remove mouseenter
 
     // Remove tooltip event listeners from all error message spans
     if (this.errorList) {
