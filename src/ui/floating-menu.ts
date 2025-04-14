@@ -30,6 +30,7 @@ export class FloatingMenu {
   private feedbackButton: HTMLSpanElement | null = null;
   private bottomContainer: HTMLDivElement | null = null;
   private collapsedErrorBadge: HTMLDivElement | null = null;
+  private collapseTimeoutId: number | null = null;
 
   /**
    * Creates a new FloatingMenu instance.
@@ -88,6 +89,18 @@ export class FloatingMenu {
     this.collapsedErrorBadge.style.alignItems = 'center'; // Center content
     this.collapsedErrorBadge.style.justifyContent = 'center'; // Center content
     this.collapsedErrorBadge.title = 'Show Errors';
+    this.collapsedErrorBadge.id = 'show-error-viewer';
+
+    // ADDED: Hover listener to the collapsed error badge to expand the log
+    this.collapsedErrorBadge.addEventListener('mouseenter', () => {
+        // Clear collapse timeout if mouse moves quickly back to trigger
+        if (this.collapseTimeoutId) {
+            clearTimeout(this.collapseTimeoutId);
+            this.collapseTimeoutId = null;
+        }
+        this.isExpanded = true;
+        this.updateStyle();
+    });
 
     // Create error count badge INSIDE the collapsed badge
     this.errorCountBadge = document.createElement('span');
@@ -103,11 +116,58 @@ export class FloatingMenu {
       this.bottomContainer.appendChild(this.collapsedErrorBadge); // Add badge to container
     }
 
-    // Add click listener to the collapsed badge to expand the log
-    this.collapsedErrorBadge.addEventListener('click', () => {
-      this.isExpanded = true;
-      this.updateStyle();
-    });
+    // Modify mouse leave listener for the expanded container
+    if (this.floatingMenuDiv) {
+        // Add mouseenter listener to clear timeout if user returns
+        this.floatingMenuDiv.addEventListener('mouseenter', () => {
+            if (this.collapseTimeoutId) {
+                clearTimeout(this.collapseTimeoutId);
+                this.collapseTimeoutId = null;
+            }
+        });
+
+        this.floatingMenuDiv.addEventListener('mouseleave', (e: MouseEvent) => {
+            // Clear any existing timeout first in case of rapid movements
+            if (this.collapseTimeoutId) {
+                clearTimeout(this.collapseTimeoutId);
+                this.collapseTimeoutId = null;
+            }
+
+            // Don't collapse if settings view is open
+            if (this.settingsView?.style.display !== 'none') {
+                return;
+            }
+
+            const menuRect = this.floatingMenuDiv?.getBoundingClientRect();
+            if (!menuRect) return; // Should not happen if element exists
+
+            // Check if mouse left upwards
+            if (e.clientY < menuRect.top) {
+                // Moved up - collapse immediately
+                console.log('[FloatingMenu] Mouse left upwards, collapsing.');
+                this.isExpanded = false;
+                this.updateStyle();
+            } else {
+                // Moved down, left, or right - collapse after a delay
+                console.log('[FloatingMenu] Mouse left downwards/sideways, starting collapse timer.');
+                this.collapseTimeoutId = window.setTimeout(() => {
+                    // Check again if settings opened during the timeout or mouse returned
+                    if (this.settingsView?.style.display === 'none' && this.isExpanded) {
+                         // Check if mouse is currently over the trigger area - if so, don't collapse
+                         const isHoveringTrigger = this.bottomContainer?.matches(':hover');
+                         if (!isHoveringTrigger) {
+                            console.log('[FloatingMenu] Collapse timer finished, collapsing.');
+                            this.isExpanded = false;
+                            this.updateStyle();
+                         } else {
+                            console.log('[FloatingMenu] Collapse timer finished, but mouse is back over trigger. Aborting collapse.');
+                         }
+                    }
+                    this.collapseTimeoutId = null; // Clear the ID after execution/check
+                }, 500); // 500ms delay
+            }
+        });
+    }
 
     // Create a close button for the expanded state
     this.closeButton = document.createElement('span');
@@ -236,7 +296,7 @@ export class FloatingMenu {
 
     // Create Feedback button (?)
     this.feedbackButton = document.createElement('span');
-    this.feedbackButton.id = 'feedback-log';
+    this.feedbackButton.id = 'show-feedback-viewer';
     this.feedbackButton.textContent = '?';
     this.feedbackButton.title = 'Get feedback';
     this.feedbackButton.style.width = '30px';
@@ -274,6 +334,15 @@ export class FloatingMenu {
           // alert('Screen capture failed or was cancelled.');
         }
       });
+    });
+
+    // Add mouseenter listener to feedback button to clear collapse timeout
+    this.feedbackButton.addEventListener('mouseenter', () => {
+        if (this.collapseTimeoutId) {
+            console.log('[FloatingMenu] Mouse entered feedback button, clearing collapse timer.');
+            clearTimeout(this.collapseTimeoutId);
+            this.collapseTimeoutId = null;
+        }
     });
 
     // Add feedback button to the bottom container
@@ -571,38 +640,42 @@ export class FloatingMenu {
    * Destroys the floating menu component, removing all DOM elements and event listeners.
    */
   public destroy(): void {
-    // Remove event listeners
-    // if (this.floatingMenuDiv && this.clickListener) { // Listener removed
-    //   this.floatingMenuDiv.removeEventListener('click', this.clickListener);
-    //   this.clickListener = null;
-    // }
-    if (this.collapsedErrorBadge) { // Remove listener from collapsed badge
-        this.collapsedErrorBadge.replaceWith(this.collapsedErrorBadge.cloneNode(true));
+    // Clear any pending timeout
+    if (this.collapseTimeoutId) {
+        clearTimeout(this.collapseTimeoutId);
+        this.collapseTimeoutId = null;
     }
-    
-    // Remove button listeners (cloning)
+
+    // Remove event listeners (cloning)
     if (this.closeButton) this.closeButton.replaceWith(this.closeButton.cloneNode(true));
     if (this.settingsButton) this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
     if (this.settingsView) this.settingsView.replaceWith(this.settingsView.cloneNode(true));
+    if (this.bottomContainer) this.bottomContainer.replaceWith(this.bottomContainer.cloneNode(true));
+    if (this.floatingMenuDiv) this.floatingMenuDiv.replaceWith(this.floatingMenuDiv.cloneNode(true));
+    if (this.feedbackButton) this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
+    if (this.collapsedErrorBadge) this.collapsedErrorBadge.replaceWith(this.collapsedErrorBadge.cloneNode(true));
 
     // Remove tooltip event listeners from all error message spans
     if (this.errorList) {
       this.errorList.querySelectorAll('.error-message').forEach(span => {
         span.replaceWith(span.cloneNode(true));
       });
+      // Also remove listeners from source/AI buttons within list items if added dynamically
+      this.errorList.querySelectorAll('li button').forEach(button => {
+          button.replaceWith(button.cloneNode(true));
+      });
     }
 
-    // Remove the main div from the DOM
-    if (this.floatingMenuDiv && this.floatingMenuDiv.parentNode) {
+    // Remove the main div from the DOM (already cloned/replaced, remove original reference if needed)
+    if (this.floatingMenuDiv?.parentNode) {
       this.floatingMenuDiv.parentNode.removeChild(this.floatingMenuDiv);
     }
-    // Remove settings view from DOM
-    if (this.settingsView && this.settingsView.parentNode) {
+    // Remove settings view from DOM (already cloned/replaced)
+    if (this.settingsView?.parentNode) {
       this.settingsView.parentNode.removeChild(this.settingsView);
     }
-
-    // Remove the bottom container from the DOM
-    if (this.bottomContainer && this.bottomContainer.parentNode) {
+    // Remove the bottom container from the DOM (already cloned/replaced)
+    if (this.bottomContainer?.parentNode) {
         this.bottomContainer.parentNode.removeChild(this.bottomContainer);
     }
 
@@ -616,10 +689,11 @@ export class FloatingMenu {
     this.settingsCloseButton = null;
     this.settingsStatus = null;
     this.noErrorsMessage = null;
-    this.feedbackButton = null; // Still nullify even if removed via container
+    this.feedbackButton = null;
     this.bottomContainer = null;
     this.collapsedErrorBadge = null;
     this.originalStyle = {};
     errorSourceMap.clear();
+    this.collapseTimeoutId = null;
   }
 }
