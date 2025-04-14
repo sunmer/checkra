@@ -77,8 +77,7 @@ const logger = initLogger({
     zIndex: '9999'
   },
   attachToWindow: true,
-  maxMessageLength: 200,
-  startCollapsed: false
+  maxMessageLength: 200
 });
 ```
 
@@ -135,8 +134,7 @@ const defaultOptions = {
     fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
   },
   attachToWindow: true,
-  maxMessageLength: 100,
-  startCollapsed: true,
+  maxMessageLength: 100
 };
 ```
 

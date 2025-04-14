@@ -20,6 +20,5 @@ export const defaultOptions: LoggerOptions = {
     fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
   },
   attachToWindow: true,
-  maxMessageLength: 100,
-  startCollapsed: true,
+  maxMessageLength: 100
 };
