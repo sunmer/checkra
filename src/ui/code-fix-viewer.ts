@@ -8,7 +8,7 @@ import { cleanCodeExample, copyToClipboard } from '../utils/code-utils';
  * Class for managing the content viewer for displaying AI fixes and other content.
  * Optimized for streaming markdown responses and improved source code display.
  */
-export class ContentViewer {
+export class CodeFixViewer {
   private element: HTMLDivElement | null = null;
   private issueContent: HTMLElement | null = null;
   private fixContent: HTMLElement | null = null;
@@ -134,7 +134,7 @@ export class ContentViewer {
       <div id="code-example-section">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h4 style="color:#6ab0ff;margin-bottom:5px;font-size:14px;">Code Fix</h4>
-          <button id="apply-fix-button" style="background-color:#0e639c;color:white;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;font-size:12px;margin-left:10px;">Apply Fix</button>
+          <button id="apply-fix-button" style="background-color:#0e639c;color:white;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;font-size:14px;margin-left:10px;">Apply Fix</button>
         </div>
         <pre id="code-example-content" style="background-color:#2d2d2d;padding:10px;border-radius:4px;overflow-x:auto;"><code>Generating code fix...</code></pre>
       </div>
@@ -401,10 +401,13 @@ export class ContentViewer {
       return;
     }
 
+    // Show initial status message including the filename
+    const fileName = this.currentErrorInfo.fileName;
+    this.showStatusMessage(`Applying fix to ${fileName}...`, 'info');
+
     // --- Ensure Directory Access ---
-    this.showStatusMessage('Checking directory access...', 'info');
     const directoryHandle = await fileService.getDirectoryHandle(
-        (message, type) => this.showStatusMessage(message, type)
+        (message, type) => this.showStatusMessage(message, type) // Keep this for directory access errors/prompts
     );
 
     if (!directoryHandle) {
@@ -427,11 +430,9 @@ export class ContentViewer {
       // --- Fetch the original source snippet (code context) ---
       let originalSourceSnippet = '';
       if (this.currentErrorInfo) {
-          this.showStatusMessage('Fetching relevant code snippet for context...', 'info');
           const sourceResult = await sourceCodeService.getSourceCode(this.currentErrorInfo);
           if (sourceResult && sourceResult.codeContext) {
               originalSourceSnippet = cleanCodeExample(sourceResult.codeContext);
-              this.showStatusMessage('Code snippet retrieved.', 'info');
           } else {
               this.showStatusMessage('Could not retrieve original code snippet for context matching.', 'warning');
           }
@@ -454,7 +455,7 @@ export class ContentViewer {
         this.currentErrorInfo, // <-- Pass ErrorInfo first
         originalSourceSnippet, // Pass the context snippet second
         cleanCode,             // Pass the cleaned AI suggestion third
-        (message, type) => this.showStatusMessage(message, type) // Pass status callback
+        (message, type) => this.showStatusMessage(message, type) // Pass status callback for fileService messages
       );
 
       if (success) {
@@ -475,7 +476,7 @@ export class ContentViewer {
         `Failed to apply code fix: ${error instanceof Error ? error.message : String(error)}`,
         'error'
       );
-      console.error('Apply fix error in ContentViewer:', error);
+      console.error('Apply fix error in CodeFixViewer:', error);
 
       // Try to copy to clipboard as fallback
       if (this.currentResponse.codeExample) {
@@ -587,4 +588,4 @@ export class ContentViewer {
 }
 
 // Singleton instance
-export const contentViewer = new ContentViewer();
+export const codeFixViewer = new CodeFixViewer();

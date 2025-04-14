@@ -2,7 +2,7 @@ import { LoggerOptions, ErrorInfo } from '../types';
 import { truncateText } from './utils';
 import { tooltip } from './tooltip';
 import { sourceViewer } from './source-viewer';
-import { fetchAIFix } from '../services/ai-service';
+import { fetchCodeFix } from '../services/ai-service';
 import { fileService } from '../services/file-service';
 import { screenCapture } from './screen-capture';
 import { feedbackViewer } from './feedback-viewer';
@@ -11,10 +11,10 @@ import { feedbackViewer } from './feedback-viewer';
 export const errorSourceMap = new Map<string, ErrorInfo>();
 
 /**
- * Class for managing the error log UI component.
+ * Class for managing the floating menu UI component (errors, feedback, settings).
  */
-export class ErrorLog {
-  private errorLogDiv: HTMLElement | null = null;
+export class FloatingMenu {
+  private floatingMenuDiv: HTMLElement | null = null;
   private errorList: HTMLUListElement | null = null;
   private errorCountBadge: HTMLSpanElement | null = null;
   private closeButton: HTMLSpanElement | null = null;
@@ -26,12 +26,13 @@ export class ErrorLog {
   private errorCount: number = 0;
   private originalStyle: Partial<CSSStyleDeclaration>;
   private config: LoggerOptions;
-  private clickListener: (() => void) | null = null;
   private noErrorsMessage: HTMLElement | null = null;
   private feedbackButton: HTMLSpanElement | null = null;
+  private bottomContainer: HTMLDivElement | null = null;
+  private collapsedErrorBadge: HTMLDivElement | null = null;
 
   /**
-   * Creates a new ErrorLog instance.
+   * Creates a new FloatingMenu instance.
    */
   constructor(config: LoggerOptions, originalStyle: Partial<CSSStyleDeclaration>) {
     this.config = config;
@@ -41,12 +42,13 @@ export class ErrorLog {
   }
 
   /**
-   * Creates the error log DOM elements.
+   * Creates the floating menu DOM elements.
    */
   private create(): void {
-    // Create error log div
-    this.errorLogDiv = document.createElement('div');
-    this.errorLogDiv.id = this.config.errorLogDivId || 'error-log';
+    // Create floating menu div (main expanded view)
+    this.floatingMenuDiv = document.createElement('div');
+    this.floatingMenuDiv.id = 'error-container';
+    this.floatingMenuDiv.style.display = 'none'; // Initially hidden if startCollapsed is true
 
     // Create error list
     this.errorList = document.createElement('ul');
@@ -54,23 +56,58 @@ export class ErrorLog {
     this.errorList.style.padding = '0';
     this.errorList.style.listStyleType = 'disc'; // Bullet points
 
-    if (this.errorLogDiv) {
-      this.errorLogDiv.appendChild(this.errorList);
+    if (this.floatingMenuDiv) {
+      this.floatingMenuDiv.appendChild(this.errorList);
     }
 
-    // Create error count badge for the collapsed state
+    // Create bottom container for collapsed state elements
+    this.bottomContainer = document.createElement('div');
+    this.bottomContainer.id = 'floating-menu-container';
+    this.bottomContainer.style.position = 'fixed';
+    this.bottomContainer.style.bottom = '10px';
+    this.bottomContainer.style.left = '10px';
+    this.bottomContainer.style.boxShadow = '2px 2px 3px #a0a0a0';
+    this.bottomContainer.style.backgroundColor = 'rgb(15 28 55 / 80%)'; // Semi-transparent dark
+    this.bottomContainer.style.borderRadius = '20px'; // Rounded corners
+    this.bottomContainer.style.padding = '6px 12px';
+    this.bottomContainer.style.display = 'flex'; // Use flexbox for layout
+    this.bottomContainer.style.alignItems = 'center';
+    this.bottomContainer.style.gap = '5px'; // Space between items
+    this.bottomContainer.style.zIndex = '999'; // Below the main log/settings
+    this.bottomContainer.style.display = 'none'; // Initially hidden
+
+    // Create collapsed error badge (red circle)
+    this.collapsedErrorBadge = document.createElement('div');
+    this.collapsedErrorBadge.style.width = '30px';
+    this.collapsedErrorBadge.style.height = '30px';
+    this.collapsedErrorBadge.style.borderRadius = '50%';
+    this.collapsedErrorBadge.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
+    this.collapsedErrorBadge.style.position = 'relative'; // For positioning the count badge
+    this.collapsedErrorBadge.style.cursor = 'pointer';
+    this.collapsedErrorBadge.style.display = 'flex'; // Center content
+    this.collapsedErrorBadge.style.alignItems = 'center'; // Center content
+    this.collapsedErrorBadge.style.justifyContent = 'center'; // Center content
+    this.collapsedErrorBadge.title = 'Show Errors';
+
+    // Create error count badge INSIDE the collapsed badge
     this.errorCountBadge = document.createElement('span');
     this.errorCountBadge.textContent = '0';
-    this.errorCountBadge.style.position = 'absolute';
-    this.errorCountBadge.style.top = '50%';
-    this.errorCountBadge.style.left = '50%';
-    this.errorCountBadge.style.transform = 'translate(-50%, -50%)';
+    // Removed absolute positioning, flexbox handles centering now
     this.errorCountBadge.style.color = 'white';
     this.errorCountBadge.style.fontWeight = 'bold';
-    
-    if (this.errorLogDiv) {
-      this.errorLogDiv.appendChild(this.errorCountBadge);
+    this.errorCountBadge.style.fontSize = '12px'; // Match old collapsed style
+    this.errorCountBadge.style.userSelect = 'none';
+
+    if (this.collapsedErrorBadge) {
+      this.collapsedErrorBadge.appendChild(this.errorCountBadge);
+      this.bottomContainer.appendChild(this.collapsedErrorBadge); // Add badge to container
     }
+
+    // Add click listener to the collapsed badge to expand the log
+    this.collapsedErrorBadge.addEventListener('click', () => {
+      this.isExpanded = true;
+      this.updateStyle();
+    });
 
     // Create a close button for the expanded state
     this.closeButton = document.createElement('span');
@@ -193,18 +230,15 @@ export class ErrorLog {
     this.noErrorsMessage.style.color = '#aaa';
     this.noErrorsMessage.style.display = 'block'; // Show by default
     
-    if (this.errorLogDiv) {
-      this.errorLogDiv.appendChild(this.noErrorsMessage);
+    if (this.floatingMenuDiv) {
+      this.floatingMenuDiv.appendChild(this.noErrorsMessage);
     }
 
     // Create Feedback button (?)
     this.feedbackButton = document.createElement('span');
     this.feedbackButton.id = 'feedback-log';
     this.feedbackButton.textContent = '?';
-    this.feedbackButton.title = 'Ged Feedback';
-    this.feedbackButton.style.position = 'fixed';
-    this.feedbackButton.style.bottom = '10px';
-    this.feedbackButton.style.left = '50px';
+    this.feedbackButton.title = 'Get feedback';
     this.feedbackButton.style.width = '30px';
     this.feedbackButton.style.height = '30px';
     this.feedbackButton.style.borderRadius = '50%';
@@ -242,44 +276,45 @@ export class ErrorLog {
       });
     });
 
+    // Add feedback button to the bottom container
+    if (this.bottomContainer && this.feedbackButton) {
+      this.bottomContainer.appendChild(this.feedbackButton);
+    }
+
     // Apply initial styles based on config
     this.updateStyle();
 
-    // When clicking the error log div, toggle its state
-    this.clickListener = () => {
-      if (!this.isExpanded) {
-        this.isExpanded = true;
-        this.updateStyle();
-      }
-    };
-    
-    if (this.errorLogDiv) {
-      this.errorLogDiv.addEventListener('click', this.clickListener);
-    }
-
-    // Append the error log div once the DOM is ready
+    // Append the elements once the DOM is ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
-        if (this.errorLogDiv) {
-          document.body.appendChild(this.errorLogDiv);
+        if (this.floatingMenuDiv) {
+          document.body.appendChild(this.floatingMenuDiv);
         }
         if (this.settingsView) {
           document.body.appendChild(this.settingsView);
         }
-        if (this.feedbackButton) {
-          document.body.appendChild(this.feedbackButton);
+        // Append the bottom container instead of the feedback button directly
+        if (this.bottomContainer) {
+          document.body.appendChild(this.bottomContainer);
         }
+        // if (this.feedbackButton) { // No longer needed
+        //   document.body.appendChild(this.feedbackButton);
+        // }
       });
     } else {
-      if (this.errorLogDiv) {
-        document.body.appendChild(this.errorLogDiv);
+      if (this.floatingMenuDiv) {
+        document.body.appendChild(this.floatingMenuDiv);
       }
       if (this.settingsView) {
         document.body.appendChild(this.settingsView);
       }
-      if (this.feedbackButton) {
-        document.body.appendChild(this.feedbackButton);
+      // Append the bottom container instead of the feedback button directly
+      if (this.bottomContainer) {
+        document.body.appendChild(this.bottomContainer);
       }
+      // if (this.feedbackButton) { // No longer needed
+      //   document.body.appendChild(this.feedbackButton);
+      // }
     }
   }
 
@@ -340,43 +375,46 @@ export class ErrorLog {
   }
 
   /**
-   * Update the error log div's style based on its state.
+   * Update the floating menu div's style based on its state.
    */
   private updateStyle(): void {
-    if (!this.errorLogDiv) return;
+    if (!this.floatingMenuDiv || !this.bottomContainer) return;
 
     if (this.isExpanded) {
+      // --- EXPANDED STATE ---
+      // Hide the bottom container
+      this.bottomContainer.style.display = 'none';
+
+      // Show and style the main floating menu div
+      this.floatingMenuDiv.style.display = 'block'; // Make sure it's visible
       // Reset all inline styles first to avoid style conflicts
-      this.errorLogDiv.removeAttribute('style');
+      this.floatingMenuDiv.removeAttribute('style');
+      // Ensure display is block after reset
+      this.floatingMenuDiv.style.display = 'block';
 
       // Reapply all original styles
       for (const prop in this.originalStyle) {
-        this.errorLogDiv.style[prop as any] = this.originalStyle[prop as keyof typeof this.originalStyle] as string;
+        this.floatingMenuDiv.style[prop as any] = this.originalStyle[prop as keyof typeof this.originalStyle] as string;
       }
 
       if (this.errorList) {
         this.errorList.style.display = 'block';
       }
 
-      if (this.closeButton && !this.errorLogDiv.contains(this.closeButton)) {
-        this.errorLogDiv.appendChild(this.closeButton);
+      if (this.closeButton && !this.floatingMenuDiv.contains(this.closeButton)) {
+        this.floatingMenuDiv.appendChild(this.closeButton);
       }
 
-      if (this.settingsButton && !this.errorLogDiv.contains(this.settingsButton)) {
-        this.errorLogDiv.appendChild(this.settingsButton);
+      if (this.settingsButton && !this.floatingMenuDiv.contains(this.settingsButton)) {
+        this.floatingMenuDiv.appendChild(this.settingsButton);
       }
 
-      if (this.settingsView && !this.errorLogDiv.contains(this.settingsView)) {
-        this.errorLogDiv.appendChild(this.settingsView);
+      if (this.settingsView && !this.floatingMenuDiv.contains(this.settingsView)) {
+        this.floatingMenuDiv.appendChild(this.settingsView);
       }
 
       if (this.settingsButton) {
         this.settingsButton.style.display = 'inline-block';
-      }
-
-      // Hide error count in expanded state
-      if (this.errorCountBadge) {
-        this.errorCountBadge.style.display = 'none';
       }
 
       // Show/hide no errors message based on error count
@@ -384,70 +422,23 @@ export class ErrorLog {
         this.noErrorsMessage.style.display = this.errorCount === 0 ? 'block' : 'none';
       }
 
-      // Hide feedback button when error log is expanded
-      if (this.feedbackButton) {
-        this.feedbackButton.style.display = 'none';
-      }
     } else {
-      // Collapsed: shrink into a small circle at the bottom left.
-      // Reset styles first to avoid conflicts
-      this.errorLogDiv.removeAttribute('style');
-
-      // Apply collapsed styles
-      this.errorLogDiv.style.position = 'fixed';
-      this.errorLogDiv.style.bottom = '10px';
-      this.errorLogDiv.style.left = '10px';
-      this.errorLogDiv.style.right = 'auto';
-      this.errorLogDiv.style.width = '30px';
-      this.errorLogDiv.style.height = '30px';
-      this.errorLogDiv.style.borderRadius = '50%';
-      this.errorLogDiv.style.padding = '0';
-      this.errorLogDiv.style.overflow = 'hidden';
-      this.errorLogDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
-      this.errorLogDiv.style.fontSize = '12px';
-      this.errorLogDiv.style.cursor = 'pointer';
-      this.errorLogDiv.style.zIndex = '1000'; // Preserve z-index from original style
-
-      if (this.errorList) {
-        this.errorList.style.display = 'none';
-      }
-
-      // Remove the close button
-      if (this.closeButton && this.errorLogDiv.contains(this.closeButton)) {
-        this.errorLogDiv.removeChild(this.closeButton);
-      }
-
-      // Remove the settings button
-      if (this.settingsButton && this.errorLogDiv.contains(this.settingsButton)) {
-        this.errorLogDiv.removeChild(this.settingsButton);
-      }
-
-      // Remove the settings view and ensure it's hidden
+      // --- COLLAPSED STATE ---
+      // Hide the main floating menu div
+      this.floatingMenuDiv.style.display = 'none';
+      // Ensure settings view is also hidden when collapsing
       this.hideSettingsView();
 
-      // Show error count in collapsed state
+      // Show the bottom container
+      this.bottomContainer.style.display = 'flex';
+
+      // Update error count in the collapsed badge
       if (this.errorCountBadge) {
-        this.errorCountBadge.style.display = 'block';
         this.errorCountBadge.textContent = this.errorCount.toString();
       }
 
-      // Hide no errors message in collapsed state
-      if (this.noErrorsMessage) {
-        this.noErrorsMessage.style.display = 'none';
-      }
-
-      // Show feedback button when error log is collapsed
-      if (this.feedbackButton) {
-        this.feedbackButton.style.display = 'flex';
-      }
     }
 
-    // The feedback button has fixed positioning, so it doesn't need
-    // to change based on the error log's expanded/collapsed state.
-    // Ensure it remains visible if it was created.
-    // if (this.feedbackButton) { // This block is no longer needed as visibility is handled above
-    //   this.feedbackButton.style.display = 'flex';
-    // }
   }
 
   /**
@@ -517,7 +508,7 @@ export class ErrorLog {
 
         fixWithAIBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.getAIFix(errorId);
+          this.getCodeFix(errorId);
         });
 
         li.appendChild(fixWithAIBtn);
@@ -548,10 +539,12 @@ export class ErrorLog {
       this.errorList.appendChild(li);
     }
 
-    // Update error count badge
+    // Update error count badge (inside the collapsed badge)
     if (this.errorCountBadge) {
       this.errorCountBadge.textContent = this.errorCount.toString();
     }
+    // Update style in case this is the first error and log was collapsed
+    this.updateStyle();
   }
 
   /**
@@ -567,21 +560,24 @@ export class ErrorLog {
   /**
    * Gets an AI fix for an error.
    */
-  private getAIFix(errorId: string): void {
+  private getCodeFix(errorId: string): void {
     const errorInfo = errorSourceMap.get(errorId);
     if (errorInfo) {
-      fetchAIFix(errorInfo);
+      fetchCodeFix(errorInfo);
     }
   }
 
   /**
-   * Destroys the error log component, removing all DOM elements and event listeners.
+   * Destroys the floating menu component, removing all DOM elements and event listeners.
    */
   public destroy(): void {
     // Remove event listeners
-    if (this.errorLogDiv && this.clickListener) {
-      this.errorLogDiv.removeEventListener('click', this.clickListener);
-      this.clickListener = null;
+    // if (this.floatingMenuDiv && this.clickListener) { // Listener removed
+    //   this.floatingMenuDiv.removeEventListener('click', this.clickListener);
+    //   this.clickListener = null;
+    // }
+    if (this.collapsedErrorBadge) { // Remove listener from collapsed badge
+        this.collapsedErrorBadge.replaceWith(this.collapsedErrorBadge.cloneNode(true));
     }
     
     // Remove button listeners (cloning)
@@ -597,25 +593,21 @@ export class ErrorLog {
     }
 
     // Remove the main div from the DOM
-    if (this.errorLogDiv && this.errorLogDiv.parentNode) {
-      this.errorLogDiv.parentNode.removeChild(this.errorLogDiv);
+    if (this.floatingMenuDiv && this.floatingMenuDiv.parentNode) {
+      this.floatingMenuDiv.parentNode.removeChild(this.floatingMenuDiv);
     }
     // Remove settings view from DOM
     if (this.settingsView && this.settingsView.parentNode) {
       this.settingsView.parentNode.removeChild(this.settingsView);
     }
 
-    // Remove feedback button and its listener
-    if (this.feedbackButton) {
-      this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
-      if (this.feedbackButton.parentNode) {
-        this.feedbackButton.parentNode.removeChild(this.feedbackButton);
-      }
-      this.feedbackButton = null;
+    // Remove the bottom container from the DOM
+    if (this.bottomContainer && this.bottomContainer.parentNode) {
+        this.bottomContainer.parentNode.removeChild(this.bottomContainer);
     }
 
     // Nullify references
-    this.errorLogDiv = null;
+    this.floatingMenuDiv = null;
     this.errorList = null;
     this.errorCountBadge = null;
     this.closeButton = null;
@@ -624,6 +616,9 @@ export class ErrorLog {
     this.settingsCloseButton = null;
     this.settingsStatus = null;
     this.noErrorsMessage = null;
+    this.feedbackButton = null; // Still nullify even if removed via container
+    this.bottomContainer = null;
+    this.collapsedErrorBadge = null;
     this.originalStyle = {};
     errorSourceMap.clear();
   }

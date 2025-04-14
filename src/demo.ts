@@ -70,8 +70,8 @@ const handleErrorClick = () => {
  */
 const handleReferenceErrorClick = () => {
   try {
-    const undefinedVariable = "This is a defined variable"; // Define the variable
-    console.log(undefinedVariable);
+    const definedVariable = "This is a defined variable"; // Define the variable
+    console.log(definedVariable); // Use the defined variable
   } catch (error) {
     console.error("Reference error caught:", error);
   }
@@ -83,7 +83,6 @@ const handleReferenceErrorClick = () => {
 const handleTypeErrorClick = () => {
   try {
     const num = 42;
-    const upperCaseNum = num.toString().toUpperCase(); // Declare and initialize upperCaseNum
     console.log(upperCaseNum);
   } catch (error) {
     console.error("Type error caught:", error);
@@ -175,7 +174,8 @@ const performSecondLevelOperation = () => {
  * This function executes normally but then calls a non-existent function
  */
 const performThirdLevelOperation = () => {
-  console.log("Nested error example - about to call non-existent function");
+  console.log('Nested error example - about to call non-existent function');
+  // Call a non-existent function - this will cause a ReferenceError
   nonExistentFunction();
 };
 
@@ -249,7 +249,4 @@ const handleCspErrorClick = () => {
 };
 
 // Deprecated legacy export that was mentioned in the original file
-const nonExistentFunction = () => {
-  console.log("This function now exists!");
-};
 export const demo = () => {};

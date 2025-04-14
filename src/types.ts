@@ -9,12 +9,6 @@ export interface LoggerOptions {
   renderErrorLogDiv?: boolean;
 
   /**
-   * The HTML element ID to use for the error log div.
-   * @default 'error-log'
-   */
-  errorLogDivId?: string;
-
-  /**
    * Custom CSS styles for the expanded error log div.
    */
   style?: Partial<CSSStyleDeclaration>;
