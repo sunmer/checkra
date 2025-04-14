@@ -90,9 +90,9 @@ export class ErrorLog {
       this.hideSettingsView();
     });
 
-    // Create settings button (⚙️)
+    // Create settings button (⚙)
     this.settingsButton = document.createElement('span');
-    this.settingsButton.textContent = '⚙️';
+    this.settingsButton.textContent = '⚙';
     this.settingsButton.title = 'Settings';
     this.settingsButton.style.position = 'absolute';
     this.settingsButton.style.top = '28px';
@@ -149,7 +149,6 @@ export class ErrorLog {
     const settingsTitle = document.createElement('h3');
     settingsTitle.textContent = 'Directory Settings';
     settingsTitle.style.marginTop = '0';
-    settingsTitle.style.marginBottom = '15px';
     settingsTitle.style.color = '#ffffff';
     this.settingsView.appendChild(settingsTitle);
 
@@ -202,7 +201,7 @@ export class ErrorLog {
     this.feedbackButton = document.createElement('span');
     this.feedbackButton.id = 'feedback-log';
     this.feedbackButton.textContent = '?';
-    this.feedbackButton.title = 'Send Feedback';
+    this.feedbackButton.title = 'Ged Feedback';
     this.feedbackButton.style.position = 'fixed';
     this.feedbackButton.style.bottom = '10px';
     this.feedbackButton.style.left = '50px';
@@ -384,6 +383,11 @@ export class ErrorLog {
       if (this.noErrorsMessage) {
         this.noErrorsMessage.style.display = this.errorCount === 0 ? 'block' : 'none';
       }
+
+      // Hide feedback button when error log is expanded
+      if (this.feedbackButton) {
+        this.feedbackButton.style.display = 'none';
+      }
     } else {
       // Collapsed: shrink into a small circle at the bottom left.
       // Reset styles first to avoid conflicts
@@ -431,14 +435,19 @@ export class ErrorLog {
       if (this.noErrorsMessage) {
         this.noErrorsMessage.style.display = 'none';
       }
+
+      // Show feedback button when error log is collapsed
+      if (this.feedbackButton) {
+        this.feedbackButton.style.display = 'flex';
+      }
     }
 
     // The feedback button has fixed positioning, so it doesn't need
     // to change based on the error log's expanded/collapsed state.
     // Ensure it remains visible if it was created.
-    if (this.feedbackButton) {
-      this.feedbackButton.style.display = 'flex';
-    }
+    // if (this.feedbackButton) { // This block is no longer needed as visibility is handled above
+    //   this.feedbackButton.style.display = 'flex';
+    // }
   }
 
   /**
