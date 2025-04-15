@@ -2,7 +2,7 @@
 export type { LoggerOptions, Logger, ErrorInfo } from './types';
 
 // Export main functionality
-export { initLogger } from './core/logger';
+export { initLogger } from './core/index';
 
 // Export UI components for direct access if needed
 export { sourceViewer } from './ui/source-viewer';
@@ -11,7 +11,7 @@ export { tooltip } from './ui/tooltip';
 
 // Import the actual initialization function and types
 // (You might need to adjust the path if initLogger is defined elsewhere)
-import { initLogger as initializeLogger } from '../src/core/logger'; // Assuming './logger' holds the core logic
+import { initLogger as initializeLogger } from './core'; // Assuming './logger' holds the core logic
 import { LoggerOptions } from './types'; // Assuming './logger' holds the core logic
 
 // --- Auto-initialization logic ---

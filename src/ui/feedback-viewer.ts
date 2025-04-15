@@ -627,6 +627,10 @@ export class FeedbackViewer {
               console.log('[FeedbackViewer DEBUG] No original background color stored or computed, wrapper will use default/inherited.');
           }
 
+          // Ensure the outline is always applied, overriding any potentially conflicting transferred styles
+          this.insertedFixWrapper.style.outline = '1px dashed #007acc';
+          console.log('[FeedbackViewer DEBUG] Explicitly set outline style on wrapper.');
+
           // Copy attributes (like class) from the suggested <body> tag if applicable
           if (attributesToCopy.length > 0) {
               attributesToCopy.forEach(attr => {
