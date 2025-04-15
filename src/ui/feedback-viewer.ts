@@ -105,12 +105,9 @@ export class FeedbackViewer {
         max-width: 80vw;
         max-height: 70vh;
         overflow: auto;
-        background-color: rgba(40, 44, 52, 0.95);
         border: 1px dashed #007acc;
         border-radius: 4px;
         color: #abb2bf;
-        /* Add padding specifically for content, leaving space for close button */
-        padding: 8px;
       }
 
       /* Style for the close button inside the fix wrapper */
@@ -250,7 +247,6 @@ export class FeedbackViewer {
     this.renderedHtmlPreview.style.display = 'none';
     this.renderedHtmlPreview.style.opacity = '0';
     this.renderedHtmlPreview.style.border = '1px dashed #007acc';
-    this.renderedHtmlPreview.style.background = 'rgba(40, 40, 40, 0.95)';
     this.renderedHtmlPreview.style.color = '#d4d4d4';
     this.renderedHtmlPreview.style.zIndex = '1001';
     this.renderedHtmlPreview.style.padding = '8px';
@@ -527,8 +523,19 @@ export class FeedbackViewer {
     }
     console.log('[FeedbackViewer DEBUG] Original element reference is valid and in DOM:', this.originalElementRef);
 
-    const htmlPreviewRegex = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
-    const match = this.accumulatedResponseText.match(htmlPreviewRegex);
+    // Regex specifically looking for the marked complete HTML
+    const specificHtmlRegex = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
+    // Generic regex looking for the first HTML code block
+    const genericHtmlRegex = /```(?:html)?\n([\s\S]*?)\n```/i;
+
+    // Try the specific regex first
+    let match = this.accumulatedResponseText.match(specificHtmlRegex);
+
+    // If the specific heading isn't found, try the generic regex
+    if (!match) {
+      console.log('[FeedbackViewer DEBUG] Specific "# Complete HTML..." heading not found. Trying generic HTML block regex.');
+      match = this.accumulatedResponseText.match(genericHtmlRegex);
+    }
 
     if (match && match[1]) {
       const extractedHtml = match[1].trim();
@@ -678,7 +685,7 @@ export class FeedbackViewer {
       }
     } else {
       // If pattern not found, ensure fix is removed (including listeners)
-      console.log('[FeedbackViewer DEBUG] Regex did not match. Ensuring fix is removed.');
+      console.log('[FeedbackViewer DEBUG] Regex did not match (neither specific nor generic). Ensuring fix is removed.');
       this.removeInjectedFix();
     }
     console.log('[FeedbackViewer DEBUG] Exiting tryInjectHtmlFix.');
