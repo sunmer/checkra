@@ -321,26 +321,30 @@ export class FloatingMenu {
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('[Feedback] Button clicked, starting screen capture...');
-      screenCapture.startCapture((imageDataUrl, selectedHtml, bounds) => {
+      screenCapture.startCapture((imageDataUrl, selectedHtml, bounds, clickX, clickY) => {
         // Log: Callback executed
         console.log('[Feedback] Screen capture callback executed.');
         console.log('[Feedback] Image data URL received:', imageDataUrl ? imageDataUrl.substring(0, 50) + '...' : 'null');
         console.log('[Feedback] Selected HTML received:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
+        console.log(`[Feedback] Click coordinates: X=${clickX}, Y=${clickY}`); // Log coordinates
 
-        // Pass imageDataUrl, selectedHtml, and bounds to the viewer
-        if (imageDataUrl || selectedHtml) { // Proceed if we got at least one piece of data
-          console.log('[Feedback] Data received. Showing input area...');
-          try {
-            // Call showInputArea with individual arguments
-            feedbackViewer.showInputArea(imageDataUrl, selectedHtml, bounds);
-            console.log('[Feedback] Feedback input area shown.');
-          } catch (viewerError) {
-            console.error('[Feedback] Error showing feedback input area:', viewerError);
-          }
+        // Pass imageDataUrl, selectedHtml, bounds, and coordinates to the viewer
+        // Check if capture was successful (at least coords should exist unless cancelled very early)
+        // Allow showing even if imageData/html is null, as long as capture wasn't fully cancelled (coords are not 0,0 maybe?)
+        // Or simply proceed if *any* data was received or coords are valid.
+        // Let's proceed if the capture wasn't cancelled (coords are not 0,0) OR if we got image/html
+        if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml) {
+            console.log('[Feedback] Data or valid click received. Showing input area...');
+            try {
+                // Call showInputArea with all arguments, including clickX and clickY
+                feedbackViewer.showInputArea(imageDataUrl, selectedHtml, bounds, clickX, clickY);
+                console.log('[Feedback] Feedback input area shown.');
+            } catch (viewerError) {
+                console.error('[Feedback] Error showing feedback input area:', viewerError);
+            }
         } else {
-          console.warn('[Feedback] Screen capture cancelled or failed. No image data or HTML received.');
-          // Optionally show a message to the user
-          // alert('Screen capture failed, cancelled, or no element selected.');
+            console.warn('[Feedback] Screen capture cancelled or failed. No data received.');
+            // Optionally show a message to the user
         }
       });
     });

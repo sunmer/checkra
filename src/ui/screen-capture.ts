@@ -1,5 +1,4 @@
 import html2canvas from 'html2canvas';
-import { finder } from '@medv/finder';
 
 /**
  * Handles capturing a selected DOM element.
@@ -8,9 +7,11 @@ class ScreenCapture {
   private captureCallback: ((
     imageDataUrl: string | null,
     selectedHtml: string | null,
-    bounds: DOMRect | null
+    bounds: DOMRect | null,
+    clickX: number,
+    clickY: number
   ) => void) | null = null;
-  private clickListener: ((event: MouseEvent) => void) | null = null;
+  private clickListener: ((event: MouseEvent) => Promise<void>) | null = null;
   private escapeListener: ((event: KeyboardEvent) => void) | null = null;
   private mouseMoveListener: ((event: MouseEvent) => void) | null = null;
   private isCapturing: boolean = false;
@@ -19,11 +20,11 @@ class ScreenCapture {
 
   private cleanup(): void {
     console.log('[ScreenCapture] Cleaning up...');
-    document.body.style.cursor = 'default';
+    document.body.classList.remove('capturing-mode');
 
     // Remove event listeners
     if (this.clickListener) {
-      document.removeEventListener('click', this.clickListener);
+      document.removeEventListener('click', this.clickListener, { capture: true });
       this.clickListener = null;
     }
 
@@ -43,7 +44,8 @@ class ScreenCapture {
       this.overlay = null;
     }
 
-    this.currentHighlight = null;
+    this.highlightElement(null);
+
     this.isCapturing = false;
     this.captureCallback = null; // Clear callback reference
     console.log('[ScreenCapture] Cleanup complete.');
@@ -58,33 +60,30 @@ class ScreenCapture {
     this.overlay.style.width = '100%';
     this.overlay.style.height = '100%';
     this.overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent dark overlay
-    this.overlay.style.zIndex = '2147483646'; // Very high z-index
+    this.overlay.style.zIndex = '100'; // Very high z-index
     this.overlay.style.pointerEvents = 'none'; // Allow clicks to pass through
     document.body.appendChild(this.overlay);
   }
 
   private highlightElement(element: HTMLElement | null): void {
-    // Remove previous highlight if it exists
+    if (!element) {
+      return;
+    }
+
+    // Remove previous highlight
     if (this.currentHighlight) {
       this.currentHighlight.style.removeProperty('outline');
       this.currentHighlight.style.removeProperty('position');
       this.currentHighlight.style.removeProperty('z-index');
-      this.currentHighlight = null; // Clear the reference *before* potentially setting it again
     }
 
-    // If a new, valid element is provided, highlight it
-    // Ensure the element is not the overlay itself
-    if (element && element !== this.overlay) {
-        // Set the current element as the highlighted one
-        this.currentHighlight = element;
+    // Set the current element as the highlighted one
+    this.currentHighlight = element;
 
-        // Apply highlighting styles - bring element above overlay
-        element.style.outline = '2px solid #0095ff';
-        // Store original position/zIndex before changing? Maybe too complex for now.
-        // Let's stick with applying relative/high zIndex for highlighting.
-        element.style.position = 'relative';
-        element.style.zIndex = '2147483647'; // Higher than overlay
-    }
+    // Apply highlighting styles - bring element above overlay
+    element.style.outline = '2px solid #0095ff';
+    element.style.position = 'relative';
+    element.style.zIndex = '100'; // Higher than overlay
   }
 
   /**
@@ -128,17 +127,19 @@ class ScreenCapture {
   public startCapture(callback: (
     imageDataUrl: string | null,
     selectedHtml: string | null,
-    bounds: DOMRect | null
+    bounds: DOMRect | null,
+    clickX: number,
+    clickY: number
   ) => void): void {
     console.log('[ScreenCapture] startCapture called.');
     if (this.isCapturing) {
       console.warn('[ScreenCapture] Capture already in progress. Ignoring request.');
-      return; // Prevent multiple captures
+      return;
     }
 
     this.captureCallback = callback;
     this.isCapturing = true;
-    document.body.style.cursor = 'crosshair'; // Indicate selection mode
+    document.body.classList.add('capturing-mode');
 
     try {
       console.log('[ScreenCapture] Setting up element selection...');
@@ -158,137 +159,149 @@ class ScreenCapture {
       // Set up mousemove handler to highlight elements under cursor
       this.mouseMoveListener = (event: MouseEvent) => {
         const target = event.target as HTMLElement;
-        const floatingMenu = document.getElementById('floating-menu-container'); // Get reference to the menu
-
-        // Prevent highlighting the overlay itself or the floating menu container and its children
-        if (!target || target === this.overlay || (floatingMenu && floatingMenu.contains(target))) {
-            // If hovering over ignored elements, ensure any previous highlight is cleared
-            if (this.currentHighlight) {
-                this.highlightElement(null); // Clear highlight
-            }
-            return; // Do not highlight these elements
-        }
-
-        // Only update highlight if the target is different
-        if (target !== this.currentHighlight) {
+        if (target && target !== this.currentHighlight) {
           this.highlightElement(target);
         }
       };
       document.addEventListener('mousemove', this.mouseMoveListener);
 
-      // Set up click handler
+      // Define the click listener function
       this.clickListener = async (event: MouseEvent) => {
         const target = event.target as HTMLElement;
-        const floatingMenu = document.getElementById('floating-menu-container'); // Get reference to the menu
+        const floatingMenu = document.getElementById('floating-menu-container');
 
-        // **New Check:** Prevent capture if clicking on the floating menu or its children
-        if (floatingMenu && floatingMenu.contains(target)) {
-            console.log('[ScreenCapture] Clicked on floating menu, ignoring capture.');
-            // Don't prevent default or stop propagation, let the menu click behave normally.
-            // Crucially, don't clean up or proceed with capture.
-            return;
+        // Ignore clicks on the floating menu or overlay
+        if ((floatingMenu && floatingMenu.contains(target)) || target === this.overlay) {
+          console.log('[ScreenCapture] Clicked on ignored element (menu or overlay), ignoring capture.');
+          return;
         }
 
-        // Don't interfere with normal clicks on inputs, buttons, etc.
-        const tagName = target.tagName.toLowerCase();
-        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || tagName === 'button' || tagName === 'a') {
-          // We might still want to prevent capture even on these if they are inside the floating menu,
-          // but the check above already handles that.
-          return; // Let the normal click proceed
-        }
-
-        // Otherwise, capture the element
+        // Prevent default browser action and stop event bubbling *now*
         event.preventDefault();
         event.stopPropagation();
-        console.log('[ScreenCapture] Element clicked:', target);
 
-        // Store callback, target, and bounds before cleanup
+        // Capture coordinates and the highlighted element
+        const clickX = event.clientX;
+        const clickY = event.clientY;
+        const selectedElement = this.currentHighlight; // Use the highlighted element
+
+        console.log('[ScreenCapture] Element selected:', selectedElement);
+        console.log(`[ScreenCapture] Click coordinates: X=${clickX}, Y=${clickY}`);
+
+        // Store callback before cleanup
         const callbackToExecute = this.captureCallback;
-        const selectedElement = target;
-        const selectedElementBounds = selectedElement?.getBoundingClientRect() ?? null; // Get bounds
 
-        // Cleanup will reset cursor, remove event listeners and overlay
-        this.cleanup();
+        // Cleanup listeners, overlay, cursor FIRST
+        this.cleanup(); // This also calls highlightElement(null)
 
+        // Check if callback is still valid
         if (!callbackToExecute) {
+          console.warn('[ScreenCapture] Callback became null after cleanup, aborting.');
           return;
         }
 
         let imageDataUrl: string | null = null;
         let selectedHtml: string | null = null;
+        let selectedElementBounds: DOMRect | null = null;
 
         if (selectedElement) {
+          selectedElementBounds = selectedElement.getBoundingClientRect(); // Get bounds
+
           // 1. Get HTML
-          selectedHtml = selectedElement.outerHTML;
-          console.log('[ScreenCapture] Captured HTML:', selectedHtml.substring(0, 100) + '...');
+          try {
+            selectedHtml = selectedElement.outerHTML;
+            console.log('[ScreenCapture] Captured HTML:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
+          } catch (e) {
+            console.error('[ScreenCapture] Error getting outerHTML:', e);
+            selectedHtml = null;
+          }
 
-          // 2. Get CSS selector for the element (this is what finder is actually for)
-          const selector = finder(selectedElement);
-          console.log('[ScreenCapture] Generated CSS selector:', selector);
-
-          // 3. Capture Image using html2canvas
+          // 2. Capture Image using html2canvas
           console.log('[ScreenCapture] Attempting html2canvas capture of selected element...');
           try {
-            // Remove any temporary styles that were added for highlighting
-            selectedElement.style.removeProperty('outline');
-            selectedElement.style.removeProperty('position');
-            selectedElement.style.removeProperty('z-index');
-
-            // Determine the effective background color
             const effectiveBackgroundColor = this.getEffectiveBackgroundColor(selectedElement);
-            console.log('[ScreenCapture] Using effective background color:', effectiveBackgroundColor);
-
             const canvas = await html2canvas(selectedElement, {
-              backgroundColor: effectiveBackgroundColor, // Use the determined color
+              backgroundColor: effectiveBackgroundColor,
               useCORS: true,
-              logging: true, // Keep logging for debugging
+              logging: false,
+              // Ensure highlight styles are removed in the clone (belt-and-suspenders)
+              onclone: (clonedDoc, clonedElement) => {
+                if (clonedElement) {
+                    clonedElement.style.removeProperty('outline');
+                    clonedElement.style.removeProperty('position');
+                    clonedElement.style.removeProperty('z-index');
+                }
+              }
             });
-            console.log('[ScreenCapture] html2canvas capture successful.');
             imageDataUrl = canvas.toDataURL('image/png');
-            console.log('[ScreenCapture] Generated image data URL.');
+            console.log('[ScreenCapture] html2canvas capture successful.');
           } catch (error) {
             console.error('[ScreenCapture] html2canvas capture failed:', error);
-            // imageDataUrl remains null
+            imageDataUrl = null;
           }
         } else {
-          console.log('[ScreenCapture] No element selected.');
+          console.log('[ScreenCapture] No valid element was highlighted for capture.');
         }
 
-        // Execute callback with results (including bounds)
+        // Execute callback with results (including bounds and coordinates)
         console.log('[ScreenCapture] Executing capture callback...');
         try {
-          // Pass bounds to the callback
-          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds);
+          // Pass all 5 arguments
+          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds, clickX, clickY);
         } catch (callbackError) {
           console.error('[ScreenCapture] Error executing the capture callback:', callbackError);
         }
       };
 
-      document.addEventListener('click', this.clickListener);
-      console.log('[ScreenCapture] Click listener initialized and waiting for selection.');
+      // Add the click listener with capture: true
+      document.addEventListener('click', this.clickListener, { capture: true });
+      console.log('[ScreenCapture] Event listeners initialized and waiting for selection.');
 
     } catch (error) {
       console.error('[ScreenCapture] Error initializing capture:', error);
       this.cleanup(); // Attempt cleanup if setup fails
       if (this.captureCallback) {
-        this.captureCallback(null, null, null); // Callback with nulls on error
+        // Call callback with nulls and default coords (0,0) on setup error
+        try {
+            // Pass all 5 arguments
+            this.captureCallback(null, null, null, 0, 0);
+        } catch (callbackError) {
+            console.error('[ScreenCapture] Error executing the capture callback during setup error:', callbackError);
+        }
       }
     }
   }
 
-  // Add a method to cancel the capture externally if needed
   public cancelCapture(): void {
     console.log('[ScreenCapture] cancelCapture called.');
     if (this.isCapturing) {
-      const callback = this.captureCallback;
+      const callback = this.captureCallback; // Store before cleanup
       this.cleanup();
 
-      // Optionally call the callback with nulls to indicate cancellation
+      // Call the callback with nulls and default coords (0,0) to indicate cancellation
       if (callback) {
-        callback(null, null, null); // Pass null for bounds on cancel
+        try {
+            // Pass all 5 arguments
+            callback(null, null, null, 0, 0);
+        } catch (callbackError) {
+            console.error('[ScreenCapture] Error executing the capture callback during cancellation:', callbackError);
+        }
       }
     }
   }
+}
+
+// Add CSS for the cursor directly to the document head (if not already done)
+// Ensure this runs only once or check if style already exists
+if (!document.getElementById('screen-capture-styles')) {
+  const style = document.createElement('style');
+  style.id = 'screen-capture-styles'; // Give it an ID to check for existence
+  style.textContent = `
+    body.capturing-mode, body.capturing-mode * {
+      cursor: crosshair !important;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 export const screenCapture = new ScreenCapture();
