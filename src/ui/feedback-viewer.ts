@@ -181,6 +181,21 @@ export class FeedbackViewer {
       #feedback-viewer #feedback-preview-button:not(:disabled):hover {
          background-color: rgba(255, 255, 255, 0.2);
       }
+
+      /* Loading Spinner Animation */
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      .loading-spinner {
+        display: inline-block; /* Or block, depending on desired layout */
+        animation: spin 1s linear infinite;
+        width: 1.2em; /* Adjust size as needed */
+        height: 1.2em;
+        vertical-align: middle; /* Align with text if needed */
+        margin-right: 8px; /* Space between spinner and text if any */
+      }
     `;
 
     document.head.appendChild(styleElement);
@@ -458,15 +473,26 @@ export class FeedbackViewer {
     this.promptTextarea.disabled = true;
     this.submitButton.disabled = true;
     this.submitButtonTextSpan.textContent = 'Sending...';
-    this.responseContentElement.textContent = '⏳ Getting feedback...';
-    this.accumulatedResponseText = '';
+
+    // --- Replace emoji with SVG spinner ---
+    this.responseContentElement.innerHTML = ''; // Clear previous content
+    const spinner = document.createElement('div'); // Use a div wrapper for easier styling/removal if needed
+    spinner.style.textAlign = 'center'; // Center the spinner
+    spinner.style.padding = '10px 0'; // Add some padding
+    spinner.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      <span style="margin-left: 8px; vertical-align: middle; color: #a0c8ff;">Getting feedback...</span>
+    `;
+    this.responseContentElement.appendChild(spinner);
+    // --- End spinner replacement ---
+
+    this.accumulatedResponseText = ''; // Reset accumulated text
     this.responseContentElement.style.display = 'block';
-    // Find the response header and show it
+    this.previewButton.disabled = true;
     const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
     if (responseHeader) {
-        responseHeader.style.display = 'flex'; // Show header (use flex to enable space-between)
+        responseHeader.style.display = 'flex';
     }
-    this.previewButton.disabled = true; // Ensure preview button is disabled
 
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
   };
@@ -486,11 +512,19 @@ export class FeedbackViewer {
       const scrollThreshold = 10;
       const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
-      if (this.accumulatedResponseText === '' && this.responseContentElement.textContent?.startsWith('⏳')) {
-        this.responseContentElement.innerHTML = '';
+      // --- Remove spinner on first chunk ---
+      if (this.accumulatedResponseText === '') {
+        // Check if the spinner is the first child and remove it
+        const spinnerWrapper = this.responseContentElement.firstChild;
+        if (spinnerWrapper && spinnerWrapper.nodeType === Node.ELEMENT_NODE && (spinnerWrapper as Element).querySelector('.loading-spinner')) {
+            this.responseContentElement.innerHTML = ''; // Clear the spinner
+        }
       }
+      // --- End spinner removal ---
+
       this.accumulatedResponseText += chunk;
       const parsedHtml = marked.parse(this.accumulatedResponseText) as string;
+      // Wrap parsed HTML to ensure consistent structure for scrolling/styling
       this.responseContentElement.innerHTML = `<div class="streamed-content">${parsedHtml}</div>`;
 
       if (isScrolledToBottom) {
@@ -498,7 +532,11 @@ export class FeedbackViewer {
       }
 
       this.tryRenderHtmlPreview();
-      this.tryInjectHtmlFix();
+      // Only try to inject if we have accumulated text
+      if (this.accumulatedResponseText.trim()) {
+          console.log('[FeedbackViewer DEBUG] Calling tryInjectHtmlFix from updateResponse.');
+          this.tryInjectHtmlFix();
+      }
     }
   }
 
