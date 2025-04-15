@@ -27,6 +27,7 @@ export class FeedbackViewer {
   private fixWrapperMouseLeaveListener: (() => void) | null = null;
   private originalElementMouseEnterListener: (() => void) | null = null;
   private closeButton: HTMLButtonElement | null = null;
+  private previewButton: HTMLButtonElement | null = null;
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
@@ -99,7 +100,8 @@ export class FeedbackViewer {
 
       .feedback-injected-fix {
         position: relative;
-        outline: 1px dashed #007acc;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
       }
 
       .feedback-fix-close-btn {
@@ -128,6 +130,56 @@ export class FeedbackViewer {
       .feedback-fix-close-btn:hover {
         background-color: rgba(200, 50, 50, 0.8);
         color: white;
+      }
+
+      #feedback-viewer button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+      }
+      #feedback-viewer button:not(:disabled):hover {
+         background-color: rgba(255, 255, 255, 0.2);
+      }
+
+      #feedback-viewer #feedback-submit-button {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        text-align: center;
+        background: #2563eb;
+        color: white;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-radius: 0.375rem;
+        padding: 6px 8px;
+        cursor: pointer;
+      }
+
+      #feedback-viewer #feedback-submit-button:focus {
+        outline: none;
+        box-shadow: 0 0 0 1px #4b5563;
+      }
+
+      #feedback-viewer #feedback-submit-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      #feedback-viewer #feedback-submit-button span:last-child {
+        margin-left: 0;
+        color: #e5e7eb;
+      }
+
+      #feedback-viewer #feedback-preview-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+      }
+      #feedback-viewer #feedback-preview-button:not(:disabled):hover {
+         background-color: rgba(255, 255, 255, 0.2);
       }
     `;
 
@@ -200,7 +252,6 @@ export class FeedbackViewer {
 
     const textareaContainer = document.createElement('div');
     textareaContainer.style.position = 'relative';
-    textareaContainer.style.marginBottom = '15px';
 
     this.promptTextarea = document.createElement('textarea');
     this.promptTextarea.rows = 4;
@@ -219,18 +270,8 @@ export class FeedbackViewer {
     textareaContainer.appendChild(this.promptTextarea);
 
     this.submitButton = document.createElement('button');
-    this.submitButton.style.position = 'absolute';
-    this.submitButton.style.bottom = '10px';
-    this.submitButton.style.right = '10px';
+    this.submitButton.id = 'feedback-submit-button';
     this.submitButton.style.display = 'flex';
-    this.submitButton.style.alignItems = 'baseline';
-    this.submitButton.style.padding = '6px 12px';
-    this.submitButton.style.backgroundColor = '#4CAF50';
-    this.submitButton.style.color = 'white';
-    this.submitButton.style.border = 'none';
-    this.submitButton.style.borderRadius = '4px';
-    this.submitButton.style.cursor = 'pointer';
-    this.submitButton.style.fontSize = '0.9em';
 
     const buttonText = document.createElement('span');
     buttonText.textContent = 'Get Feedback';
@@ -239,10 +280,10 @@ export class FeedbackViewer {
 
     const shortcutHint = document.createElement('span');
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    shortcutHint.textContent = isMac ? '(Cmd+⏎)' : '(Ctrl+⏎)';
+    shortcutHint.textContent = isMac ? '(Cmd + ⏎)' : '(Ctrl + ⏎)';
     shortcutHint.style.fontSize = '10px';
-    shortcutHint.style.color = '#e0e0e0';
-    shortcutHint.style.marginLeft = '6px';
+
+    this.submitButton.appendChild(buttonText);
     this.submitButton.appendChild(shortcutHint);
 
     this.submitButton.addEventListener('click', this.handleSubmit);
@@ -250,27 +291,64 @@ export class FeedbackViewer {
 
     contentWrapper.appendChild(textareaContainer);
 
+    // --- Create Response Header (Container for Title and Button) ---
+    const responseHeader = document.createElement('div');
+    responseHeader.style.display = 'none'; // Initially hidden
+    responseHeader.style.justifyContent = 'space-between';
+    responseHeader.style.alignItems = 'center';
+    responseHeader.style.marginBottom = '10px';
+    responseHeader.style.marginTop = '15px';
+    responseHeader.style.borderBottom = '1px solid rgba(255, 255, 255, 0.15)';
+    responseHeader.style.paddingBottom = '6px';
+
     const responseTitle = document.createElement('h4');
     responseTitle.textContent = 'Feedback Response';
     responseTitle.style.color = '#a0c8ff';
-    responseTitle.style.marginBottom = '10px';
-    responseTitle.style.marginTop = '15px';
     responseTitle.style.fontSize = '1em';
     responseTitle.style.fontWeight = '600';
-    responseTitle.style.borderBottom = '1px solid rgba(255, 255, 255, 0.15)';
-    responseTitle.style.paddingBottom = '6px';
-    responseTitle.style.display = 'none';
+    responseTitle.style.margin = '0'; // Remove default margins
 
+    // --- Create Preview Button ---
+    this.previewButton = document.createElement('button');
+    this.previewButton.id = 'feedback-preview-button';
+    this.previewButton.disabled = true; // Start disabled
+    this.previewButton.style.display = 'flex';
+    this.previewButton.style.alignItems = 'center';
+    this.previewButton.style.gap = '4px';
+    this.previewButton.style.padding = '4px 8px';
+    this.previewButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+    this.previewButton.style.color = '#a0c8ff';
+    this.previewButton.style.border = '1px solid rgba(255, 255, 255, 0.3)';
+    this.previewButton.style.borderRadius = '4px';
+    this.previewButton.style.cursor = 'pointer';
+    this.previewButton.style.fontSize = '0.85em';
+    this.previewButton.title = 'Preview suggested changes directly on the page';
+    this.previewButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>
+      <span>Preview result</span>
+    `;
+    // Add listener to hide the modal when clicked (if enabled)
+    this.previewButton.addEventListener('click', () => {
+        if (!this.previewButton?.disabled) {
+            this.hide();
+        }
+    });
+
+    // --- Append Title and Button to Header ---
+    responseHeader.appendChild(responseTitle);
+    responseHeader.appendChild(this.previewButton);
+
+    // --- Append Header and Content Area ---
     this.responseContentElement = document.createElement('div');
     this.responseContentElement.id = 'feedback-response-content';
     this.responseContentElement.style.wordWrap = 'break-word';
     this.responseContentElement.style.fontFamily = 'inherit';
     this.responseContentElement.style.fontSize = '0.95em';
     this.responseContentElement.style.marginTop = '10px';
-    this.responseContentElement.style.display = 'none';
+    this.responseContentElement.style.display = 'none'; // Content area also starts hidden
 
-    contentWrapper.appendChild(responseTitle);
-    contentWrapper.appendChild(this.responseContentElement);
+    contentWrapper.appendChild(responseHeader); // Add the header container
+    contentWrapper.appendChild(this.responseContentElement); // Add the content area below the header
 
     this.element.appendChild(contentWrapper);
 
@@ -317,7 +395,7 @@ export class FeedbackViewer {
     effectiveBackgroundColor: string | null
   ): void {
     if (!this.element) this.create();
-    if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview) return;
+    if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.previewButton) return;
 
     this.currentImageDataUrl = imageDataUrl;
     this.currentSelectedHtml = selectedHtml;
@@ -334,8 +412,10 @@ export class FeedbackViewer {
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
     this.responseContentElement.style.display = 'none';
-    const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
-    if (responseTitle) responseTitle.style.display = 'none';
+    // Find the response header (parent of responseContentElement) and hide it
+    const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
+    if (responseHeader) responseHeader.style.display = 'none'; // Hide header too
+    this.previewButton.disabled = true; // Ensure preview button is disabled
 
     this.renderedHtmlPreview.innerHTML = '';
     this.renderedHtmlPreview.style.display = 'none';
@@ -362,7 +442,7 @@ export class FeedbackViewer {
   };
 
   private handleSubmit = (): void => {
-    if (!this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan) return;
+    if (!this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.previewButton) return;
     if (!this.currentImageDataUrl && !this.currentSelectedHtml) {
       console.warn('[Feedback] Cannot submit feedback without captured image or HTML.');
       this.showError('Could not capture image or HTML structure.');
@@ -381,10 +461,12 @@ export class FeedbackViewer {
     this.responseContentElement.textContent = '⏳ Getting feedback...';
     this.accumulatedResponseText = '';
     this.responseContentElement.style.display = 'block';
-    const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
-    if (responseTitle) {
-        responseTitle.style.display = 'block';
+    // Find the response header and show it
+    const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
+    if (responseHeader) {
+        responseHeader.style.display = 'flex'; // Show header (use flex to enable space-between)
     }
+    this.previewButton.disabled = true; // Ensure preview button is disabled
 
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
   };
@@ -562,15 +644,8 @@ export class FeedbackViewer {
           
           this.insertedFixWrapper.style.display = '';
 
-          // Determine if the original element was the body
-          const isOriginalElementBody = this.originalElementRef === document.body;
-
-          if (this.originalEffectiveBgColor) {
-              this.insertedFixWrapper.style.backgroundColor = this.originalEffectiveBgColor;
-              console.log(`[FeedbackViewer DEBUG] Applied original effective background color to wrapper: ${this.originalEffectiveBgColor}`);
-          } else if (!isOriginalElementBody || !this.insertedFixWrapper.style.backgroundColor) {
-              console.log('[FeedbackViewer DEBUG] No original background color stored or computed, wrapper will use default/inherited.');
-          }
+          this.insertedFixWrapper.style.backgroundColor = 'transparent';
+          console.log('[FeedbackViewer DEBUG] Set wrapper background to transparent.');
 
           this.insertedFixWrapper.style.outline = '1px dashed #007acc';
           console.log('[FeedbackViewer DEBUG] Explicitly set outline style on wrapper.');
@@ -645,6 +720,14 @@ export class FeedbackViewer {
               this.originalElementRef.nextSibling
             );
             console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element.');
+
+            requestAnimationFrame(() => {
+                if (this.insertedFixWrapper) {
+                    this.insertedFixWrapper.style.opacity = '1';
+                    console.log('[FeedbackViewer DEBUG] Triggered fade-in for injected fix.');
+                }
+            });
+
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
             this.insertedFixWrapper = null;
@@ -710,6 +793,10 @@ export class FeedbackViewer {
       this.submitButton.disabled = false;
       this.submitButtonTextSpan.textContent = 'Get Feedback';
     }
+    // Enable the preview button only if a fix was likely generated
+    if (this.previewButton && this.insertedFixWrapper) { // <<< Enable only if fix exists
+        this.previewButton.disabled = false;
+    }
 
     this.tryRenderHtmlPreview();
     console.log('[FeedbackViewer DEBUG] Calling tryInjectHtmlFix from finalizeResponse.');
@@ -717,7 +804,7 @@ export class FeedbackViewer {
   }
 
   public showError(error: Error | string): void {
-    if (!this.element || !this.responseContentElement || !this.submitButtonTextSpan) return;
+    if (!this.element || !this.responseContentElement || !this.submitButtonTextSpan || !this.previewButton) return;
 
     this.element.style.display = 'flex';
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -725,10 +812,12 @@ export class FeedbackViewer {
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
 
-    const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
-    if (responseTitle) {
-        responseTitle.style.display = 'block';
+    // Find the response header and show it
+    const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
+    if (responseHeader) {
+        responseHeader.style.display = 'flex'; // Show header
     }
+    this.previewButton.disabled = true; // Keep preview button disabled on error
 
     this.responseContentElement.style.display = 'block';
     this.responseContentElement.innerHTML = `<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
@@ -748,8 +837,9 @@ export class FeedbackViewer {
       if (this.promptTextarea) this.promptTextarea.value = '';
       if (this.responseContentElement) {
         this.responseContentElement.innerHTML = '';
-        const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
-        if (responseTitle) responseTitle.style.display = 'none';
+        // Find the response header and hide it
+        const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
+        if (responseHeader) responseHeader.style.display = 'none'; // Hide header
       }
       this.accumulatedResponseText = '';
       this.originalEffectiveBgColor = null;
@@ -799,6 +889,7 @@ export class FeedbackViewer {
     this.fixWrapperMouseLeaveListener = null;
     this.originalElementMouseEnterListener = null;
     this.closeButton = null;
+    this.previewButton = null;
     console.log('[FeedbackViewer] Instance destroyed.');
   }
 }
