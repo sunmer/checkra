@@ -21,6 +21,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "build:demo": "vite build demo",
     "lint": "eslint .",
     "test": "jest",
     "prepublishOnly": "npm run build"
