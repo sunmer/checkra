@@ -2,54 +2,6 @@ import { escapeHTML } from './utils';
 import { fetchFeedback } from '../services/ai-service';
 import { marked } from 'marked';
 
-// Flag to track if styles have been injected
-let feedbackViewerStylesInjected = false;
-
-/**
- * Injects CSS rules for tighter spacing within the feedback response area.
- */
-function injectFeedbackViewerStyles(): void {
-  if (feedbackViewerStylesInjected) return;
-
-  const styleId = 'feedback-viewer-styles';
-  if (document.getElementById(styleId)) {
-    feedbackViewerStylesInjected = true; // Already exists somehow
-    return;
-  }
-
-  const css = `
-#feedback-response-content p,
-#feedback-response-content ul,
-#feedback-response-content ol,
-#feedback-response-content blockquote,
-#feedback-response-content pre {
-    margin-top: 0.3em;
-    margin-bottom: 0.3em;
-}
-
-#feedback-response-content li {
-    margin-bottom: 1rem;
-}
-
-#feedback-response-content h1,
-#feedback-response-content h2,
-#feedback-response-content h3,
-#feedback-response-content h4,
-#feedback-response-content h5,
-#feedback-response-content h6 {
-    margin-bottom: 0.3em;
-    color: #fff;
-}
-`;
-
-  const styleElement = document.createElement('style');
-  styleElement.id = styleId;
-  styleElement.textContent = css;
-  document.head.appendChild(styleElement);
-  feedbackViewerStylesInjected = true;
-  console.log('[FeedbackViewer] Injected custom styles for response content.');
-}
-
 /**
  * Class for managing the feedback response viewer modal.
  */
@@ -62,12 +14,12 @@ export class FeedbackViewer {
   private outsideClickHandler: (e: MouseEvent) => void;
   private currentImageDataUrl: string | null = null;
   private currentSelectedHtml: string | null = null;
-  private currentTargetRect: DOMRect | null = null;
+  private initialCursorX: number | null = null;
+  private initialCursorY: number | null = null;
   private accumulatedResponseText: string = '';
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
-      // Allow clicks on textarea/button without closing
       if (this.element &&
         this.element.style.display !== 'none' &&
         e.target instanceof Node &&
@@ -80,34 +32,81 @@ export class FeedbackViewer {
   public create(): void {
     if (this.element) return;
 
-    // --- Inject styles if not already done ---
-    injectFeedbackViewerStyles();
-    // --- End style injection ---
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      #feedback-response-content .streamed-content h1,
+      #feedback-response-content .streamed-content h2,
+      #feedback-response-content .streamed-content h3,
+      #feedback-response-content .streamed-content h4,
+      #feedback-response-content .streamed-content h5,
+      #feedback-response-content .streamed-content h6 {
+        color: #fff;
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+      }
+
+      #feedback-response-content .streamed-content p {
+        margin-bottom: 0.8em;
+        line-height: 1.6;
+      }
+
+      #feedback-response-content .streamed-content code {
+        background-color: #3a3a3a;
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+        font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+        font-size: 0.9em;
+      }
+
+      #feedback-response-content .streamed-content pre {
+        background-color: #2a2a2a;
+        padding: 10px;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin-bottom: 1em;
+      }
+
+      #feedback-response-content .streamed-content pre code {
+        background-color: transparent;
+        padding: 0;
+        border-radius: 0;
+        font-size: 1em; /* Reset font size for code blocks */
+      }
+
+      #feedback-response-content .streamed-content ul,
+      #feedback-response-content .streamed-content ol {
+        padding-left: 20px;
+        margin-bottom: 1em;
+      }
+
+      #feedback-response-content .streamed-content li {
+        margin-bottom: 0.4em;
+      }
+    `;
+
+    document.head.appendChild(styleElement);
 
     this.element = document.createElement('div');
     this.element.id = 'feedback-viewer';
 
-    // Style for positioning
-    this.element.style.position = 'fixed'; // Use fixed positioning
-    this.element.style.backgroundColor = '#1e1e1e'; // Match contentViewer
+    this.element.style.position = 'fixed';
+    this.element.style.backgroundColor = '#1e1e1e';
     this.element.style.color = '#d4d4d4';
-    this.element.style.padding = '15px'; // Slightly reduced padding
+    this.element.style.padding = '15px';
     this.element.style.borderRadius = '5px';
-    this.element.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.5)'; // Adjusted shadow
-    this.element.style.zIndex = '1002'; // Same as contentViewer
-    this.element.style.maxWidth = '450px'; // Set a max width
+    this.element.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.5)';
+    this.element.style.zIndex = '1002';
     this.element.style.maxHeight = '300px';
-    this.element.style.minWidth = '300px';
+    this.element.style.width = '400px';
     this.element.style.overflowY = 'auto';
     this.element.style.fontSize = '13px';
     this.element.style.display = 'none';
     this.element.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
     this.element.style.lineHeight = '1.5';
 
-    // Content structure
     const contentWrapper = document.createElement('div');
 
-    // Prompt Input Area
     const promptTitle = document.createElement('h4');
     promptTitle.textContent = 'Describe what you need help with';
     promptTitle.style.color = '#88c0ff';
@@ -116,17 +115,15 @@ export class FeedbackViewer {
     promptTitle.style.paddingBottom = '4px';
     contentWrapper.appendChild(promptTitle);
 
-    // Create a relative container for the textarea and the overlapping button
     const textareaContainer = document.createElement('div');
-    textareaContainer.style.position = 'relative'; // Context for absolute positioning
-    textareaContainer.style.marginBottom = '20px'; // Space below the textarea/button group
+    textareaContainer.style.position = 'relative';
+    textareaContainer.style.marginBottom = '20px';
 
     this.promptTextarea = document.createElement('textarea');
-    this.promptTextarea.rows = 4; // Increase rows slightly?
+    this.promptTextarea.rows = 4;
     this.promptTextarea.placeholder = 'e.g., "This button alignment looks off."';
-    this.promptTextarea.style.width = 'calc(100% - 16px)'; // Account for padding
+    this.promptTextarea.style.width = 'calc(100% - 16px)';
     this.promptTextarea.style.padding = '8px';
-    // Add padding-bottom to ensure text doesn't go under the button
     this.promptTextarea.style.paddingBottom = '20px';
     this.promptTextarea.style.backgroundColor = '#2a2a2a';
     this.promptTextarea.style.color = '#d4d4d4';
@@ -134,65 +131,56 @@ export class FeedbackViewer {
     this.promptTextarea.style.borderRadius = '3px';
     this.promptTextarea.style.fontFamily = 'inherit';
     this.promptTextarea.style.fontSize = '13px';
-    this.promptTextarea.style.resize = 'vertical'; // Allow vertical resize
+    this.promptTextarea.style.resize = 'vertical';
     this.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
-    textareaContainer.appendChild(this.promptTextarea); // Add textarea to its container
+    textareaContainer.appendChild(this.promptTextarea);
 
-    // Submit Button - Positioned absolutely, horizontal internal layout
     this.submitButton = document.createElement('button');
-    this.submitButton.style.position = 'absolute'; // Position relative to textareaContainer
-    this.submitButton.style.bottom = '8px'; // Position from bottom edge of container
-    this.submitButton.style.right = '8px'; // Position from right edge of container
-    // Use flexbox for horizontal layout inside the button
+    this.submitButton.style.position = 'absolute';
+    this.submitButton.style.bottom = '8px';
+    this.submitButton.style.right = '8px';
     this.submitButton.style.display = 'flex';
-    this.submitButton.style.alignItems = 'baseline'; // Align text baselines
-    this.submitButton.style.padding = '5px 10px'; // Adjust padding for horizontal layout
+    this.submitButton.style.alignItems = 'baseline';
+    this.submitButton.style.padding = '5px 10px';
     this.submitButton.style.backgroundColor = '#007acc';
     this.submitButton.style.color = 'white';
     this.submitButton.style.border = 'none';
     this.submitButton.style.borderRadius = '3px';
     this.submitButton.style.cursor = 'pointer';
-    this.submitButton.style.fontSize = '13px'; // Main text size
+    this.submitButton.style.fontSize = '13px';
 
-    // Main button text ("Get Feedback")
     const buttonText = document.createElement('span');
     buttonText.textContent = 'Get Feedback';
     this.submitButton.appendChild(buttonText);
-    this.submitButtonTextSpan = buttonText; // Store reference
+    this.submitButtonTextSpan = buttonText;
 
-    // Shortcut hint text ("(Cmd + ⏎)" or "(Ctrl + ⏎)") - Now side-by-side
     const shortcutHint = document.createElement('span');
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    shortcutHint.textContent = isMac ? '(Cmd+⏎)' : '(Ctrl+⏎)'; // Slightly shorter text
-    shortcutHint.style.fontSize = '10px'; // Smaller font size
-    shortcutHint.style.color = '#e0e0e0'; // Slightly dimmer color
-    shortcutHint.style.marginLeft = '6px'; // Space between main text and hint
+    shortcutHint.textContent = isMac ? '(Cmd+⏎)' : '(Ctrl+⏎)';
+    shortcutHint.style.fontSize = '10px';
+    shortcutHint.style.color = '#e0e0e0';
+    shortcutHint.style.marginLeft = '6px';
     this.submitButton.appendChild(shortcutHint);
 
     this.submitButton.addEventListener('click', this.handleSubmit);
-    // Append the button directly to the textarea container for absolute positioning
     textareaContainer.appendChild(this.submitButton);
 
-    // Append the textarea container (which now includes the button) to the main content wrapper
     contentWrapper.appendChild(textareaContainer);
 
-    // Response Area
     const responseTitle = document.createElement('h4');
     responseTitle.textContent = 'Feedback Response';
     responseTitle.style.color = '#88c0ff';
     responseTitle.style.marginBottom = '10px';
-    responseTitle.style.marginTop = '15px'; // Add space above response title
-    responseTitle.style.borderBottom = '1px solid #444';
+    responseTitle.style.marginTop = '15px';
     responseTitle.style.paddingBottom = '4px';
-    responseTitle.style.display = 'none'; // Hide initially
+    responseTitle.style.display = 'none';
     this.responseContentElement = document.createElement('div');
     this.responseContentElement.id = 'feedback-response-content';
-    //this.responseContentElement.style.whiteSpace = 'pre-wrap'; // Crucial for markdown line breaks
-    this.responseContentElement.style.wordWrap = 'break-word'; // Ensure long lines wrap
-    this.responseContentElement.style.fontFamily = 'inherit'; // Inherit from modal
+    this.responseContentElement.style.wordWrap = 'break-word';
+    this.responseContentElement.style.fontFamily = 'inherit';
     this.responseContentElement.style.fontSize = '13px';
-    this.responseContentElement.style.marginTop = '15px'; // Add space above response
-    this.responseContentElement.style.display = 'none'; // Hide initially
+    this.responseContentElement.style.marginTop = '15px';
+    this.responseContentElement.style.display = 'none';
 
     contentWrapper.appendChild(responseTitle);
     contentWrapper.appendChild(this.responseContentElement);
@@ -203,43 +191,50 @@ export class FeedbackViewer {
   }
 
   private positionViewer(): void {
-    if (!this.element || !this.currentTargetRect) return;
+    if (!this.element) return;
 
-    const viewerRect = this.element.getBoundingClientRect(); // Get actual dimensions
-    const targetRect = this.currentTargetRect;
-    const margin = 10; // Space between element and viewer
+    const viewerRect = this.element.getBoundingClientRect();
+    const margin = 10;
+
+    const cursorRect: DOMRect = this.initialCursorX !== null && this.initialCursorY !== null
+      ? new DOMRect(this.initialCursorX, this.initialCursorY, 0, 0)
+      : new DOMRect(window.innerWidth / 2 - viewerRect.width / 2, window.innerHeight / 2 - viewerRect.height / 2, 0, 0);
+
+    const targetRect = cursorRect;
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // Calculate available space
     const spaceTop = targetRect.top - margin;
-    const spaceBottom = vh - targetRect.bottom - margin;
+    const spaceBottom = vh - targetRect.top - margin;
     const spaceLeft = targetRect.left - margin;
-    const spaceRight = vw - targetRect.right - margin;
+    const spaceRight = vw - targetRect.left - margin;
 
-    let bestTop = targetRect.bottom + margin; // Default to below
-    let bestLeft = targetRect.left;
+    let bestTop = targetRect.top + margin;
+    let bestLeft = targetRect.left + margin;
 
-    // Determine best position based on available space and viewer size
-    // Prioritize bottom > right > top > left
-    if (spaceBottom >= viewerRect.height) {
-      bestTop = targetRect.bottom + margin;
-      bestLeft = targetRect.left;
-    } else if (spaceRight >= viewerRect.width) {
-      bestTop = targetRect.top;
-      bestLeft = targetRect.right + margin;
-    } else if (spaceTop >= viewerRect.height) {
-      bestTop = targetRect.top - viewerRect.height - margin;
-      bestLeft = targetRect.left;
-    } else if (spaceLeft >= viewerRect.width) {
-      bestTop = targetRect.top;
-      bestLeft = targetRect.left - viewerRect.width - margin;
+    if (spaceBottom >= viewerRect.height && spaceRight >= viewerRect.width) {
+        bestTop = targetRect.top + margin;
+        bestLeft = targetRect.left + margin;
+    } else if (spaceTop >= viewerRect.height && spaceRight >= viewerRect.width) {
+        bestTop = targetRect.top - viewerRect.height - margin;
+        bestLeft = targetRect.left + margin;
+    } else if (spaceBottom >= viewerRect.height && spaceLeft >= viewerRect.width) {
+        bestTop = targetRect.top + margin;
+        bestLeft = targetRect.left - viewerRect.width - margin;
+    } else if (spaceTop >= viewerRect.height && spaceLeft >= viewerRect.width) {
+        bestTop = targetRect.top - viewerRect.height - margin;
+        bestLeft = targetRect.left - viewerRect.width - margin;
+    } else {
+        if (spaceBottom >= viewerRect.height) {
+            bestTop = targetRect.top + margin;
+            bestLeft = targetRect.left - viewerRect.width / 2;
+        } else if (spaceTop >= viewerRect.height) {
+            bestTop = targetRect.top - viewerRect.height - margin;
+            bestLeft = targetRect.left - viewerRect.width / 2;
+        }
     }
-    // If none fit perfectly, default position (below) might already be set,
-    // but we might need to adjust if it overflows viewport.
 
-    // Boundary checks (ensure viewer stays within viewport)
     if (bestLeft < margin) {
       bestLeft = margin;
     } else if (bestLeft + viewerRect.width > vw - margin) {
@@ -252,25 +247,26 @@ export class FeedbackViewer {
       bestTop = vh - viewerRect.height - margin;
     }
 
-    // Apply styles
     this.element.style.top = `${bestTop}px`;
     this.element.style.left = `${bestLeft}px`;
-    this.element.style.transform = 'none'; // Ensure no transform interferes
+    this.element.style.transform = 'none';
   }
 
   public showInputArea(
     imageDataUrl: string | null,
     selectedHtml: string | null,
-    targetRect: DOMRect | null
+    targetRect: DOMRect | null,
+    clickX: number,
+    clickY: number
   ): void {
     if (!this.element) this.create();
     if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan) return;
 
     this.currentImageDataUrl = imageDataUrl;
     this.currentSelectedHtml = selectedHtml;
-    this.currentTargetRect = targetRect;
+    this.initialCursorX = clickX;
+    this.initialCursorY = clickY;
 
-    // Reset state
     this.promptTextarea.value = '';
     this.promptTextarea.disabled = false;
     this.submitButton.disabled = false;
@@ -278,7 +274,8 @@ export class FeedbackViewer {
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
     this.responseContentElement.style.display = 'none';
-    this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: none');
+    const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
+    if (responseTitle) responseTitle.style.display = 'none';
 
     this.promptTextarea.style.display = 'block';
     this.submitButton.style.display = 'flex';
@@ -292,7 +289,7 @@ export class FeedbackViewer {
   private handleTextareaKeydown = (e: KeyboardEvent): void => {
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     if (e.key === 'Enter' && (isMac ? e.metaKey : e.ctrlKey)) {
-      e.preventDefault(); // Prevent newline in textarea
+      e.preventDefault();
       this.handleSubmit();
     }
   };
@@ -311,7 +308,6 @@ export class FeedbackViewer {
     console.log('[Feedback] Image Data:', this.currentImageDataUrl ? 'Present' : 'Absent');
     console.log('[Feedback] Selected HTML:', this.currentSelectedHtml ? 'Present' : 'Absent');
 
-    // Disable inputs and show loading state
     this.promptTextarea.disabled = true;
     this.submitButton.disabled = true;
     this.submitButtonTextSpan.textContent = 'Sending...';
@@ -320,54 +316,40 @@ export class FeedbackViewer {
     this.responseContentElement.style.display = 'block';
     this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
 
-    // Call the service function with all three arguments
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
   };
 
-  // Called by ai-service when stream starts
   public prepareForStream(): void {
     if (this.responseContentElement) {
-      // Clear the "Sending..." message using innerHTML
       this.responseContentElement.innerHTML = '';
-      this.accumulatedResponseText = ''; // Ensure accumulator is clear
+      this.accumulatedResponseText = '';
     }
   }
 
   public updateResponse(chunk: string): void {
-    if (this.responseContentElement && this.element) { // Ensure element exists for scrolling
-      // Check if user is scrolled near the bottom BEFORE adding new content
-      const scrollThreshold = 10; // How many pixels away from bottom is "at the bottom"
+    if (this.responseContentElement && this.element) {
+      const scrollThreshold = 10;
       const isScrolledToBottom = this.element.scrollHeight - this.element.scrollTop - this.element.clientHeight < scrollThreshold;
 
-      // If it was showing the initial "Sending..." message, clear it first
-      // (prepareForStream should handle this, but double-check doesn't hurt)
       if (this.accumulatedResponseText === '' && this.responseContentElement.textContent?.startsWith('⏳')) {
         this.responseContentElement.innerHTML = '';
       }
-      // Append raw chunk to accumulator
       this.accumulatedResponseText += chunk;
-      // Parse the entire accumulated text and render as HTML
-      // Note: marked.parse() is synchronous in v4+
-      this.responseContentElement.innerHTML = marked.parse(this.accumulatedResponseText) as string;
+      const parsedHtml = marked.parse(this.accumulatedResponseText) as string;
+      this.responseContentElement.innerHTML = `<div class="streamed-content">${parsedHtml}</div>`;
 
-      // Scroll to bottom ONLY if the user was already near the bottom before the update
       if (isScrolledToBottom) {
-        // Use scrollTop to scroll to the new bottom
         this.element.scrollTop = this.element.scrollHeight;
       }
     }
   }
 
   public finalizeResponse(): void {
-    // Check the accumulated raw text for emptiness
     if (this.responseContentElement && this.accumulatedResponseText === '') {
-      // Use textContent for simple messages
       this.responseContentElement.textContent = 'Received empty response.';
     }
-    // No need to parse again here if updateResponse parses every time
     console.log("Feedback stream finalized in viewer.");
 
-    // Re-enable input fields and reset button text after successful completion
     if (this.promptTextarea) this.promptTextarea.disabled = false;
     if (this.submitButton && this.submitButtonTextSpan) {
       this.submitButton.disabled = false;
@@ -378,20 +360,16 @@ export class FeedbackViewer {
   public showError(error: Error | string): void {
     if (!this.element || !this.responseContentElement || !this.submitButtonTextSpan) return;
 
-    this.element.style.display = 'block'; // Ensure visible
+    this.element.style.display = 'block';
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Clear any loading message or previous content
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
 
-    // Show response title if hidden
     this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
 
-    // Render error message using innerHTML, escaping the dynamic part
     this.responseContentElement.innerHTML = `<div style="color:#ff6b6b; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
 
-    // Re-enable input fields on error
     if (this.promptTextarea) this.promptTextarea.disabled = false;
     if (this.submitButton) {
       this.submitButton.disabled = false;
@@ -402,19 +380,23 @@ export class FeedbackViewer {
   public hide(): void {
     if (this.element) {
       this.element.style.display = 'none';
-      // Clear sensitive data when hiding
       this.currentImageDataUrl = null;
       this.currentSelectedHtml = null;
-      this.currentTargetRect = null;
       if (this.promptTextarea) this.promptTextarea.value = '';
       if (this.responseContentElement) {
         this.responseContentElement.innerHTML = '';
       }
       this.accumulatedResponseText = '';
     }
+    this.initialCursorX = null;
+    this.initialCursorY = null;
   }
 
   public destroy(): void {
+    const styleElement = document.head.querySelector('style');
+    if (styleElement && styleElement.textContent?.includes('#feedback-response-content .streamed-content')) {
+        document.head.removeChild(styleElement);
+    }
     document.removeEventListener('mousedown', this.outsideClickHandler);
     this.promptTextarea?.removeEventListener('keydown', this.handleTextareaKeydown);
     if (this.element && this.element.parentNode) {
@@ -426,15 +408,7 @@ export class FeedbackViewer {
     this.responseContentElement = null;
     this.currentImageDataUrl = null;
     this.currentSelectedHtml = null;
-    this.currentTargetRect = null;
     this.submitButtonTextSpan = null;
-
-    // Note: We don't typically remove the injected styles on destroy,
-    // as they are lightweight and might be needed if the viewer is recreated.
-    // If you absolutely wanted to remove them, you could do:
-    // const styleElement = document.getElementById('feedback-viewer-styles');
-    // if (styleElement) styleElement.remove();
-    // feedbackViewerStylesInjected = false; // Allow re-injection
   }
 }
 
