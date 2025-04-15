@@ -10,7 +10,8 @@ class ScreenCapture {
     bounds: DOMRect | null,
     targetElement: Element | null,
     clickX: number,
-    clickY: number
+    clickY: number,
+    effectiveBackgroundColor: string | null
   ) => void) | null = null;
   private clickListener: ((event: MouseEvent) => Promise<void>) | null = null;
   private escapeListener: ((event: KeyboardEvent) => void) | null = null;
@@ -99,6 +100,12 @@ class ScreenCapture {
     const defaultBackgroundColor = '#ffffff'; // Default to white
 
     while (currentElement) {
+      // Ensure we don't check the overlay itself if it somehow gets selected
+      if (currentElement === this.overlay) {
+          currentElement = currentElement.parentElement;
+          continue;
+      }
+
       const computedStyle = window.getComputedStyle(currentElement);
       const bgColor = computedStyle.backgroundColor;
 
@@ -133,7 +140,8 @@ class ScreenCapture {
     bounds: DOMRect | null,
     targetElement: Element | null,
     clickX: number,
-    clickY: number
+    clickY: number,
+    effectiveBackgroundColor: string | null
   ) => void): void {
     console.log('[ScreenCapture] startCapture called.');
     if (this.isCapturing) {
@@ -191,6 +199,14 @@ class ScreenCapture {
 
         console.log('[ScreenCapture] Element selected:', selectedElement);
         console.log(`[ScreenCapture] Click coordinates: X=${clickX}, Y=${clickY}`);
+
+        // --- Get effective background color BEFORE removing highlight ---
+        let effectiveBackgroundColor: string | null = null;
+        if (selectedElement) {
+            effectiveBackgroundColor = this.getEffectiveBackgroundColor(selectedElement);
+            console.log('[ScreenCapture] Effective background color:', effectiveBackgroundColor);
+        }
+        // --- End get background color ---
 
         // --- Explicitly remove highlight styles BEFORE cleanup and outerHTML ---
         if (selectedElement) {
@@ -260,11 +276,11 @@ class ScreenCapture {
           console.log('[ScreenCapture] No valid element was highlighted for capture.');
         }
 
-        // Execute callback with results (including bounds, element, and coordinates)
+        // Execute callback with results (including bounds, element, coordinates, and background color)
         console.log('[ScreenCapture] Executing capture callback...');
         try {
-          // Pass all 6 arguments now
-          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds, selectedElement, clickX, clickY);
+          // Pass all 7 arguments now
+          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds, selectedElement, clickX, clickY, effectiveBackgroundColor);
         } catch (callbackError) {
           console.error('[ScreenCapture] Error executing the capture callback:', callbackError);
         }
@@ -280,8 +296,8 @@ class ScreenCapture {
       if (this.captureCallback) {
         // Call callback with nulls and default coords (0,0) on setup error
         try {
-            // Pass all 6 arguments now
-            this.captureCallback(null, null, null, null, 0, 0);
+            // Pass all 7 arguments now
+            this.captureCallback(null, null, null, null, 0, 0, null);
         } catch (callbackError) {
             console.error('[ScreenCapture] Error executing the capture callback during setup error:', callbackError);
         }
@@ -298,8 +314,8 @@ class ScreenCapture {
       // Call the callback with nulls and default coords (0,0) to indicate cancellation
       if (callback) {
         try {
-            // Pass all 6 arguments now
-            callback(null, null, null, null, 0, 0);
+            // Pass all 7 arguments now
+            callback(null, null, null, null, 0, 0, null);
         } catch (callbackError) {
             console.error('[ScreenCapture] Error executing the capture callback during cancellation:', callbackError);
         }

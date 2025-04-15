@@ -24,6 +24,7 @@ export class FeedbackViewer {
   private initialCursorY: number | null = null;
   private accumulatedResponseText: string = '';
   private fixWrapperCloseButtonListener: (() => void) | null = null;
+  private originalEffectiveBgColor: string | null = null;
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
@@ -94,17 +95,10 @@ export class FeedbackViewer {
 
       /* Style for the inline injected fix */
       .feedback-injected-fix {
-        position: absolute;
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
-        pointer-events: none;
-        z-index: 10;
+        position: relative;
         margin: 0;
         padding: 0;
         box-sizing: border-box;
-        max-width: 80vw;
-        max-height: 70vh;
-        overflow: auto;
         border: 1px dashed #007acc;
       }
 
@@ -126,10 +120,10 @@ export class FeedbackViewer {
         font-size: 12px;
         font-weight: bold;
         line-height: 1;
-        z-index: 11; /* Above the fix content */
-        pointer-events: auto; /* Make the button clickable */
+        z-index: 11;
+        pointer-events: auto;
         transition: background-color 0.2s, color 0.2s;
-        font-family: sans-serif; /* Ensure 'X' looks consistent */
+        font-family: sans-serif;
       }
 
       .feedback-fix-close-btn:hover {
@@ -340,7 +334,8 @@ export class FeedbackViewer {
     targetRect: DOMRect | null,
     targetElement: Element | null,
     clickX: number,
-    clickY: number
+    clickY: number,
+    effectiveBackgroundColor: string | null
   ): void {
     if (!this.element) this.create();
     if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview) return;
@@ -351,6 +346,7 @@ export class FeedbackViewer {
     this.originalElementRef = targetElement;
     this.initialCursorX = clickX;
     this.initialCursorY = clickY;
+    this.originalEffectiveBgColor = effectiveBackgroundColor;
 
     this.promptTextarea.value = '';
     this.promptTextarea.disabled = false;
@@ -572,13 +568,21 @@ export class FeedbackViewer {
           console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing. Proceeding with update.');
           contentChanged = true; // Though not strictly used later, indicates update happened
 
-          // --- Remove existing fix, its listeners, AND original element hover listeners ---
+          // --- Remove existing fix and restore original element display ---
           console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix before creating new wrapper.');
-          this.removeInjectedFix(); // This now also removes original element listeners
+          this.removeInjectedFix(); // This will now also restore original element display
 
-          // --- Create and style the new wrapper ---
+          // --- Create the new wrapper ---
           this.insertedFixWrapper = document.createElement('div');
           this.insertedFixWrapper.classList.add('feedback-injected-fix');
+
+          // --- Apply the original effective background color ---
+          if (this.originalEffectiveBgColor) {
+              this.insertedFixWrapper.style.backgroundColor = this.originalEffectiveBgColor;
+              console.log(`[FeedbackViewer DEBUG] Applied original background color to wrapper: ${this.originalEffectiveBgColor}`);
+          } else {
+              console.log('[FeedbackViewer DEBUG] No original background color stored, wrapper will use default/transparent.');
+          }
 
           // --- Append parsed content ---
           try {
@@ -602,87 +606,41 @@ export class FeedbackViewer {
           // Define the listener for the close button
           this.fixWrapperCloseButtonListener = () => {
               console.log('[FeedbackViewer DEBUG] Close button clicked on injected fix.');
-              this.removeInjectedFix(); // Call remove to clean up everything related to the fix
+              this.removeInjectedFix(); // Call remove to clean up everything
           };
           closeButton.addEventListener('click', this.fixWrapperCloseButtonListener);
           this.insertedFixWrapper.appendChild(closeButton);
           console.log('[FeedbackViewer DEBUG] Added close button to wrapper.');
 
-
-          // --- Calculate position (Top/Left only) ---
-          const rect = this.originalElementRef.getBoundingClientRect();
-          const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-          const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-          const topPos = rect.top + scrollTop;
-          const leftPos = rect.left + scrollLeft;
-
-          this.insertedFixWrapper.style.top = `${topPos}px`;
-          this.insertedFixWrapper.style.left = `${leftPos}px`;
-          console.log(`[FeedbackViewer DEBUG] Calculated position: top=${topPos}px, left=${leftPos}px`);
-
-          // --- Append wrapper to body ---
-          document.body.appendChild(this.insertedFixWrapper);
-          console.log('[FeedbackViewer DEBUG] Appended insertedFixWrapper to document.body.');
-
-          // --- Add hover listeners TO THE ORIGINAL ELEMENT ---
-          // Clear any potentially lingering listeners first (should be handled by removeInjectedFix, but belt-and-suspenders)
-          if (this.originalElementMouseEnterListener) {
-              this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
-          }
-          if (this.originalElementMouseLeaveListener) {
-              this.originalElementRef.removeEventListener('mouseleave', this.originalElementMouseLeaveListener);
-          }
-
-          this.originalElementMouseEnterListener = () => {
-            console.log('[FeedbackViewer DEBUG] MouseEnter on original element triggered.');
-            if (this.insertedFixWrapper) {
-              this.insertedFixWrapper.style.opacity = '1';
-              this.insertedFixWrapper.style.pointerEvents = 'auto'; // Allow interaction when visible
-              console.log('[FeedbackViewer DEBUG] Set wrapper opacity to 1 and pointerEvents to auto.');
+          // --- Hide original element and insert wrapper ---
+          if (this.originalElementRef && this.originalElementRef.parentNode) {
+            if (this.originalElementRef instanceof HTMLElement) {
+              this.originalElementRef.style.display = 'none'; // Hide original
+              console.log('[FeedbackViewer DEBUG] Hid original element.');
             } else {
-              console.log('[FeedbackViewer DEBUG] MouseEnter: Wrapper was null.');
+              console.warn('[FeedbackViewer DEBUG] Original element is not an HTMLElement, cannot set display style directly.');
             }
-          };
-          this.originalElementMouseLeaveListener = () => {
-            console.log('[FeedbackViewer DEBUG] MouseLeave on original element triggered.');
-            // Check if the mouse is moving TO the fix wrapper itself before hiding
-            // This requires the wrapper to have pointer-events: auto when visible
-            if (this.insertedFixWrapper && !this.insertedFixWrapper.matches(':hover')) {
-                this.insertedFixWrapper.style.opacity = '0';
-                this.insertedFixWrapper.style.pointerEvents = 'none'; // Disable interaction when hidden
-                console.log('[FeedbackViewer DEBUG] Set wrapper opacity to 0 and pointerEvents to none.');
-            } else if (this.insertedFixWrapper) {
-                console.log('[FeedbackViewer DEBUG] MouseLeave: Mouse moved onto the fix wrapper, keeping visible.');
-            } else {
-               console.log('[FeedbackViewer DEBUG] MouseLeave: Wrapper was null.');
+
+            // Insert the wrapper right after the original element
+            this.originalElementRef.parentNode.insertBefore(
+              this.insertedFixWrapper,
+              this.originalElementRef.nextSibling
+            );
+            console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element.');
+          } else {
+            console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
+            this.insertedFixWrapper = null; // Nullify wrapper if insertion failed
+            if(this.originalElementRef && this.originalElementRef instanceof HTMLElement) {
+               this.originalElementRef.style.display = '';
             }
-          };
-
-          this.originalElementRef.addEventListener('mouseenter', this.originalElementMouseEnterListener);
-          this.originalElementRef.addEventListener('mouseleave', this.originalElementMouseLeaveListener);
-          console.log('[FeedbackViewer DEBUG] Added hover listeners to original element.');
-
-          // Add a listener to the wrapper itself to handle mouse leaving IT
-          // This prevents flickering when moving from original element onto the fix
-          this.insertedFixWrapper.addEventListener('mouseleave', () => {
-              console.log('[FeedbackViewer DEBUG] MouseLeave from fix wrapper triggered.');
-              // Check if the mouse moved back to the original element
-              if (this.originalElementRef && !this.originalElementRef.matches(':hover')) {
-                  if (this.insertedFixWrapper) {
-                      this.insertedFixWrapper.style.opacity = '0';
-                      this.insertedFixWrapper.style.pointerEvents = 'none';
-                      console.log('[FeedbackViewer DEBUG] Set wrapper opacity to 0 and pointerEvents to none after leaving wrapper.');
-                  }
-              } else {
-                   console.log('[FeedbackViewer DEBUG] MouseLeave from fix wrapper: Mouse moved back onto original element.');
-              }
-          });
+            return; // Stop processing if insertion failed
+          }
 
       } else {
          console.log('[FeedbackViewer DEBUG] No update needed (wrapper exists and content matches).');
       }
     } else {
-      // If pattern not found, ensure fix is removed (including listeners)
+      // If pattern not found, ensure fix is removed (including restoring original element)
       console.log('[FeedbackViewer DEBUG] Regex did not match (neither specific nor generic). Ensuring fix is removed.');
       this.removeInjectedFix();
     }
@@ -691,25 +649,20 @@ export class FeedbackViewer {
 
   private removeInjectedFix(): void {
     console.log('[FeedbackViewer DEBUG] Entering removeInjectedFix.');
-    let listenersRemoved = false;
+    let elementRestored = false;
     let elementRemoved = false;
 
-    // Remove hover listeners from the original element
+    // Restore display of the original element BEFORE removing the wrapper
     if (this.originalElementRef) {
-      if (this.originalElementMouseEnterListener) {
-        this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
-        this.originalElementMouseEnterListener = null;
-        listenersRemoved = true;
-        console.log('[FeedbackViewer DEBUG] Removed mouseenter listener from original element.');
-      }
-      if (this.originalElementMouseLeaveListener) {
-        this.originalElementRef.removeEventListener('mouseleave', this.originalElementMouseLeaveListener);
-        this.originalElementMouseLeaveListener = null;
-        listenersRemoved = true;
-        console.log('[FeedbackViewer DEBUG] Removed mouseleave listener from original element.');
-      }
+        if (this.originalElementRef instanceof HTMLElement) {
+          this.originalElementRef.style.display = '';
+          elementRestored = true;
+          console.log('[FeedbackViewer DEBUG] Restored display for original HTMLElement.');
+        } else {
+           console.log('[FeedbackViewer DEBUG] originalElementRef is not an HTMLElement, cannot restore display style directly.');
+        }
     } else {
-       console.log('[FeedbackViewer DEBUG] originalElementRef is null, cannot remove hover listeners.');
+       console.log('[FeedbackViewer DEBUG] originalElementRef is null, cannot restore display.');
     }
 
     // Remove the wrapper element and its close button listener
@@ -725,7 +678,7 @@ export class FeedbackViewer {
        console.log('[FeedbackViewer DEBUG] insertedFixWrapper is null, nothing to remove from DOM.');
     }
 
-    if (listenersRemoved || elementRemoved) {
+    if (elementRestored || elementRemoved) {
         console.log('[FeedbackViewer DEBUG] removeInjectedFix completed actions.');
     } else {
         console.log('[FeedbackViewer DEBUG] removeInjectedFix completed, no actions needed.');
@@ -779,6 +732,7 @@ export class FeedbackViewer {
         this.responseContentElement.innerHTML = '';
       }
       this.accumulatedResponseText = '';
+      this.originalEffectiveBgColor = null;
       console.log('[FeedbackViewer] Main viewer panel hidden.');
     }
     if (this.renderedHtmlPreview) {
@@ -821,6 +775,7 @@ export class FeedbackViewer {
     this.originalElementMouseEnterListener = null;
     this.originalElementMouseLeaveListener = null;
     this.fixWrapperCloseButtonListener = null;
+    this.originalEffectiveBgColor = null;
     console.log('[FeedbackViewer] Instance destroyed.');
   }
 }

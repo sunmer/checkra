@@ -321,20 +321,37 @@ export class FloatingMenu {
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('[Feedback] Button clicked, starting screen capture...');
-      screenCapture.startCapture((imageDataUrl, selectedHtml, bounds, targetElement, clickX, clickY) => {
+      screenCapture.startCapture((
+        imageDataUrl,
+        selectedHtml,
+        bounds,
+        targetElement,
+        clickX,
+        clickY,
+        effectiveBackgroundColor
+      ) => {
         // Log: Callback executed
         console.log('[Feedback] Screen capture callback executed.');
         console.log('[Feedback] Image data URL received:', imageDataUrl ? imageDataUrl.substring(0, 50) + '...' : 'null');
         console.log('[Feedback] Selected HTML received:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
         console.log('[Feedback] Target Element received:', targetElement ? targetElement.tagName : 'null');
         console.log(`[Feedback] Click coordinates: X=${clickX}, Y=${clickY}`); // Log coordinates
+        console.log(`[Feedback] Effective Background Color: ${effectiveBackgroundColor}`); // Log background color
 
-        // Pass imageDataUrl, selectedHtml, bounds, targetElement, and coordinates to the viewer
+        // Pass imageDataUrl, selectedHtml, bounds, targetElement, coordinates, and background color to the viewer
         if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml || targetElement) {
             console.log('[Feedback] Data or valid click/element received. Showing input area...');
             try {
-                // Call showInputArea with all arguments, including targetElement, clickX and clickY
-                feedbackViewer.showInputArea(imageDataUrl, selectedHtml, bounds, targetElement, clickX, clickY);
+                // Call showInputArea with all arguments, including targetElement, clickX, clickY, and effectiveBackgroundColor
+                feedbackViewer.showInputArea(
+                    imageDataUrl,
+                    selectedHtml,
+                    bounds,
+                    targetElement,
+                    clickX,
+                    clickY,
+                    effectiveBackgroundColor
+                );
                 console.log('[Feedback] Feedback input area shown.');
             } catch (viewerError) {
                 console.error('[Feedback] Error showing feedback input area:', viewerError);
