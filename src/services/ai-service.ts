@@ -134,7 +134,6 @@ export const fetchFeedback = async (
     promptText: string,
     selectedHtml: string | null
 ): Promise<void> => {
-  // Note: feedbackViewer UI should be in 'sending' state before this is called
   try {
     // Construct body conditionally based on available data
     const requestBody: { image?: string | null; prompt: string; html?: string | null } = {
