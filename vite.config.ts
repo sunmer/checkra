@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
 
-// Define common configuration options, including 'define'
 const commonConfig = {
   define: {
     'process.env.BABEL_TYPES_8_BREAKING': JSON.stringify(true),
@@ -13,7 +12,6 @@ export default defineConfig(({ command, mode }) => {
   if (command === 'serve') {
     // Development mode - serve the demo directory
     return {
-      // Merge common config
       ...commonConfig,
       root: 'demo',
       server: {
@@ -27,30 +25,26 @@ export default defineConfig(({ command, mode }) => {
   } else {
     // Build mode - build the library
     return {
-      // Merge common config
       ...commonConfig,
       build: {
         lib: {
           entry: resolve(__dirname, 'src/index.ts'),
-          name: 'AdvancedFrontendLogger',
-          // Consider formats needed, e.g., ['es', 'cjs', 'umd']
-          formats: ['es', 'cjs', 'umd'],
-          fileName: (format) => `index.${format}.js`
+          name: 'Checkra',
+          // Build only UMD format for direct browser script tag usage
+          formats: ['umd'],
+          // Output a simple filename
+          fileName: (format) => `logger.js`
         },
         sourcemap: true,
         rollupOptions: {
             // Make sure dependencies like @babel/* are NOT externalized
             // unless you intend for the consumer to provide them.
             // By default, Vite bundles dependencies for library mode.
-            external: [
-                // e.g., 'react', 'vue' if they are peer dependencies
-            ],
+            external: [],
              output: {
                // Provide global variables to use in the UMD build
                // for externalized deps (if any)
-               globals: {
-                 // vue: 'Vue',
-               }
+               globals: {}
              }
         }
       },

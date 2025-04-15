@@ -97,10 +97,7 @@ export class FeedbackViewer {
       /* Style for the inline injected fix */
       .feedback-injected-fix {
         position: relative;
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        border: 1px dashed #007acc;
+        outline: 1px dashed #007acc;
       }
 
       /* Style for the close button inside the fix wrapper */
@@ -526,23 +523,49 @@ export class FeedbackViewer {
       const extractedHtml = match[1].trim();
       console.log('[FeedbackViewer DEBUG] Regex matched. Extracted HTML:', extractedHtml.substring(0, 200) + '...');
 
-      let contentChanged = false;
+      let newContentSourceElement: HTMLElement | null = null;
+      let newContentHtml = ''; // The innerHTML to compare against the wrapper
+      let attributesToCopy: { name: string; value: string }[] = []; // Store attributes if body is replaced
 
-      const parser = new DOMParser();
-      let parsedDoc;
-      let newContentHtml = '';
       try {
-        parsedDoc = parser.parseFromString(extractedHtml, 'text/html');
-        const tempContentContainer = document.createElement('div');
-        while (parsedDoc.body.firstChild) {
-            tempContentContainer.appendChild(parsedDoc.body.firstChild);
+        const parser = new DOMParser();
+        const parsedDoc = parser.parseFromString(extractedHtml, 'text/html');
+
+        if (parsedDoc.body && extractedHtml.toLowerCase().startsWith('<body')) {
+            console.log('[FeedbackViewer DEBUG] Detected <BODY> tag as root. Replacing with <DIV>.');
+            const replacementDiv = document.createElement('div');
+
+            // Store attributes from <body> to potentially copy later (excluding style)
+            attributesToCopy = Array.from(parsedDoc.body.attributes)
+                .filter(attr => attr.name.toLowerCase() !== 'style');
+            console.log(`[FeedbackViewer DEBUG] Stored ${attributesToCopy.length} attributes from suggested <body> to copy to wrapper.`);
+
+            while (parsedDoc.body.firstChild) {
+                replacementDiv.appendChild(parsedDoc.body.firstChild);
+            }
+            newContentSourceElement = replacementDiv;
+            newContentHtml = replacementDiv.innerHTML;
+            console.log('[FeedbackViewer DEBUG] Created replacement DIV. innerHTML:', newContentHtml.substring(0, 200) + '...');
+        } else {
+            const tempContentContainer = document.createElement('div');
+            while (parsedDoc.body.firstChild) {
+                tempContentContainer.appendChild(parsedDoc.body.firstChild);
+            }
+            newContentSourceElement = tempContentContainer;
+            newContentHtml = tempContentContainer.innerHTML;
+            console.log('[FeedbackViewer DEBUG] Using parsed content directly. innerHTML:', newContentHtml.substring(0, 200) + '...');
         }
-        newContentHtml = tempContentContainer.innerHTML;
-        console.log('[FeedbackViewer DEBUG] Parsed HTML successfully. Parsed content innerHTML:', newContentHtml.substring(0, 200) + '...');
+
       } catch (parseError) {
-        console.error('[FeedbackViewer DEBUG] Error parsing extracted HTML:', parseError);
+        console.error('[FeedbackViewer DEBUG] Error processing extracted HTML:', parseError);
         this.removeInjectedFix();
         return;
+      }
+
+      if (!newContentSourceElement) {
+          console.error('[FeedbackViewer DEBUG] Failed to create content source element.');
+          this.removeInjectedFix();
+          return;
       }
 
       const needsUpdate = !this.insertedFixWrapper || this.insertedFixWrapper.innerHTML !== newContentHtml;
@@ -552,32 +575,78 @@ export class FeedbackViewer {
       }
 
       if (needsUpdate) {
-          console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing. Proceeding with update.');
+          const isOriginalElementBody = this.originalElementRef?.tagName === 'BODY';
+          const suggestedHtmlRepresentsBody = extractedHtml.toLowerCase().trim().startsWith('<body');
+
+          if (isOriginalElementBody && !suggestedHtmlRepresentsBody) {
+              console.warn('[FeedbackViewer DEBUG] Guardrail triggered: Attempted to replace the BODY element with HTML that does not start with a <body> tag. Aborting injection to prevent page breakage.', { extractedHtml });
+              this.removeInjectedFix();
+              return;
+          }
+
+          console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing (and guardrail passed). Proceeding with update.');
           this.removeInjectedFix();
 
           this.insertedFixWrapper = document.createElement('div');
           this.insertedFixWrapper.classList.add('feedback-injected-fix');
           this.insertedFixWrapper.style.display = '';
 
+          // --- START STYLE TRANSFER ---
+          if (isOriginalElementBody && this.originalElementRef instanceof HTMLElement) {
+              console.log('[FeedbackViewer DEBUG] Original element is BODY, attempting to transfer computed styles.');
+              try {
+                  const computedStyles = window.getComputedStyle(this.originalElementRef);
+                  const stylesToTransfer = [
+                      'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+                      'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+                      'maxWidth', 'boxSizing',
+                      'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'color',
+                      'backgroundColor' // Get computed background first
+                  ];
+
+                  stylesToTransfer.forEach(prop => {
+                      if (computedStyles[prop as keyof CSSStyleDeclaration]) {
+                          // Type assertion needed because prop is a string index
+                          (this.insertedFixWrapper!.style as any)[prop] = computedStyles[prop as keyof CSSStyleDeclaration];
+                          // console.log(`[FeedbackViewer DEBUG] Transferred style ${prop}: ${computedStyles[prop as keyof CSSStyleDeclaration]}`);
+                      }
+                  });
+                  console.log('[FeedbackViewer DEBUG] Finished transferring computed styles.');
+              } catch (styleError) {
+                  console.error('[FeedbackViewer DEBUG] Error getting or applying computed styles:', styleError);
+              }
+          }
+          // --- END STYLE TRANSFER ---
+
+          // Apply original effective background color (might override computed backgroundColor if different)
           if (this.originalEffectiveBgColor) {
               this.insertedFixWrapper.style.backgroundColor = this.originalEffectiveBgColor;
-              console.log(`[FeedbackViewer DEBUG] Applied original background color to wrapper: ${this.originalEffectiveBgColor}`);
-          } else {
-              console.log('[FeedbackViewer DEBUG] No original background color stored, wrapper will use default/transparent.');
+              console.log(`[FeedbackViewer DEBUG] Applied original effective background color to wrapper: ${this.originalEffectiveBgColor}`);
+          } else if (!isOriginalElementBody || !this.insertedFixWrapper.style.backgroundColor) {
+              // Only log if we didn't already apply a computed background or effective background
+              console.log('[FeedbackViewer DEBUG] No original background color stored or computed, wrapper will use default/inherited.');
+          }
+
+          // Copy attributes (like class) from the suggested <body> tag if applicable
+          if (attributesToCopy.length > 0) {
+              attributesToCopy.forEach(attr => {
+                  this.insertedFixWrapper!.setAttribute(attr.name, attr.value);
+                  console.log(`[FeedbackViewer DEBUG] Copied attribute to wrapper: ${attr.name}="${attr.value}"`);
+              });
           }
 
           try {
-            const freshParsedDoc = parser.parseFromString(extractedHtml, 'text/html');
-            while (freshParsedDoc.body.firstChild) {
-                this.insertedFixWrapper.appendChild(freshParsedDoc.body.firstChild);
+            while (newContentSourceElement.firstChild) {
+                this.insertedFixWrapper.appendChild(newContentSourceElement.firstChild);
             }
-            console.log('[FeedbackViewer DEBUG] Appended parsed content to wrapper.');
+            console.log('[FeedbackViewer DEBUG] Appended processed content to wrapper.');
           } catch (appendError) {
-             console.error('[FeedbackViewer DEBUG] Error appending parsed content to wrapper:', appendError);
+             console.error('[FeedbackViewer DEBUG] Error appending processed content to wrapper:', appendError);
              this.insertedFixWrapper = null;
              return;
           }
 
+          // Add close button
           const closeButton = document.createElement('span');
           closeButton.classList.add('feedback-fix-close-btn');
           closeButton.textContent = '✕';
@@ -591,6 +660,7 @@ export class FeedbackViewer {
           this.insertedFixWrapper.appendChild(closeButton);
           console.log('[FeedbackViewer DEBUG] Added close button to wrapper.');
 
+          // Setup hover listeners for showing/hiding the fix
           this.fixWrapperMouseLeaveListener = () => {
               console.log('[FeedbackViewer DEBUG] Mouse left injected fix wrapper.');
               if (this.insertedFixWrapper) {
@@ -598,6 +668,7 @@ export class FeedbackViewer {
                   console.log('[FeedbackViewer DEBUG] Hid injected fix wrapper.');
               }
               if (this.originalElementRef instanceof HTMLElement) {
+                  // Restore original element's display when mouse leaves the fix
                   this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
                   console.log(`[FeedbackViewer DEBUG] Restored original element display to '${this.originalElementDisplayStyle || ''}'.`);
               }
@@ -606,6 +677,7 @@ export class FeedbackViewer {
           this.originalElementMouseEnterListener = () => {
                console.log('[FeedbackViewer DEBUG] Mouse entered original element area.');
                if (this.insertedFixWrapper && this.originalElementRef instanceof HTMLElement) {
+                   // Show the fix and hide the original element when hovering the original area
                    this.insertedFixWrapper.style.display = '';
                    this.originalElementRef.style.display = 'none';
                    console.log('[FeedbackViewer DEBUG] Showed fix wrapper, hid original element.');
@@ -620,16 +692,19 @@ export class FeedbackViewer {
               console.warn('[FeedbackViewer DEBUG] Original element is not HTMLElement, cannot add mouseenter listener.');
           }
 
+          // Insert the fix wrapper into the DOM
           if (this.originalElementRef && this.originalElementRef.parentNode) {
             if (this.originalElementRef instanceof HTMLElement) {
+              // Store original display style and hide the original element
               this.originalElementDisplayStyle = this.originalElementRef.style.display;
               this.originalElementRef.style.display = 'none';
               console.log(`[FeedbackViewer DEBUG] Stored original display ('${this.originalElementDisplayStyle}') and hid original element.`);
             } else {
-              this.originalElementDisplayStyle = null;
+              this.originalElementDisplayStyle = null; // Cannot store display for non-HTMLElements
               console.warn('[FeedbackViewer DEBUG] Original element is not an HTMLElement, cannot store/set display style directly.');
             }
 
+            // Insert the new wrapper right after the original element
             this.originalElementRef.parentNode.insertBefore(
               this.insertedFixWrapper,
               this.originalElementRef.nextSibling
@@ -637,16 +712,17 @@ export class FeedbackViewer {
             console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element.');
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
-            this.removeInjectedFix();
+            this.removeInjectedFix(); // Clean up if insertion fails
             return;
           }
+
 
       } else {
          console.log('[FeedbackViewer DEBUG] No update needed (wrapper exists and content matches).');
       }
     } else {
       console.log('[FeedbackViewer DEBUG] Regex did not match. Ensuring fix is removed.');
-      this.removeInjectedFix();
+      this.removeInjectedFix(); // Remove any existing fix if the pattern is no longer found
     }
     console.log('[FeedbackViewer DEBUG] Exiting tryInjectHtmlFix.');
   }

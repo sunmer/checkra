@@ -16,7 +16,6 @@ export const errorSourceMap = new Map<string, ErrorInfo>();
 export class FloatingMenu {
   private floatingMenuDiv: HTMLElement | null = null;
   private errorList: HTMLUListElement | null = null;
-  private errorCountBadge: HTMLSpanElement | null = null;
   private settingsButton: HTMLSpanElement | null = null;
   private settingsView: HTMLDivElement | null = null;
   private settingsStatus: HTMLParagraphElement | null = null;
@@ -27,7 +26,6 @@ export class FloatingMenu {
   private noErrorsMessage: HTMLElement | null = null;
   private feedbackButton: HTMLSpanElement | null = null;
   private bottomContainer: HTMLDivElement | null = null;
-  private errorButton: HTMLDivElement | null = null;
   private collapseTimeoutId: number | null = null;
   private settingsOutsideClickHandler: ((event: MouseEvent) => void) | null = null;
 
@@ -76,100 +74,6 @@ export class FloatingMenu {
     this.bottomContainer.style.gap = '5px'; // Space between items
     this.bottomContainer.style.zIndex = '999'; // Below the main log/settings
     this.bottomContainer.style.display = 'none'; // Initially hidden
-
-    // Create collapsed error badge (red circle)
-    this.errorButton = document.createElement('div');
-    this.errorButton.style.width = '30px';
-    this.errorButton.style.height = '30px';
-    this.errorButton.style.borderRadius = '50%';
-    // Slightly lighter red and less transparent
-    this.errorButton.style.boxShadow = 'rgba(0, 0, 0, 0.5) 0px -1px 3px';
-    this.errorButton.style.backgroundColor = 'rgba(255, 15, 61, 0.85)';
-    this.errorButton.style.border = '2px solid rgb(52 63 84 / 80%)';
-    this.errorButton.style.position = 'relative'; // For positioning the count badge
-    this.errorButton.style.cursor = 'pointer';
-    this.errorButton.style.display = 'flex'; // Center content
-    this.errorButton.style.alignItems = 'center'; // Center content
-    this.errorButton.style.justifyContent = 'center'; // Center content
-    // Add a subtle shadow to make it look like a button
-    this.errorButton.title = 'Show Errors';
-    this.errorButton.id = 'show-error-viewer';
-
-    this.errorButton.addEventListener('click', () => {
-      // Clear collapse timeout if it happens to be running (unlikely but safe)
-      if (this.collapseTimeoutId) {
-        clearTimeout(this.collapseTimeoutId);
-        this.collapseTimeoutId = null;
-      }
-      // Only expand if not already expanded
-      if (!this.isExpanded) {
-        this.isExpanded = true;
-        this.updateStyle();
-      }
-      // Note: We don't toggle here. Collapse happens on mouseleave from the expanded menu.
-    });
-
-    // Create error count badge INSIDE the collapsed badge
-    this.errorCountBadge = document.createElement('span');
-    this.errorCountBadge.textContent = '0';
-    
-    this.errorCountBadge.style.color = 'white';
-    this.errorCountBadge.style.fontWeight = 'bold';
-    this.errorCountBadge.style.fontSize = '12px'; // Match old collapsed style
-    this.errorCountBadge.style.userSelect = 'none';
-
-    if (this.errorButton) {
-      this.errorButton.appendChild(this.errorCountBadge);
-      this.bottomContainer.appendChild(this.errorButton); // Add badge to container
-    }
-
-    // Modify mouse leave listener for the expanded container
-    if (this.floatingMenuDiv) {
-      // Add mouseenter listener to clear timeout if user returns
-      this.floatingMenuDiv.addEventListener('mouseenter', () => {
-        if (this.collapseTimeoutId) {
-          console.log('[FloatingMenu] Mouse re-entered expanded menu, clearing collapse timer.');
-          clearTimeout(this.collapseTimeoutId);
-          this.collapseTimeoutId = null;
-        }
-      });
-
-      this.floatingMenuDiv.addEventListener('mouseleave', (_e: MouseEvent) => {
-        // Clear any existing timeout first in case of rapid movements
-        if (this.collapseTimeoutId) {
-          clearTimeout(this.collapseTimeoutId);
-        }
-
-        // Don't collapse if settings view is open
-        if (this.settingsView?.style.display !== 'none') {
-          console.log('[FloatingMenu] Mouse left, but settings view is open. Not starting collapse timer.');
-          return;
-        }
-
-        // Start collapse timer (1 second delay)
-        console.log('[FloatingMenu] Mouse left expanded menu, starting 1s collapse timer.');
-        this.collapseTimeoutId = window.setTimeout(() => {
-          // Check again if settings opened during the timeout, if it's still expanded,
-          // and if the mouse is NOT currently over the trigger area OR the expanded menu itself.
-          const isHoveringTrigger = this.bottomContainer?.matches(':hover');
-          const isHoveringExpandedMenu = this.floatingMenuDiv?.matches(':hover'); // Check if mouse returned to expanded menu
-
-          if (
-            this.settingsView?.style.display === 'none' &&
-            this.isExpanded &&
-            !isHoveringTrigger &&
-            !isHoveringExpandedMenu // Don't collapse if mouse is back over the expanded menu
-          ) {
-            console.log('[FloatingMenu] Collapse timer finished, collapsing.');
-            this.isExpanded = false;
-            this.updateStyle();
-          } else {
-            console.log('[FloatingMenu] Collapse timer finished, but conditions not met (settings open, mouse back over trigger/menu, or no longer expanded). Aborting collapse.');
-          }
-          this.collapseTimeoutId = null; // Clear the ID after execution/check
-        }, 500);
-      });
-    }
 
     // Create settings button (⚙)
     this.settingsButton = document.createElement('span');
@@ -561,11 +465,6 @@ export class FloatingMenu {
       // Show the bottom container
       this.bottomContainer.style.display = 'flex';
 
-      // Update error count in the collapsed badge
-      if (this.errorCountBadge) {
-        this.errorCountBadge.textContent = this.errorCount.toString();
-      }
-
     }
 
   }
@@ -698,10 +597,6 @@ export class FloatingMenu {
       this.errorList.appendChild(li);
     }
 
-    // Update error count badge (inside the collapsed badge)
-    if (this.errorCountBadge) {
-      this.errorCountBadge.textContent = this.errorCount.toString();
-    }
     // Update style in case this is the first error and log was collapsed
     this.updateStyle();
   }
@@ -742,7 +637,6 @@ export class FloatingMenu {
     if (this.bottomContainer) this.bottomContainer.replaceWith(this.bottomContainer.cloneNode(true)); // Still clone container itself if needed
     if (this.floatingMenuDiv) this.floatingMenuDiv.replaceWith(this.floatingMenuDiv.cloneNode(true)); // Clones to remove mouseenter/mouseleave
     if (this.feedbackButton) this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true)); // Clones to remove click/mouseenter
-    if (this.errorButton) this.errorButton.replaceWith(this.errorButton.cloneNode(true)); // Clones to remove mouseenter
 
     // Remove tooltip event listeners from all error message spans
     if (this.errorList) {
@@ -771,14 +665,12 @@ export class FloatingMenu {
     // Nullify references
     this.floatingMenuDiv = null;
     this.errorList = null;
-    this.errorCountBadge = null;
     this.settingsButton = null;
     this.settingsView = null;
     this.settingsStatus = null;
     this.noErrorsMessage = null;
     this.feedbackButton = null;
     this.bottomContainer = null;
-    this.errorButton = null;
     this.originalStyle = {};
     errorSourceMap.clear();
     this.collapseTimeoutId = null;

@@ -1,7 +1,7 @@
 {
-  "name": "console.ai",
+  "name": "checkra.io",
   "version": "1.0.0",
-  "description": "Console logging on steroids - Enhanced frontend error tracking and debugging",
+  "description": "Checkra - Get AI-based recommendations for your website",
   "type": "module",
   "main": "./dist/index.cjs.js",
   "module": "./dist/index.es.js",
