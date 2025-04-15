@@ -8,6 +8,7 @@ class ScreenCapture {
     imageDataUrl: string | null,
     selectedHtml: string | null,
     bounds: DOMRect | null,
+    targetElement: Element | null,
     clickX: number,
     clickY: number
   ) => void) | null = null;
@@ -128,6 +129,7 @@ class ScreenCapture {
     imageDataUrl: string | null,
     selectedHtml: string | null,
     bounds: DOMRect | null,
+    targetElement: Element | null,
     clickX: number,
     clickY: number
   ) => void): void {
@@ -243,11 +245,11 @@ class ScreenCapture {
           console.log('[ScreenCapture] No valid element was highlighted for capture.');
         }
 
-        // Execute callback with results (including bounds and coordinates)
+        // Execute callback with results (including bounds, element, and coordinates)
         console.log('[ScreenCapture] Executing capture callback...');
         try {
-          // Pass all 5 arguments
-          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds, clickX, clickY);
+          // Pass all 6 arguments now
+          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds, selectedElement, clickX, clickY);
         } catch (callbackError) {
           console.error('[ScreenCapture] Error executing the capture callback:', callbackError);
         }
@@ -263,8 +265,8 @@ class ScreenCapture {
       if (this.captureCallback) {
         // Call callback with nulls and default coords (0,0) on setup error
         try {
-            // Pass all 5 arguments
-            this.captureCallback(null, null, null, 0, 0);
+            // Pass all 6 arguments now
+            this.captureCallback(null, null, null, null, 0, 0);
         } catch (callbackError) {
             console.error('[ScreenCapture] Error executing the capture callback during setup error:', callbackError);
         }
@@ -281,8 +283,8 @@ class ScreenCapture {
       // Call the callback with nulls and default coords (0,0) to indicate cancellation
       if (callback) {
         try {
-            // Pass all 5 arguments
-            callback(null, null, null, 0, 0);
+            // Pass all 6 arguments now
+            callback(null, null, null, null, 0, 0);
         } catch (callbackError) {
             console.error('[ScreenCapture] Error executing the capture callback during cancellation:', callbackError);
         }

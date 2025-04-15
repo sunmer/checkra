@@ -321,23 +321,20 @@ export class FloatingMenu {
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('[Feedback] Button clicked, starting screen capture...');
-      screenCapture.startCapture((imageDataUrl, selectedHtml, bounds, clickX, clickY) => {
+      screenCapture.startCapture((imageDataUrl, selectedHtml, bounds, targetElement, clickX, clickY) => {
         // Log: Callback executed
         console.log('[Feedback] Screen capture callback executed.');
         console.log('[Feedback] Image data URL received:', imageDataUrl ? imageDataUrl.substring(0, 50) + '...' : 'null');
         console.log('[Feedback] Selected HTML received:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
+        console.log('[Feedback] Target Element received:', targetElement ? targetElement.tagName : 'null');
         console.log(`[Feedback] Click coordinates: X=${clickX}, Y=${clickY}`); // Log coordinates
 
-        // Pass imageDataUrl, selectedHtml, bounds, and coordinates to the viewer
-        // Check if capture was successful (at least coords should exist unless cancelled very early)
-        // Allow showing even if imageData/html is null, as long as capture wasn't fully cancelled (coords are not 0,0 maybe?)
-        // Or simply proceed if *any* data was received or coords are valid.
-        // Let's proceed if the capture wasn't cancelled (coords are not 0,0) OR if we got image/html
-        if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml) {
-            console.log('[Feedback] Data or valid click received. Showing input area...');
+        // Pass imageDataUrl, selectedHtml, bounds, targetElement, and coordinates to the viewer
+        if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml || targetElement) {
+            console.log('[Feedback] Data or valid click/element received. Showing input area...');
             try {
-                // Call showInputArea with all arguments, including clickX and clickY
-                feedbackViewer.showInputArea(imageDataUrl, selectedHtml, bounds, clickX, clickY);
+                // Call showInputArea with all arguments, including targetElement, clickX and clickY
+                feedbackViewer.showInputArea(imageDataUrl, selectedHtml, bounds, targetElement, clickX, clickY);
                 console.log('[Feedback] Feedback input area shown.');
             } catch (viewerError) {
                 console.error('[Feedback] Error showing feedback input area:', viewerError);
