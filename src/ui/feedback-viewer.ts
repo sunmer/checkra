@@ -18,11 +18,8 @@ export class FeedbackViewer {
   private originalElementBounds: DOMRect | null = null;
   private originalElementRef: Element | null = null;
   private insertedFixWrapper: HTMLDivElement | null = null;
-  private initialCursorX: number | null = null;
-  private initialCursorY: number | null = null;
   private accumulatedResponseText: string = '';
   private fixWrapperCloseButtonListener: (() => void) | null = null;
-  private originalEffectiveBgColor: string | null = null;
   private originalElementDisplayStyle: string | null = null;
   private fixWrapperMouseLeaveListener: (() => void) | null = null;
   private originalElementMouseEnterListener: (() => void) | null = null;
@@ -404,10 +401,7 @@ export class FeedbackViewer {
     imageDataUrl: string | null,
     selectedHtml: string | null,
     targetRect: DOMRect | null,
-    targetElement: Element | null,
-    clickX: number,
-    clickY: number,
-    effectiveBackgroundColor: string | null
+    targetElement: Element | null
   ): void {
     if (!this.element) this.create();
     if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.previewButton) return;
@@ -416,9 +410,6 @@ export class FeedbackViewer {
     this.currentSelectedHtml = selectedHtml;
     this.originalElementBounds = targetRect;
     this.originalElementRef = targetElement;
-    this.initialCursorX = clickX;
-    this.initialCursorY = clickY;
-    this.originalEffectiveBgColor = effectiveBackgroundColor;
 
     this.promptTextarea.value = '';
     this.promptTextarea.disabled = false;
@@ -880,7 +871,6 @@ export class FeedbackViewer {
         if (responseHeader) responseHeader.style.display = 'none'; // Hide header
       }
       this.accumulatedResponseText = '';
-      this.originalEffectiveBgColor = null;
 
       console.log('[FeedbackViewer] Main viewer panel hidden.');
     }
@@ -922,7 +912,6 @@ export class FeedbackViewer {
     this.originalElementRef = null;
     this.insertedFixWrapper = null;
     this.fixWrapperCloseButtonListener = null;
-    this.originalEffectiveBgColor = null;
     this.originalElementDisplayStyle = null;
     this.fixWrapperMouseLeaveListener = null;
     this.originalElementMouseEnterListener = null;

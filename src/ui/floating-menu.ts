@@ -89,10 +89,7 @@ export class FloatingMenu {
                     imageDataUrl,
                     selectedHtml,
                     bounds,
-                    targetElement,
-                    clickX,
-                    clickY,
-                    effectiveBackgroundColor
+                    targetElement
                 );
                 console.log('[Feedback] Feedback input area shown.');
             } catch (viewerError) {

@@ -1,15 +1,15 @@
 {
-  "name": "checkra.io",
+  "name": "checkra",
   "version": "1.0.0",
-  "description": "Checkra - Improve your website collaboratively",
+  "description": "Checkra - Collaboratively improve any website with AI",
   "type": "module",
-  "main": "./dist/index.cjs.js",
-  "module": "./dist/index.es.js",
+  "main": "./dist/checkra.umd.cjs",
+  "module": "./dist/checkra.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.es.js",
-      "require": "./dist/index.cjs.js",
+      "import": "./dist/checkra.js",
+      "require": "./dist/checkra.umd.cjs",
       "types": "./dist/index.d.ts"
     }
   },
@@ -27,12 +27,14 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "ai-tools",
-    "inspector",
+    "feedback",
     "ai",
+    "website improvement",
+    "collaboration",
+    "frontend",
     "developer-tools"
   ],
-  "author": "",
+  "author": "Your Name or Company <your-email@example.com>",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^18.19.86",

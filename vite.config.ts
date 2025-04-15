@@ -20,28 +20,27 @@ export default defineConfig(({ command, mode }) => {
         lib: {
           entry: resolve(__dirname, 'src/index.ts'),
           name: 'Checkra',
-          // Build only UMD format for direct browser script tag usage
-          formats: ['umd'],
-          // Output a simple filename
-          fileName: (format) => `logger.js`
+          // Build ESM and UMD formats
+          formats: ['es', 'umd'],
+          // Adjust filenames to match package.json entries
+          fileName: (format) => `checkra.${format === 'umd' ? 'umd.cjs' : 'js'}`
         },
         sourcemap: true,
         rollupOptions: {
-            // Make sure dependencies like @babel/* are NOT externalized
-            // unless you intend for the consumer to provide them.
+            // Ensure external dependencies are handled correctly if any
             // By default, Vite bundles dependencies for library mode.
-            external: [],
+            external: [], // Add peer dependencies here if needed (e.g., 'react' if it were a React lib)
              output: {
                // Provide global variables to use in the UMD build
                // for externalized deps (if any)
-               globals: {}
+               globals: {} // e.g., react: 'React'
              }
         }
       },
       plugins: [
         dts({
-          include: ['src/**/*.ts'],
-          rollupTypes: true
+          insertTypesEntry: true, // Creates a single entry point type file (e.g., dist/index.d.ts)
+          rollupTypes: true // Roll up types into a single file
         })
       ],
     };

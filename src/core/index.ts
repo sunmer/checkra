@@ -17,6 +17,7 @@ export function initCheckra(options?: CheckraOptions): void {
     style: options?.style ?? {} // Keep style option for future use
   };
 
+  // @ts-ignore
   let feedbackMenu: FloatingMenu | null = null;
 
   // Only initialize UI if isVisible is true
