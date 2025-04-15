@@ -1,7 +1,7 @@
 {
   "name": "checkra.io",
   "version": "1.0.0",
-  "description": "Checkra - Get AI-based recommendations for your website",
+  "description": "Checkra - Improve your website collaboratively",
   "type": "module",
   "main": "./dist/index.cjs.js",
   "module": "./dist/index.es.js",
