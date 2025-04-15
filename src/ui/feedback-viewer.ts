@@ -343,6 +343,7 @@ export class FeedbackViewer {
     this.renderedHtmlPreview.style.opacity = '0';
     this.renderedHtmlPreview.style.pointerEvents = 'none';
 
+    console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from showInputArea (start).');
     this.removeInjectedFix();
 
     this.promptTextarea.style.display = 'block';
@@ -491,6 +492,7 @@ export class FeedbackViewer {
 
     if (!this.originalElementRef || !document.body.contains(this.originalElementRef)) {
         console.log('[FeedbackViewer DEBUG] tryInjectHtmlFix aborted: originalElementRef invalid or not in DOM.');
+        console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from tryInjectHtmlFix (invalid originalElementRef).');
         this.removeInjectedFix();
         return;
     }
@@ -552,15 +554,8 @@ export class FeedbackViewer {
       const needsUpdate = !this.insertedFixWrapper || this.insertedFixWrapper.innerHTML !== newContentHtml;
       
       if (needsUpdate) {
-          const isOriginalElementBody = this.originalElementRef?.tagName === 'BODY';
-          const suggestedHtmlRepresentsBody = extractedHtml.toLowerCase().trim().startsWith('<body');
-
-          if (isOriginalElementBody && !suggestedHtmlRepresentsBody) {
-              console.warn('[FeedbackViewer DEBUG] Guardrail triggered: Attempted to replace the BODY element with HTML that does not start with a <body> tag.');
-              return;
-          }
-
           console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing. Proceeding with update.');
+          console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from tryInjectHtmlFix (before injecting new fix).');
           this.removeInjectedFix();
 
           this.insertedFixWrapper = document.createElement('div');
@@ -568,28 +563,8 @@ export class FeedbackViewer {
           
           this.insertedFixWrapper.style.display = '';
 
-          if (isOriginalElementBody && this.originalElementRef instanceof HTMLElement) {
-              console.log('[FeedbackViewer DEBUG] Original element is BODY, attempting to transfer computed styles.');
-              try {
-                  const computedStyles = window.getComputedStyle(this.originalElementRef);
-                  const stylesToTransfer = [
-                      'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-                      'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
-                      'maxWidth', 'boxSizing',
-                      'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'color',
-                      'backgroundColor'
-                  ];
-
-                  stylesToTransfer.forEach(prop => {
-                      if (computedStyles[prop as keyof CSSStyleDeclaration]) {
-                          (this.insertedFixWrapper!.style as any)[prop] = computedStyles[prop as keyof CSSStyleDeclaration];
-                      }
-                  });
-                  console.log('[FeedbackViewer DEBUG] Finished transferring computed styles.');
-              } catch (styleError) {
-                  console.error('[FeedbackViewer DEBUG] Error getting or applying computed styles:', styleError);
-              }
-          }
+          // Determine if the original element was the body
+          const isOriginalElementBody = this.originalElementRef === document.body;
 
           if (this.originalEffectiveBgColor) {
               this.insertedFixWrapper.style.backgroundColor = this.originalEffectiveBgColor;
@@ -681,35 +656,48 @@ export class FeedbackViewer {
       }
     } else {
       console.log('[FeedbackViewer DEBUG] Regex did not match. Ensuring fix is removed.');
+      console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from tryInjectHtmlFix (regex mismatch).');
       this.removeInjectedFix();
     }
     console.log('[FeedbackViewer DEBUG] Exiting tryInjectHtmlFix.');
   }
 
   private removeInjectedFix(): void {
-    console.log('[FeedbackViewer DEBUG] Entering removeInjectedFix.');
-    
+    console.log('[FeedbackViewer DEBUG] >>> Entering removeInjectedFix <<<');
+    // Log the call stack to see who called this function
+    console.trace('[FeedbackViewer DEBUG] removeInjectedFix call stack:');
+
     if (this.insertedFixWrapper && this.fixWrapperMouseLeaveListener) {
+        console.log('[FeedbackViewer DEBUG] Removing mouseleave listener from fix wrapper.');
         this.insertedFixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
         this.fixWrapperMouseLeaveListener = null;
     }
-    
+
     if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
+        console.log('[FeedbackViewer DEBUG] Removing mouseenter listener from original element.');
         this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
         this.originalElementMouseEnterListener = null;
     }
-    
+
     if (this.originalElementRef instanceof HTMLElement) {
+        console.log(`[FeedbackViewer DEBUG] Restoring original element display: ${this.originalElementDisplayStyle || 'default'}`);
         this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
     }
-    
+
     if (this.insertedFixWrapper) {
+        console.log('[FeedbackViewer DEBUG] Removing insertedFixWrapper from DOM.');
         this.insertedFixWrapper.remove();
         this.insertedFixWrapper = null;
     }
-    
+
     this.originalElementDisplayStyle = null;
-    this.fixWrapperCloseButtonListener = null;
+    // Keep fixWrapperCloseButtonListener removal here if it's only added when wrapper exists
+    if (this.fixWrapperCloseButtonListener) {
+        // Assuming the button is removed with the wrapper, just nullify the listener ref
+        console.log('[FeedbackViewer DEBUG] Nullifying close button listener reference.');
+        this.fixWrapperCloseButtonListener = null;
+    }
+    console.log('[FeedbackViewer DEBUG] <<< Exiting removeInjectedFix >>>');
   }
 
   public finalizeResponse(): void {
@@ -766,6 +754,7 @@ export class FeedbackViewer {
       }
       this.accumulatedResponseText = '';
       this.originalEffectiveBgColor = null;
+
       console.log('[FeedbackViewer] Main viewer panel hidden.');
     }
     if (this.renderedHtmlPreview) {
@@ -773,11 +762,8 @@ export class FeedbackViewer {
         this.renderedHtmlPreview.style.opacity = '0';
         this.renderedHtmlPreview.style.pointerEvents = 'none';
         this.renderedHtmlPreview.innerHTML = '';
-        console.log('[FeedbackViewer] HTML preview overlay hidden.');
+        console.log('[FeedbackViewer] Rendered HTML preview hidden.');
     }
-    this.initialCursorX = null;
-    this.initialCursorY = null;
-    this.removeInjectedFix();
   }
 
   public destroy(): void {
@@ -795,6 +781,7 @@ export class FeedbackViewer {
         this.renderedHtmlPreview.replaceWith(this.renderedHtmlPreview.cloneNode(true));
         document.body.removeChild(this.renderedHtmlPreview);
     }
+    console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from destroy().');
     this.removeInjectedFix();
     this.element = null;
     this.promptTextarea = null;
