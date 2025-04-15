@@ -9,8 +9,7 @@ export default {
   },
   plugins: [
     require('@tailwindcss/typography'),
-    require('@tailwindcss/forms'),
-    require('preline/plugin')
+    require('@tailwindcss/forms')
   ]
 }
 
