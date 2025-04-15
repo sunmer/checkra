@@ -152,7 +152,6 @@ export class FeedbackViewer {
     this.element.style.display = 'none';
     this.element.style.fontFamily = 'sans-serif';
     this.element.style.lineHeight = '1.5';
-    this.element.style.display = 'flex';
     this.element.style.flexDirection = 'column';
 
     const header = document.createElement('div');
