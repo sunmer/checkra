@@ -67,15 +67,17 @@ class ScreenCapture {
   }
 
   private highlightElement(element: HTMLElement | null): void {
-    if (!element) {
-      return;
-    }
-
-    // Remove previous highlight
+    // Remove previous highlight first
     if (this.currentHighlight) {
       this.currentHighlight.style.removeProperty('outline');
       this.currentHighlight.style.removeProperty('position');
       this.currentHighlight.style.removeProperty('z-index');
+      this.currentHighlight = null; // Clear the reference
+    }
+
+    // If the new element is null or the overlay itself, just return
+    if (!element || element === this.overlay) {
+      return;
     }
 
     // Set the current element as the highlighted one
@@ -83,8 +85,8 @@ class ScreenCapture {
 
     // Apply highlighting styles - bring element above overlay
     element.style.outline = '2px solid #0095ff';
-    element.style.position = 'relative';
-    element.style.zIndex = '100'; // Higher than overlay
+    element.style.position = 'relative'; // Needed for z-index to work reliably
+    element.style.zIndex = '101'; // Higher than overlay's z-index (100)
   }
 
   /**
@@ -190,11 +192,22 @@ class ScreenCapture {
         console.log('[ScreenCapture] Element selected:', selectedElement);
         console.log(`[ScreenCapture] Click coordinates: X=${clickX}, Y=${clickY}`);
 
+        // --- Explicitly remove highlight styles BEFORE cleanup and outerHTML ---
+        if (selectedElement) {
+            console.log('[ScreenCapture] Explicitly removing highlight styles before capture.');
+            selectedElement.style.removeProperty('outline');
+            selectedElement.style.removeProperty('position');
+            selectedElement.style.removeProperty('z-index');
+        }
+        // --- End explicit removal ---
+
         // Store callback before cleanup
         const callbackToExecute = this.captureCallback;
 
         // Cleanup listeners, overlay, cursor FIRST
-        this.cleanup(); // This also calls highlightElement(null)
+        // Note: cleanup will call highlightElement(null) which also tries to remove styles,
+        // but doing it explicitly above ensures it happens before outerHTML is read.
+        this.cleanup(); // This also calls highlightElement(null) internally
 
         // Check if callback is still valid
         if (!callbackToExecute) {
@@ -209,7 +222,7 @@ class ScreenCapture {
         if (selectedElement) {
           selectedElementBounds = selectedElement.getBoundingClientRect(); // Get bounds
 
-          // 1. Get HTML
+          // 1. Get HTML (Styles should definitely be removed now)
           try {
             selectedHtml = selectedElement.outerHTML;
             console.log('[ScreenCapture] Captured HTML:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
@@ -222,13 +235,15 @@ class ScreenCapture {
           console.log('[ScreenCapture] Attempting html2canvas capture of selected element...');
           try {
             const effectiveBackgroundColor = this.getEffectiveBackgroundColor(selectedElement);
+            // html2canvas uses a clone, so the original element's state (styles removed) is fine.
+            // The onclone callback is still good practice for the image generation itself.
             const canvas = await html2canvas(selectedElement, {
               backgroundColor: effectiveBackgroundColor,
               useCORS: true,
               logging: false,
-              // Ensure highlight styles are removed in the clone (belt-and-suspenders)
               onclone: (clonedDoc, clonedElement) => {
                 if (clonedElement) {
+                    // Ensure clone definitely doesn't have styles for screenshot
                     clonedElement.style.removeProperty('outline');
                     clonedElement.style.removeProperty('position');
                     clonedElement.style.removeProperty('z-index');
