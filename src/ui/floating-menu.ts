@@ -1,12 +1,14 @@
 import { CheckraOptions } from '../types';
 import { screenCapture } from './screen-capture';
 import { feedbackViewer } from './feedback-viewer';
+import { settingsViewer } from './settings-modal';
 
 /**
  * Class for managing the floating feedback button UI component.
  */
 export class FloatingMenu {
   private feedbackButton: HTMLSpanElement | null = null;
+  private settingsButton: HTMLSpanElement | null = null;
   private bottomContainer: HTMLDivElement | null = null;
 
   /**
@@ -102,9 +104,47 @@ export class FloatingMenu {
       });
     });
 
-    // Add feedback button to the bottom container
-    if (this.bottomContainer && this.feedbackButton) {
-      this.bottomContainer.appendChild(this.feedbackButton);
+    // Create Settings button (SVG)
+    this.settingsButton = document.createElement('span');
+    this.settingsButton.id = 'show-settings-modal';
+    this.settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>`;
+    this.settingsButton.title = 'Open Settings';
+
+    // Apply similar styling as the feedback button
+    this.settingsButton.style.width = '16px';
+    this.settingsButton.style.height = '16px';
+    this.settingsButton.style.marginTop = '-4px';
+    this.settingsButton.style.borderRadius = '50%';
+    this.settingsButton.style.color = 'white';
+    this.settingsButton.style.display = 'flex';
+    this.settingsButton.style.alignItems = 'center';
+    this.settingsButton.style.justifyContent = 'center';
+    this.settingsButton.style.cursor = 'pointer';
+    this.settingsButton.style.border = '2px solid rgb(52 63 84 / 80%)';
+    this.settingsButton.style.userSelect = 'none';
+
+    // Style the inner SVG
+    const settingsSvgElement = this.settingsButton.querySelector('svg');
+    if (settingsSvgElement) {
+      settingsSvgElement.style.width = '18px';
+      settingsSvgElement.style.height = '18px';
+    }
+
+    // Add click listener for the settings button
+    this.settingsButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log('[Settings] Button clicked, opening settings modal...');
+      settingsViewer.showModal();
+    });
+
+    // Add buttons to the bottom container
+    if (this.bottomContainer) {
+      if (this.feedbackButton) {
+        this.bottomContainer.appendChild(this.feedbackButton);
+      }
+      if (this.settingsButton) {
+        this.bottomContainer.appendChild(this.settingsButton);
+      }
     }
 
     // Append the bottom container once the DOM is ready
@@ -125,14 +165,16 @@ export class FloatingMenu {
    * Destroys the floating menu component, removing all DOM elements and event listeners.
    */
   public destroy(): void {
-    // Remove event listeners by cloning the node (simple way to remove all listeners)
+    // Remove event listeners by cloning the nodes
     if (this.feedbackButton) {
         this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
     }
-    // It might be sufficient to just remove the container, which contains the button
-    if (this.bottomContainer) {
-        this.bottomContainer.replaceWith(this.bottomContainer.cloneNode(true));
+    if (this.settingsButton) {
+        this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
     }
+    // It might be sufficient to just remove the container, which contains the buttons
+    // (Cloning the container might not remove listeners attached directly to children)
+    // Let's stick to removing the container directly after handling children.
 
     // Remove the bottom container from the DOM
     if (this.bottomContainer?.parentNode) {
@@ -141,6 +183,7 @@ export class FloatingMenu {
 
     // Nullify references
     this.feedbackButton = null;
+    this.settingsButton = null;
     this.bottomContainer = null;
   }
 }

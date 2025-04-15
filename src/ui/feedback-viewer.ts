@@ -26,6 +26,7 @@ export class FeedbackViewer {
   private originalElementDisplayStyle: string | null = null;
   private fixWrapperMouseLeaveListener: (() => void) | null = null;
   private originalElementMouseEnterListener: (() => void) | null = null;
+  private closeButton: HTMLButtonElement | null = null;
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
@@ -34,7 +35,9 @@ export class FeedbackViewer {
         e.target instanceof Node &&
         !this.element.contains(e.target) &&
         !this.renderedHtmlPreview?.contains(e.target)) {
-        this.hide();
+        if (!this.closeButton || !this.closeButton.contains(e.target as Node)) {
+             this.hide();
+        }
       }
     };
   }
@@ -81,7 +84,7 @@ export class FeedbackViewer {
         background-color: transparent;
         padding: 0;
         border-radius: 0;
-        font-size: 1em; /* Reset font size for code blocks */
+        font-size: 1em;
       }
 
       #feedback-response-content .streamed-content ul,
@@ -94,13 +97,11 @@ export class FeedbackViewer {
         margin-bottom: 0.4em;
       }
 
-      /* Style for the inline injected fix */
       .feedback-injected-fix {
         position: relative;
         outline: 1px dashed #007acc;
       }
 
-      /* Style for the close button inside the fix wrapper */
       .feedback-fix-close-btn {
         position: absolute;
         top: 2px;
@@ -136,63 +137,101 @@ export class FeedbackViewer {
     this.element.id = 'feedback-viewer';
 
     this.element.style.position = 'fixed';
-    this.element.style.backgroundColor = '#1e1e1e';
-    this.element.style.color = '#d4d4d4';
-    this.element.style.padding = '15px';
-    this.element.style.borderRadius = '5px';
-    this.element.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.5)';
+    this.element.style.top = '50%';
+    this.element.style.left = '50%';
+    this.element.style.transform = 'translate(-50%, -50%)';
+    this.element.style.backgroundColor = 'rgba(35, 45, 75, 0.95)';
+    this.element.style.color = 'white';
+    this.element.style.padding = '0';
+    this.element.style.borderRadius = '8px';
+    this.element.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.4)';
     this.element.style.zIndex = '1002';
-    this.element.style.maxHeight = '300px';
-    this.element.style.width = '400px';
-    this.element.style.overflowY = 'auto';
-    this.element.style.fontSize = '13px';
+    this.element.style.maxHeight = '80vh';
+    this.element.style.width = 'clamp(350px, 50vw, 500px)';
+    this.element.style.overflow = 'hidden';
     this.element.style.display = 'none';
-    this.element.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+    this.element.style.fontFamily = 'sans-serif';
     this.element.style.lineHeight = '1.5';
+    this.element.style.display = 'flex';
+    this.element.style.flexDirection = 'column';
+
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.padding = '10px 20px';
+    header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.2)';
+    header.style.flexShrink = '0';
+
+    const title = document.createElement('h2');
+    title.textContent = 'Ask for improvements';
+    title.style.margin = '0';
+    title.style.fontSize = '1.2em';
+
+    this.closeButton = document.createElement('button');
+    this.closeButton.innerHTML = '&times;';
+    this.closeButton.style.background = 'none';
+    this.closeButton.style.border = 'none';
+    this.closeButton.style.color = 'white';
+    this.closeButton.style.fontSize = '1.8em';
+    this.closeButton.style.lineHeight = '1';
+    this.closeButton.style.cursor = 'pointer';
+    this.closeButton.style.padding = '0 5px';
+    this.closeButton.title = 'Close Feedback';
+    this.closeButton.addEventListener('click', () => this.hide());
+
+    header.appendChild(title);
+    header.appendChild(this.closeButton);
+    this.element.appendChild(header);
 
     const contentWrapper = document.createElement('div');
+    contentWrapper.style.padding = '15px 20px 20px 20px';
+    contentWrapper.style.overflowY = 'auto';
+    contentWrapper.style.flexGrow = '1';
 
     const promptTitle = document.createElement('h4');
     promptTitle.textContent = 'Describe what you need help with';
-    promptTitle.style.color = '#88c0ff';
-    promptTitle.style.marginBottom = '5px';
-    promptTitle.style.marginTop = '5px';
-    promptTitle.style.paddingBottom = '4px';
+    promptTitle.style.color = '#a0c8ff';
+    promptTitle.style.marginBottom = '8px';
+    promptTitle.style.marginTop = '0';
+    promptTitle.style.fontSize = '1em';
+    promptTitle.style.fontWeight = '600';
+    promptTitle.style.paddingBottom = '0';
     contentWrapper.appendChild(promptTitle);
 
     const textareaContainer = document.createElement('div');
     textareaContainer.style.position = 'relative';
-    textareaContainer.style.marginBottom = '20px';
+    textareaContainer.style.marginBottom = '15px';
 
     this.promptTextarea = document.createElement('textarea');
     this.promptTextarea.rows = 4;
-    this.promptTextarea.placeholder = 'e.g., "This button alignment looks off."';
-    this.promptTextarea.style.width = 'calc(100% - 16px)';
-    this.promptTextarea.style.padding = '8px';
-    this.promptTextarea.style.paddingBottom = '20px';
-    this.promptTextarea.style.backgroundColor = '#2a2a2a';
-    this.promptTextarea.style.color = '#d4d4d4';
-    this.promptTextarea.style.border = '1px solid #555';
-    this.promptTextarea.style.borderRadius = '3px';
+    this.promptTextarea.placeholder = 'e.g., "How can I improve the conversion of this page?"';
+    this.promptTextarea.style.width = '100%';
+    this.promptTextarea.style.padding = '10px';
+    this.promptTextarea.style.backgroundColor = '#fff';
+    this.promptTextarea.style.color = '#333';
+    this.promptTextarea.style.border = '1px solid #ccc';
+    this.promptTextarea.style.borderRadius = '4px';
     this.promptTextarea.style.fontFamily = 'inherit';
-    this.promptTextarea.style.fontSize = '13px';
+    this.promptTextarea.style.fontSize = '1em';
     this.promptTextarea.style.resize = 'vertical';
+    this.promptTextarea.style.boxSizing = 'border-box';
     this.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
     textareaContainer.appendChild(this.promptTextarea);
 
     this.submitButton = document.createElement('button');
     this.submitButton.style.position = 'absolute';
-    this.submitButton.style.bottom = '8px';
-    this.submitButton.style.right = '24px';
+    this.submitButton.style.bottom = '10px';
+    this.submitButton.style.right = '10px';
     this.submitButton.style.display = 'flex';
     this.submitButton.style.alignItems = 'baseline';
-    this.submitButton.style.padding = '5px 10px';
-    this.submitButton.style.backgroundColor = '#007acc';
+    this.submitButton.style.padding = '6px 12px';
+    this.submitButton.style.backgroundColor = '#4CAF50';
     this.submitButton.style.color = 'white';
     this.submitButton.style.border = 'none';
-    this.submitButton.style.borderRadius = '3px';
+    this.submitButton.style.borderRadius = '4px';
     this.submitButton.style.cursor = 'pointer';
-    this.submitButton.style.fontSize = '13px';
+    this.submitButton.style.fontSize = '0.9em';
 
     const buttonText = document.createElement('span');
     buttonText.textContent = 'Get Feedback';
@@ -214,21 +253,26 @@ export class FeedbackViewer {
 
     const responseTitle = document.createElement('h4');
     responseTitle.textContent = 'Feedback Response';
-    responseTitle.style.color = '#88c0ff';
+    responseTitle.style.color = '#a0c8ff';
     responseTitle.style.marginBottom = '10px';
     responseTitle.style.marginTop = '15px';
-    responseTitle.style.paddingBottom = '4px';
+    responseTitle.style.fontSize = '1em';
+    responseTitle.style.fontWeight = '600';
+    responseTitle.style.borderBottom = '1px solid rgba(255, 255, 255, 0.15)';
+    responseTitle.style.paddingBottom = '6px';
     responseTitle.style.display = 'none';
+
     this.responseContentElement = document.createElement('div');
     this.responseContentElement.id = 'feedback-response-content';
     this.responseContentElement.style.wordWrap = 'break-word';
     this.responseContentElement.style.fontFamily = 'inherit';
-    this.responseContentElement.style.fontSize = '13px';
-    this.responseContentElement.style.marginTop = '15px';
+    this.responseContentElement.style.fontSize = '0.95em';
+    this.responseContentElement.style.marginTop = '10px';
     this.responseContentElement.style.display = 'none';
 
     contentWrapper.appendChild(responseTitle);
     contentWrapper.appendChild(this.responseContentElement);
+
     this.element.appendChild(contentWrapper);
 
     this.renderedHtmlPreview = document.createElement('div');
@@ -262,68 +306,6 @@ export class FeedbackViewer {
     document.body.appendChild(this.renderedHtmlPreview);
     document.body.appendChild(this.element);
     document.addEventListener('mousedown', this.outsideClickHandler);
-  }
-
-  private positionViewer(): void {
-    if (!this.element) return;
-
-    const viewerRect = this.element.getBoundingClientRect();
-    const margin = 10;
-
-    const cursorRect: DOMRect = this.initialCursorX !== null && this.initialCursorY !== null
-      ? new DOMRect(this.initialCursorX, this.initialCursorY, 0, 0)
-      : new DOMRect(window.innerWidth / 2 - viewerRect.width / 2, window.innerHeight / 2 - viewerRect.height / 2, 0, 0);
-
-    const targetRect = cursorRect;
-
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    const spaceTop = targetRect.top - margin;
-    const spaceBottom = vh - targetRect.top - margin;
-    const spaceLeft = targetRect.left - margin;
-    const spaceRight = vw - targetRect.left - margin;
-
-    let bestTop = targetRect.top + margin;
-    let bestLeft = targetRect.left + margin;
-
-    if (spaceBottom >= viewerRect.height && spaceRight >= viewerRect.width) {
-        bestTop = targetRect.top + margin;
-        bestLeft = targetRect.left + margin;
-    } else if (spaceTop >= viewerRect.height && spaceRight >= viewerRect.width) {
-        bestTop = targetRect.top - viewerRect.height - margin;
-        bestLeft = targetRect.left + margin;
-    } else if (spaceBottom >= viewerRect.height && spaceLeft >= viewerRect.width) {
-        bestTop = targetRect.top + margin;
-        bestLeft = targetRect.left - viewerRect.width - margin;
-    } else if (spaceTop >= viewerRect.height && spaceLeft >= viewerRect.width) {
-        bestTop = targetRect.top - viewerRect.height - margin;
-        bestLeft = targetRect.left - viewerRect.width - margin;
-    } else {
-        if (spaceBottom >= viewerRect.height) {
-            bestTop = targetRect.top + margin;
-            bestLeft = targetRect.left - viewerRect.width / 2;
-        } else if (spaceTop >= viewerRect.height) {
-            bestTop = targetRect.top - viewerRect.height - margin;
-            bestLeft = targetRect.left - viewerRect.width / 2;
-        }
-    }
-
-    if (bestLeft < margin) {
-      bestLeft = margin;
-    } else if (bestLeft + viewerRect.width > vw - margin) {
-      bestLeft = vw - viewerRect.width - margin;
-    }
-
-    if (bestTop < margin) {
-      bestTop = margin;
-    } else if (bestTop + viewerRect.height > vh - margin) {
-      bestTop = vh - viewerRect.height - margin;
-    }
-
-    this.element.style.top = `${bestTop}px`;
-    this.element.style.left = `${bestLeft}px`;
-    this.element.style.transform = 'none';
   }
 
   public showInputArea(
@@ -366,8 +348,7 @@ export class FeedbackViewer {
     this.promptTextarea.style.display = 'block';
     this.submitButton.style.display = 'flex';
 
-    this.element.style.display = 'block';
-    this.positionViewer();
+    this.element.style.display = 'flex';
 
     this.promptTextarea.focus();
   }
@@ -400,7 +381,10 @@ export class FeedbackViewer {
     this.responseContentElement.textContent = '⏳ Getting feedback...';
     this.accumulatedResponseText = '';
     this.responseContentElement.style.display = 'block';
-    this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
+    const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
+    if (responseTitle) {
+        responseTitle.style.display = 'block';
+    }
 
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
   };
@@ -414,8 +398,11 @@ export class FeedbackViewer {
 
   public updateResponse(chunk: string): void {
     if (this.responseContentElement && this.element) {
+      const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:last-child');
+      if (!contentWrapper) return;
+
       const scrollThreshold = 10;
-      const isScrolledToBottom = this.element.scrollHeight - this.element.scrollTop - this.element.clientHeight < scrollThreshold;
+      const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
       if (this.accumulatedResponseText === '' && this.responseContentElement.textContent?.startsWith('⏳')) {
         this.responseContentElement.innerHTML = '';
@@ -425,11 +412,10 @@ export class FeedbackViewer {
       this.responseContentElement.innerHTML = `<div class="streamed-content">${parsedHtml}</div>`;
 
       if (isScrolledToBottom) {
-        this.element.scrollTop = this.element.scrollHeight;
+        contentWrapper.scrollTop = contentWrapper.scrollHeight;
       }
 
       this.tryRenderHtmlPreview();
-      console.log('[FeedbackViewer DEBUG] Calling tryInjectHtmlFix from updateResponse.');
       this.tryInjectHtmlFix();
     }
   }
@@ -513,9 +499,7 @@ export class FeedbackViewer {
     const genericHtmlRegex = /```(?:html)?\n([\s\S]*?)\n```/i;
 
     let match = this.accumulatedResponseText.match(specificHtmlRegex);
-
     if (!match) {
-      console.log('[FeedbackViewer DEBUG] Specific "# Complete HTML..." heading not found. Trying generic HTML block regex.');
       match = this.accumulatedResponseText.match(genericHtmlRegex);
     }
 
@@ -524,8 +508,8 @@ export class FeedbackViewer {
       console.log('[FeedbackViewer DEBUG] Regex matched. Extracted HTML:', extractedHtml.substring(0, 200) + '...');
 
       let newContentSourceElement: HTMLElement | null = null;
-      let newContentHtml = ''; // The innerHTML to compare against the wrapper
-      let attributesToCopy: { name: string; value: string }[] = []; // Store attributes if body is replaced
+      let newContentHtml = '';
+      let attributesToCopy: { name: string; value: string }[] = [];
 
       try {
         const parser = new DOMParser();
@@ -535,7 +519,6 @@ export class FeedbackViewer {
             console.log('[FeedbackViewer DEBUG] Detected <BODY> tag as root. Replacing with <DIV>.');
             const replacementDiv = document.createElement('div');
 
-            // Store attributes from <body> to potentially copy later (excluding style)
             attributesToCopy = Array.from(parsedDoc.body.attributes)
                 .filter(attr => attr.name.toLowerCase() !== 'style');
             console.log(`[FeedbackViewer DEBUG] Stored ${attributesToCopy.length} attributes from suggested <body> to copy to wrapper.`);
@@ -558,40 +541,33 @@ export class FeedbackViewer {
 
       } catch (parseError) {
         console.error('[FeedbackViewer DEBUG] Error processing extracted HTML:', parseError);
-        this.removeInjectedFix();
         return;
       }
 
       if (!newContentSourceElement) {
           console.error('[FeedbackViewer DEBUG] Failed to create content source element.');
-          this.removeInjectedFix();
           return;
       }
 
       const needsUpdate = !this.insertedFixWrapper || this.insertedFixWrapper.innerHTML !== newContentHtml;
-      console.log(`[FeedbackViewer DEBUG] Needs update? ${needsUpdate}. Current wrapper exists: ${!!this.insertedFixWrapper}`);
-      if (this.insertedFixWrapper) {
-        console.log('[FeedbackViewer DEBUG] Current wrapper innerHTML:', this.insertedFixWrapper.innerHTML.substring(0, 200) + '...');
-      }
-
+      
       if (needsUpdate) {
           const isOriginalElementBody = this.originalElementRef?.tagName === 'BODY';
           const suggestedHtmlRepresentsBody = extractedHtml.toLowerCase().trim().startsWith('<body');
 
           if (isOriginalElementBody && !suggestedHtmlRepresentsBody) {
-              console.warn('[FeedbackViewer DEBUG] Guardrail triggered: Attempted to replace the BODY element with HTML that does not start with a <body> tag. Aborting injection to prevent page breakage.', { extractedHtml });
-              this.removeInjectedFix();
+              console.warn('[FeedbackViewer DEBUG] Guardrail triggered: Attempted to replace the BODY element with HTML that does not start with a <body> tag.');
               return;
           }
 
-          console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing (and guardrail passed). Proceeding with update.');
+          console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing. Proceeding with update.');
           this.removeInjectedFix();
 
           this.insertedFixWrapper = document.createElement('div');
           this.insertedFixWrapper.classList.add('feedback-injected-fix');
+          
           this.insertedFixWrapper.style.display = '';
 
-          // --- START STYLE TRANSFER ---
           if (isOriginalElementBody && this.originalElementRef instanceof HTMLElement) {
               console.log('[FeedbackViewer DEBUG] Original element is BODY, attempting to transfer computed styles.');
               try {
@@ -601,14 +577,12 @@ export class FeedbackViewer {
                       'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
                       'maxWidth', 'boxSizing',
                       'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'color',
-                      'backgroundColor' // Get computed background first
+                      'backgroundColor'
                   ];
 
                   stylesToTransfer.forEach(prop => {
                       if (computedStyles[prop as keyof CSSStyleDeclaration]) {
-                          // Type assertion needed because prop is a string index
                           (this.insertedFixWrapper!.style as any)[prop] = computedStyles[prop as keyof CSSStyleDeclaration];
-                          // console.log(`[FeedbackViewer DEBUG] Transferred style ${prop}: ${computedStyles[prop as keyof CSSStyleDeclaration]}`);
                       }
                   });
                   console.log('[FeedbackViewer DEBUG] Finished transferring computed styles.');
@@ -616,22 +590,17 @@ export class FeedbackViewer {
                   console.error('[FeedbackViewer DEBUG] Error getting or applying computed styles:', styleError);
               }
           }
-          // --- END STYLE TRANSFER ---
 
-          // Apply original effective background color (might override computed backgroundColor if different)
           if (this.originalEffectiveBgColor) {
               this.insertedFixWrapper.style.backgroundColor = this.originalEffectiveBgColor;
               console.log(`[FeedbackViewer DEBUG] Applied original effective background color to wrapper: ${this.originalEffectiveBgColor}`);
           } else if (!isOriginalElementBody || !this.insertedFixWrapper.style.backgroundColor) {
-              // Only log if we didn't already apply a computed background or effective background
               console.log('[FeedbackViewer DEBUG] No original background color stored or computed, wrapper will use default/inherited.');
           }
 
-          // Ensure the outline is always applied, overriding any potentially conflicting transferred styles
           this.insertedFixWrapper.style.outline = '1px dashed #007acc';
           console.log('[FeedbackViewer DEBUG] Explicitly set outline style on wrapper.');
 
-          // Copy attributes (like class) from the suggested <body> tag if applicable
           if (attributesToCopy.length > 0) {
               attributesToCopy.forEach(attr => {
                   this.insertedFixWrapper!.setAttribute(attr.name, attr.value);
@@ -650,65 +619,53 @@ export class FeedbackViewer {
              return;
           }
 
-          // Add close button
+          this.fixWrapperCloseButtonListener = () => {
+              console.log('[FeedbackViewer DEBUG] Close button clicked on injected fix.');
+              this.removeInjectedFix();
+          };
+          
           const closeButton = document.createElement('span');
           closeButton.classList.add('feedback-fix-close-btn');
           closeButton.textContent = '✕';
           closeButton.title = 'Dismiss fix suggestion';
 
-          this.fixWrapperCloseButtonListener = () => {
-              console.log('[FeedbackViewer DEBUG] Close button clicked on injected fix.');
-              this.removeInjectedFix();
-          };
           closeButton.addEventListener('click', this.fixWrapperCloseButtonListener);
           this.insertedFixWrapper.appendChild(closeButton);
-          console.log('[FeedbackViewer DEBUG] Added close button to wrapper.');
-
-          // Setup hover listeners for showing/hiding the fix
+          
           this.fixWrapperMouseLeaveListener = () => {
               console.log('[FeedbackViewer DEBUG] Mouse left injected fix wrapper.');
               if (this.insertedFixWrapper) {
                   this.insertedFixWrapper.style.display = 'none';
-                  console.log('[FeedbackViewer DEBUG] Hid injected fix wrapper.');
               }
+              
               if (this.originalElementRef instanceof HTMLElement) {
-                  // Restore original element's display when mouse leaves the fix
                   this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
-                  console.log(`[FeedbackViewer DEBUG] Restored original element display to '${this.originalElementDisplayStyle || ''}'.`);
               }
           };
-
+          
           this.originalElementMouseEnterListener = () => {
-               console.log('[FeedbackViewer DEBUG] Mouse entered original element area.');
-               if (this.insertedFixWrapper && this.originalElementRef instanceof HTMLElement) {
-                   // Show the fix and hide the original element when hovering the original area
-                   this.insertedFixWrapper.style.display = '';
-                   this.originalElementRef.style.display = 'none';
-                   console.log('[FeedbackViewer DEBUG] Showed fix wrapper, hid original element.');
-               }
+              console.log('[FeedbackViewer DEBUG] Mouse entered original element area.');
+              if (this.insertedFixWrapper && this.originalElementRef instanceof HTMLElement) {
+                  this.insertedFixWrapper.style.display = '';
+                  this.originalElementRef.style.display = 'none';
+              }
           };
 
           this.insertedFixWrapper.addEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
+          
           if (this.originalElementRef instanceof HTMLElement) {
               this.originalElementRef.addEventListener('mouseenter', this.originalElementMouseEnterListener);
               console.log('[FeedbackViewer DEBUG] Added mouseleave listener to wrapper and mouseenter listener to original element.');
-          } else {
-              console.warn('[FeedbackViewer DEBUG] Original element is not HTMLElement, cannot add mouseenter listener.');
+              
+              this.originalElementDisplayStyle = window.getComputedStyle(this.originalElementRef).display;
+              if (this.originalElementDisplayStyle === 'none') {
+                  this.originalElementDisplayStyle = 'block';
+              }
+              
+              this.originalElementRef.style.display = 'none';
           }
 
-          // Insert the fix wrapper into the DOM
           if (this.originalElementRef && this.originalElementRef.parentNode) {
-            if (this.originalElementRef instanceof HTMLElement) {
-              // Store original display style and hide the original element
-              this.originalElementDisplayStyle = this.originalElementRef.style.display;
-              this.originalElementRef.style.display = 'none';
-              console.log(`[FeedbackViewer DEBUG] Stored original display ('${this.originalElementDisplayStyle}') and hid original element.`);
-            } else {
-              this.originalElementDisplayStyle = null; // Cannot store display for non-HTMLElements
-              console.warn('[FeedbackViewer DEBUG] Original element is not an HTMLElement, cannot store/set display style directly.');
-            }
-
-            // Insert the new wrapper right after the original element
             this.originalElementRef.parentNode.insertBefore(
               this.insertedFixWrapper,
               this.originalElementRef.nextSibling
@@ -716,70 +673,43 @@ export class FeedbackViewer {
             console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element.');
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
-            this.removeInjectedFix(); // Clean up if insertion fails
+            this.insertedFixWrapper = null;
             return;
           }
-
-
       } else {
          console.log('[FeedbackViewer DEBUG] No update needed (wrapper exists and content matches).');
       }
     } else {
       console.log('[FeedbackViewer DEBUG] Regex did not match. Ensuring fix is removed.');
-      this.removeInjectedFix(); // Remove any existing fix if the pattern is no longer found
+      this.removeInjectedFix();
     }
     console.log('[FeedbackViewer DEBUG] Exiting tryInjectHtmlFix.');
   }
 
   private removeInjectedFix(): void {
     console.log('[FeedbackViewer DEBUG] Entering removeInjectedFix.');
-    let elementRestored = false;
-    let wrapperRemoved = false;
-    let listenersRemoved = false;
-
+    
     if (this.insertedFixWrapper && this.fixWrapperMouseLeaveListener) {
         this.insertedFixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
         this.fixWrapperMouseLeaveListener = null;
-        listenersRemoved = true;
-        console.log('[FeedbackViewer DEBUG] Removed mouseleave listener from wrapper.');
     }
+    
     if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
         this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
         this.originalElementMouseEnterListener = null;
-        listenersRemoved = true;
-        console.log('[FeedbackViewer DEBUG] Removed mouseenter listener from original element.');
     }
-    if (this.fixWrapperCloseButtonListener) {
-         this.fixWrapperCloseButtonListener = null;
-    }
-
+    
     if (this.originalElementRef instanceof HTMLElement) {
         this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
-        elementRestored = true;
-        console.log(`[FeedbackViewer DEBUG] Restored display for original HTMLElement to '${this.originalElementDisplayStyle || ''}'.`);
-    } else {
-       console.log('[FeedbackViewer DEBUG] originalElementRef is not an HTMLElement or null, cannot restore display style directly.');
     }
-    this.originalElementDisplayStyle = null;
-
+    
     if (this.insertedFixWrapper) {
         this.insertedFixWrapper.remove();
         this.insertedFixWrapper = null;
-        wrapperRemoved = true;
-        console.log('[FeedbackViewer DEBUG] Removed insertedFixWrapper element from DOM.');
-    } else {
-       console.log('[FeedbackViewer DEBUG] insertedFixWrapper is null, nothing to remove from DOM.');
     }
-
-    this.fixWrapperMouseLeaveListener = null;
-    this.originalElementMouseEnterListener = null;
+    
+    this.originalElementDisplayStyle = null;
     this.fixWrapperCloseButtonListener = null;
-
-    if (elementRestored || wrapperRemoved || listenersRemoved) {
-        console.log('[FeedbackViewer DEBUG] removeInjectedFix completed actions.');
-    } else {
-        console.log('[FeedbackViewer DEBUG] removeInjectedFix completed, no actions needed.');
-    }
   }
 
   public finalizeResponse(): void {
@@ -802,18 +732,22 @@ export class FeedbackViewer {
   public showError(error: Error | string): void {
     if (!this.element || !this.responseContentElement || !this.submitButtonTextSpan) return;
 
-    this.element.style.display = 'block';
+    this.element.style.display = 'flex';
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
 
-    this.responseContentElement.previousElementSibling?.setAttribute('style', 'display: block; color: #88c0ff; margin-bottom: 10px; margin-top: 15px; border-bottom: 1px solid #444; padding-bottom: 4px;');
+    const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
+    if (responseTitle) {
+        responseTitle.style.display = 'block';
+    }
 
-    this.responseContentElement.innerHTML = `<div style="color:#ff6b6b; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
+    this.responseContentElement.style.display = 'block';
+    this.responseContentElement.innerHTML = `<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
 
     if (this.promptTextarea) this.promptTextarea.disabled = false;
-    if (this.submitButton) {
+    if (this.submitButton && this.submitButtonTextSpan) {
       this.submitButton.disabled = false;
       this.submitButtonTextSpan.textContent = 'Get Feedback';
     }
@@ -827,6 +761,8 @@ export class FeedbackViewer {
       if (this.promptTextarea) this.promptTextarea.value = '';
       if (this.responseContentElement) {
         this.responseContentElement.innerHTML = '';
+        const responseTitle = this.responseContentElement.previousElementSibling as HTMLElement;
+        if (responseTitle) responseTitle.style.display = 'none';
       }
       this.accumulatedResponseText = '';
       this.originalEffectiveBgColor = null;
@@ -841,6 +777,7 @@ export class FeedbackViewer {
     }
     this.initialCursorX = null;
     this.initialCursorY = null;
+    this.removeInjectedFix();
   }
 
   public destroy(): void {
@@ -850,6 +787,7 @@ export class FeedbackViewer {
     }
     document.removeEventListener('mousedown', this.outsideClickHandler);
     this.promptTextarea?.removeEventListener('keydown', this.handleTextareaKeydown);
+    this.closeButton?.removeEventListener('click', this.hide);
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -874,6 +812,7 @@ export class FeedbackViewer {
     this.originalElementDisplayStyle = null;
     this.fixWrapperMouseLeaveListener = null;
     this.originalElementMouseEnterListener = null;
+    this.closeButton = null;
     console.log('[FeedbackViewer] Instance destroyed.');
   }
 }

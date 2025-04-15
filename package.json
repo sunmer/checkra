@@ -27,11 +27,9 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "logger",
-    "frontend",
-    "debugging",
-    "error-tracking",
-    "console",
+    "ai-tools",
+    "inspector",
+    "ai",
     "developer-tools"
   ],
   "author": "",
@@ -53,11 +51,6 @@
     "node": ">=14"
   },
   "dependencies": {
-    "@babel/generator": "^7.27.0",
-    "@babel/parser": "^7.27.0",
-    "@babel/traverse": "^7.27.0",
-    "@babel/types": "^7.27.0",
-    "diff": "^7.0.0",
     "html2canvas": "^1.4.1",
     "marked": "^15.0.8",
     "preline": "^3.0.1"
