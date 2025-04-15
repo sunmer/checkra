@@ -5,7 +5,11 @@ import { finder } from '@medv/finder';
  * Handles capturing a selected DOM element.
  */
 class ScreenCapture {
-  private captureCallback: ((imageDataUrl: string | null, selectedHtml: string | null) => void) | null = null;
+  private captureCallback: ((
+    imageDataUrl: string | null,
+    selectedHtml: string | null,
+    bounds: DOMRect | null
+  ) => void) | null = null;
   private clickListener: ((event: MouseEvent) => void) | null = null;
   private escapeListener: ((event: KeyboardEvent) => void) | null = null;
   private mouseMoveListener: ((event: MouseEvent) => void) | null = null;
@@ -60,24 +64,27 @@ class ScreenCapture {
   }
 
   private highlightElement(element: HTMLElement | null): void {
-    if (!element) {
-      return;
-    }
-
-    // Remove previous highlight
+    // Remove previous highlight if it exists
     if (this.currentHighlight) {
       this.currentHighlight.style.removeProperty('outline');
       this.currentHighlight.style.removeProperty('position');
       this.currentHighlight.style.removeProperty('z-index');
+      this.currentHighlight = null; // Clear the reference *before* potentially setting it again
     }
 
-    // Set the current element as the highlighted one
-    this.currentHighlight = element;
+    // If a new, valid element is provided, highlight it
+    // Ensure the element is not the overlay itself
+    if (element && element !== this.overlay) {
+        // Set the current element as the highlighted one
+        this.currentHighlight = element;
 
-    // Apply highlighting styles - bring element above overlay
-    element.style.outline = '2px solid #0095ff';
-    element.style.position = 'relative';
-    element.style.zIndex = '2147483647'; // Higher than overlay
+        // Apply highlighting styles - bring element above overlay
+        element.style.outline = '2px solid #0095ff';
+        // Store original position/zIndex before changing? Maybe too complex for now.
+        // Let's stick with applying relative/high zIndex for highlighting.
+        element.style.position = 'relative';
+        element.style.zIndex = '2147483647'; // Higher than overlay
+    }
   }
 
   /**
@@ -118,7 +125,11 @@ class ScreenCapture {
     return defaultBackgroundColor;
   }
 
-  public startCapture(callback: (imageDataUrl: string | null, selectedHtml: string | null) => void): void {
+  public startCapture(callback: (
+    imageDataUrl: string | null,
+    selectedHtml: string | null,
+    bounds: DOMRect | null
+  ) => void): void {
     console.log('[ScreenCapture] startCapture called.');
     if (this.isCapturing) {
       console.warn('[ScreenCapture] Capture already in progress. Ignoring request.');
@@ -147,7 +158,19 @@ class ScreenCapture {
       // Set up mousemove handler to highlight elements under cursor
       this.mouseMoveListener = (event: MouseEvent) => {
         const target = event.target as HTMLElement;
-        if (target && target !== this.currentHighlight) {
+        const floatingMenu = document.getElementById('floating-menu-container'); // Get reference to the menu
+
+        // Prevent highlighting the overlay itself or the floating menu container and its children
+        if (!target || target === this.overlay || (floatingMenu && floatingMenu.contains(target))) {
+            // If hovering over ignored elements, ensure any previous highlight is cleared
+            if (this.currentHighlight) {
+                this.highlightElement(null); // Clear highlight
+            }
+            return; // Do not highlight these elements
+        }
+
+        // Only update highlight if the target is different
+        if (target !== this.currentHighlight) {
           this.highlightElement(target);
         }
       };
@@ -155,10 +178,22 @@ class ScreenCapture {
 
       // Set up click handler
       this.clickListener = async (event: MouseEvent) => {
-        // Don't interfere with normal clicks on inputs, buttons, etc.
         const target = event.target as HTMLElement;
+        const floatingMenu = document.getElementById('floating-menu-container'); // Get reference to the menu
+
+        // **New Check:** Prevent capture if clicking on the floating menu or its children
+        if (floatingMenu && floatingMenu.contains(target)) {
+            console.log('[ScreenCapture] Clicked on floating menu, ignoring capture.');
+            // Don't prevent default or stop propagation, let the menu click behave normally.
+            // Crucially, don't clean up or proceed with capture.
+            return;
+        }
+
+        // Don't interfere with normal clicks on inputs, buttons, etc.
         const tagName = target.tagName.toLowerCase();
         if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || tagName === 'button' || tagName === 'a') {
+          // We might still want to prevent capture even on these if they are inside the floating menu,
+          // but the check above already handles that.
           return; // Let the normal click proceed
         }
 
@@ -167,9 +202,10 @@ class ScreenCapture {
         event.stopPropagation();
         console.log('[ScreenCapture] Element clicked:', target);
 
-        // Store callback and target before cleanup
+        // Store callback, target, and bounds before cleanup
         const callbackToExecute = this.captureCallback;
         const selectedElement = target;
+        const selectedElementBounds = selectedElement?.getBoundingClientRect() ?? null; // Get bounds
 
         // Cleanup will reset cursor, remove event listeners and overlay
         this.cleanup();
@@ -218,10 +254,11 @@ class ScreenCapture {
           console.log('[ScreenCapture] No element selected.');
         }
 
-        // Execute callback with results
+        // Execute callback with results (including bounds)
         console.log('[ScreenCapture] Executing capture callback...');
         try {
-          callbackToExecute(imageDataUrl, selectedHtml);
+          // Pass bounds to the callback
+          callbackToExecute(imageDataUrl, selectedHtml, selectedElementBounds);
         } catch (callbackError) {
           console.error('[ScreenCapture] Error executing the capture callback:', callbackError);
         }
@@ -234,7 +271,7 @@ class ScreenCapture {
       console.error('[ScreenCapture] Error initializing capture:', error);
       this.cleanup(); // Attempt cleanup if setup fails
       if (this.captureCallback) {
-        this.captureCallback(null, null); // Callback with nulls on error
+        this.captureCallback(null, null, null); // Callback with nulls on error
       }
     }
   }
@@ -248,7 +285,7 @@ class ScreenCapture {
 
       // Optionally call the callback with nulls to indicate cancellation
       if (callback) {
-        callback(null, null);
+        callback(null, null, null); // Pass null for bounds on cancel
       }
     }
   }

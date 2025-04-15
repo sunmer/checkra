@@ -65,6 +65,7 @@ export class FloatingMenu {
     this.bottomContainer.style.position = 'fixed';
     this.bottomContainer.style.bottom = '10px';
     this.bottomContainer.style.left = '10px';
+    this.bottomContainer.style.boxSizing = 'border-box';
     this.bottomContainer.style.boxShadow = '2px 2px 3px rgba(0, 0, 0, 0.4)'; // Slightly darker shadow
     // Replace solid background with a gradient for a glossy effect
     this.bottomContainer.style.background = 'linear-gradient(to bottom, rgba(35, 45, 75, 0.9), rgba(29, 38, 55, 0.95))';
@@ -94,21 +95,24 @@ export class FloatingMenu {
     this.errorButton.title = 'Show Errors';
     this.errorButton.id = 'show-error-viewer';
 
-    // ADDED: Hover listener to the collapsed error badge to expand the log
-    this.errorButton.addEventListener('mouseenter', () => {
-      // Clear collapse timeout if mouse moves quickly back to trigger
+    this.errorButton.addEventListener('click', () => {
+      // Clear collapse timeout if it happens to be running (unlikely but safe)
       if (this.collapseTimeoutId) {
         clearTimeout(this.collapseTimeoutId);
         this.collapseTimeoutId = null;
       }
-      this.isExpanded = true;
-      this.updateStyle();
+      // Only expand if not already expanded
+      if (!this.isExpanded) {
+        this.isExpanded = true;
+        this.updateStyle();
+      }
+      // Note: We don't toggle here. Collapse happens on mouseleave from the expanded menu.
     });
 
     // Create error count badge INSIDE the collapsed badge
     this.errorCountBadge = document.createElement('span');
     this.errorCountBadge.textContent = '0';
-    // Removed absolute positioning, flexbox handles centering now
+    
     this.errorCountBadge.style.color = 'white';
     this.errorCountBadge.style.fontWeight = 'bold';
     this.errorCountBadge.style.fontSize = '12px'; // Match old collapsed style
@@ -317,18 +321,18 @@ export class FloatingMenu {
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('[Feedback] Button clicked, starting screen capture...');
-      screenCapture.startCapture((imageDataUrl, selectedHtml) => {
+      screenCapture.startCapture((imageDataUrl, selectedHtml, bounds) => {
         // Log: Callback executed
         console.log('[Feedback] Screen capture callback executed.');
         console.log('[Feedback] Image data URL received:', imageDataUrl ? imageDataUrl.substring(0, 50) + '...' : 'null');
         console.log('[Feedback] Selected HTML received:', selectedHtml ? selectedHtml.substring(0, 100) + '...' : 'null');
 
-        // Pass both imageDataUrl and selectedHtml to the viewer
+        // Pass imageDataUrl, selectedHtml, and bounds to the viewer
         if (imageDataUrl || selectedHtml) { // Proceed if we got at least one piece of data
           console.log('[Feedback] Data received. Showing input area...');
           try {
-            // Pass both arguments to showInputArea
-            feedbackViewer.showInputArea(imageDataUrl, selectedHtml);
+            // Call showInputArea with individual arguments
+            feedbackViewer.showInputArea(imageDataUrl, selectedHtml, bounds);
             console.log('[Feedback] Feedback input area shown.');
           } catch (viewerError) {
             console.error('[Feedback] Error showing feedback input area:', viewerError);
@@ -523,23 +527,6 @@ export class FloatingMenu {
       if (this.errorList) {
         this.errorList.style.display = 'block';
       }
-
-      // REMOVED: No longer adding settings button to expanded view
-      // if (this.settingsButton && !this.floatingMenuDiv.contains(this.settingsButton)) {
-      //   this.floatingMenuDiv.appendChild(this.settingsButton);
-      // }
-
-      if (this.settingsView && !this.floatingMenuDiv.contains(this.settingsView)) {
-        // NOTE: Settings VIEW still needs to be appended somewhere.
-        // Appending to body might be better if it's modal-like.
-        // Let's keep it appended to the body during creation instead.
-        // document.body.appendChild(this.settingsView); // Moved to create()
-      }
-
-      // REMOVED: Settings button display is handled by bottomContainer visibility now
-      // if (this.settingsButton) {
-      //   this.settingsButton.style.display = 'inline-block';
-      // }
 
       // Show/hide no errors message based on error count
       if (this.noErrorsMessage) {
