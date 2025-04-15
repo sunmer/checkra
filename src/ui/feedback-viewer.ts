@@ -97,17 +97,15 @@ export class FeedbackViewer {
         position: absolute;
         opacity: 0;
         transition: opacity 0.2s ease-in-out;
-        pointer-events: none; /* Wrapper ignores mouse by default */
+        pointer-events: none;
         z-index: 10;
         margin: 0;
-        padding: 0; /* Padding will be handled by content or specific rules */
+        padding: 0;
         box-sizing: border-box;
         max-width: 80vw;
         max-height: 70vh;
         overflow: auto;
         border: 1px dashed #007acc;
-        border-radius: 4px;
-        color: #abb2bf;
       }
 
       /* Style for the close button inside the fix wrapper */
