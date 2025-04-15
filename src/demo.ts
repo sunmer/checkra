@@ -1,18 +1,21 @@
-// @ts-nocheck
-import { initLogger } from './index';
+import { initCheckra } from './index';
 
 /**
  * Set up the demonstration functionality for Checkra
  */
 export const setupDemo = () => {
-  // Initialize logger
+  // Initialize Checkra for the demo
   try {
-    initLogger({
-      renderErrorLogDiv: true
+    // Example: Initialize with UI visible
+    initCheckra({
+      isVisible: true
     });
+    console.log('[Checkra Demo] Initialized Checkra for demo.');
+
   } catch (error) {
-    console.error(error);
+    console.error('[Checkra Demo] Error initializing Checkra:', error);
   }
 };
-// Deprecated legacy export that was mentioned in the original file
+
+// Deprecated legacy export (can likely be removed if not used)
 export const demo = () => { };

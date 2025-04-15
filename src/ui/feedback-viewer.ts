@@ -183,7 +183,7 @@ export class FeedbackViewer {
     this.submitButton = document.createElement('button');
     this.submitButton.style.position = 'absolute';
     this.submitButton.style.bottom = '8px';
-    this.submitButton.style.right = '8px';
+    this.submitButton.style.right = '24px';
     this.submitButton.style.display = 'flex';
     this.submitButton.style.alignItems = 'baseline';
     this.submitButton.style.padding = '5px 10px';

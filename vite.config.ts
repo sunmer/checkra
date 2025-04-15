@@ -2,30 +2,20 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
 
-const commonConfig = {
-  define: {
-    'process.env.BABEL_TYPES_8_BREAKING': JSON.stringify(true),
-  },
-};
-
 export default defineConfig(({ command, mode }) => {
   if (command === 'serve') {
     // Development mode - serve the demo directory
     return {
-      ...commonConfig,
       root: 'demo',
       server: {
         open: true
       },
-      // Ensure deps like @babel/* are processed if needed (usually default is okay)
-      optimizeDeps: {
-         // include: ['@babel/parser', /* etc. if needed, but try without first */]
-      }
+      plugins: [
+      ],
     };
   } else {
     // Build mode - build the library
     return {
-      ...commonConfig,
       build: {
         lib: {
           entry: resolve(__dirname, 'src/index.ts'),
