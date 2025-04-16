@@ -216,22 +216,16 @@ export class FeedbackViewer {
       }
 
       #feedback-viewer #feedback-submit-button:disabled {
-        opacity: 0.5;
+        /* Override the general disabled style to keep the blue background */
+        background-color: #2563eb !important;
+        /* Keep the opacity change to indicate it's disabled */
+        opacity: 0.6; /* Slightly less faded than the default 0.5 */
         cursor: not-allowed;
       }
 
       #feedback-viewer #feedback-submit-button span:last-child {
         margin-left: 0;
         color: #e5e7eb;
-      }
-
-      #feedback-viewer #feedback-preview-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        background-color: rgba(255, 255, 255, 0.1) !important;
-      }
-      #feedback-viewer #feedback-preview-button:not(:disabled):hover {
-         background-color: rgba(255, 255, 255, 0.2);
       }
 
       /* Loading Spinner Animation */

@@ -40,7 +40,7 @@ class ScreenCapture {
       this.mouseMoveListener = null;
     }
 
-    // Remove overlay if it exists
+    // Remove overlay if it exists - This check will now likely always be false
     if (this.overlay && this.overlay.parentNode) {
       document.body.removeChild(this.overlay);
       this.overlay = null;
@@ -53,20 +53,6 @@ class ScreenCapture {
     console.log('[ScreenCapture] Cleanup complete.');
   }
 
-  private createOverlay(): void {
-    // Create overlay div
-    this.overlay = document.createElement('div');
-    this.overlay.style.position = 'fixed';
-    this.overlay.style.top = '0';
-    this.overlay.style.left = '0';
-    this.overlay.style.width = '100%';
-    this.overlay.style.height = '100%';
-    this.overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent dark overlay
-    this.overlay.style.zIndex = '100'; // Very high z-index
-    this.overlay.style.pointerEvents = 'none'; // Allow clicks to pass through
-    document.body.appendChild(this.overlay);
-  }
-
   private highlightElement(element: HTMLElement | null): void {
     // Remove previous highlight first
     if (this.currentHighlight) {
@@ -76,18 +62,18 @@ class ScreenCapture {
       this.currentHighlight = null; // Clear the reference
     }
 
-    // If the new element is null or the overlay itself, just return
-    if (!element || element === this.overlay) {
+    // If the new element is null, just return (overlay check removed as it's not added)
+    if (!element) {
       return;
     }
 
     // Set the current element as the highlighted one
     this.currentHighlight = element;
 
-    // Apply highlighting styles - bring element above overlay
+    // Apply highlighting styles - bring element above other page elements
     element.style.outline = '2px solid #0095ff';
     element.style.position = 'relative'; // Needed for z-index to work reliably
-    element.style.zIndex = '101'; // Higher than overlay's z-index (100)
+    element.style.zIndex = '101'; // High z-index to appear above most elements
   }
 
   /**
@@ -100,11 +86,11 @@ class ScreenCapture {
     const defaultBackgroundColor = '#ffffff'; // Default to white
 
     while (currentElement) {
-      // Ensure we don't check the overlay itself if it somehow gets selected
-      if (currentElement === this.overlay) {
-          currentElement = currentElement.parentElement;
-          continue;
-      }
+      // REMOVED: Check for overlay is no longer needed as it's not in the DOM
+      // if (currentElement === this.overlay) {
+      //     currentElement = currentElement.parentElement;
+      //     continue;
+      // }
 
       const computedStyle = window.getComputedStyle(currentElement);
       const bgColor = computedStyle.backgroundColor;
@@ -156,8 +142,8 @@ class ScreenCapture {
     try {
       console.log('[ScreenCapture] Setting up element selection...');
 
-      // Create overlay
-      this.createOverlay();
+      // Create overlay - REMOVED: Don't create/add the overlay anymore
+      // this.createOverlay();
 
       // Set up escape key handler
       this.escapeListener = (event: KeyboardEvent) => {
@@ -182,9 +168,9 @@ class ScreenCapture {
         const target = event.target as HTMLElement;
         const floatingMenu = document.getElementById('floating-menu-container');
 
-        // Ignore clicks on the floating menu or overlay
-        if ((floatingMenu && floatingMenu.contains(target)) || target === this.overlay) {
-          console.log('[ScreenCapture] Clicked on ignored element (menu or overlay), ignoring capture.');
+        // Ignore clicks on the floating menu (overlay check removed)
+        if (floatingMenu && floatingMenu.contains(target)) {
+          console.log('[ScreenCapture] Clicked on ignored element (menu), ignoring capture.');
           return;
         }
 
