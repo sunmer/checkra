@@ -1,5 +1,6 @@
 import Settings from '../settings';
 import { feedbackViewer } from '../ui/feedback-viewer';
+import { getEffectiveApiKey } from '../core/index'; // Import the getter
 
 
 /**
@@ -22,9 +23,21 @@ export const fetchFeedback = async (
         requestBody.html = selectedHtml;
     }
 
+    // --- Add Authorization Header ---
+    const currentApiKey = getEffectiveApiKey();
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentApiKey) {
+        headers['Authorization'] = `Bearer ${currentApiKey}`;
+    } else {
+        // This case should ideally not happen if initCheckra ran successfully,
+        // but log a warning just in case.
+        console.warn('[Checkra Service] API key/anonymous ID not available for feedback request.');
+    }
+    // --- End Add Authorization Header ---
+
     const response = await fetch(`${Settings.API_URL}/suggest/feedback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers, // Use the updated headers object
       body: JSON.stringify(requestBody),
     });
 

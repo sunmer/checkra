@@ -2,6 +2,27 @@ import { CheckraOptions } from '../types';
 import { FloatingMenu } from '../ui/floating-menu';
 import { settingsViewer } from '../ui/settings-modal';
 
+// --- Key Management ---
+let effectiveApiKey: string | null = null;
+const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
+
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+/**
+ * Retrieves the effective API key (provided or anonymous UUID) for use in API calls.
+ * @returns The key string or null if not initialized.
+ */
+export function getEffectiveApiKey(): string | null {
+    return effectiveApiKey;
+}
+// --- End Key Management ---
+
 /**
  * Defines the public API returned by initCheckra.
  */
@@ -29,18 +50,43 @@ export interface CheckraAPI {
  * @returns A CheckraAPI object to interact with the library, or null if initialization fails.
  */
 export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
-  // Default configuration
-  const config: Required<CheckraOptions> = {
-    isVisible: options?.isVisible ?? true,
-    style: options?.style ?? {}
+  const config = {
+    apiKey: options?.apiKey ?? undefined, // Keep undefined if not provided
+    isVisible: options?.isVisible ?? true, // Default for isVisible
+    style: options?.style ?? {}           // Default for style
   };
+
+  // --- Determine Effective API Key ---
+  if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.trim() !== '') {
+    effectiveApiKey = config.apiKey.trim();
+    console.log('[Checkra] Using provided API key.');
+  } else {
+    console.log('[Checkra] No API key provided, using anonymous ID.');
+    try {
+      let anonymousId = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (anonymousId) {
+        effectiveApiKey = anonymousId;
+        console.log('[Checkra] Using stored anonymous ID from localStorage.');
+      } else {
+        anonymousId = generateUUID();
+        localStorage.setItem(LOCAL_STORAGE_KEY, anonymousId);
+        effectiveApiKey = anonymousId;
+        console.log('[Checkra] Generated and stored new anonymous ID in localStorage.');
+      }
+    } catch (error) {
+      // localStorage might be unavailable (e.g., private browsing)
+      console.warn('[Checkra] localStorage access failed. Generating ephemeral anonymous ID.', error);
+      effectiveApiKey = generateUUID(); // Generate one for this session only
+    }
+  }
+  // --- End Determine Effective API Key ---
 
   let feedbackMenuInstance: FloatingMenu | null = null;
 
   try {
     // Only initialize UI components if isVisible is true
     if (config.isVisible) {
-      feedbackMenuInstance = new FloatingMenu(config); // Create the floating menu
+      feedbackMenuInstance = new FloatingMenu(config); // Assuming FloatingMenu constructor accepts CheckraOptions
     }
 
     console.log(`[Checkra] Initialized. UI Visible: ${config.isVisible}`);
@@ -81,6 +127,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
 
   } catch (error) {
     console.error('[Checkra] Failed to initialize:', error);
+    effectiveApiKey = null; // Clear key on init failure
     return null; // Return null on initialization failure
   }
 }

@@ -1,5 +1,5 @@
 const SETTINGS_PROD = {
-  API_URL: "https://logger-backend-psi.vercel.app/api"
+  API_URL: "https://checkra.io/api"
 };
 
 const SETTINGS_DEV = {
