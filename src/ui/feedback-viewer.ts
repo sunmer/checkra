@@ -1,6 +1,7 @@
 import { escapeHTML } from './utils';
 import { fetchFeedback } from '../services/ai-service';
 import { marked } from 'marked';
+import { copyViewportToClipboard } from '../utils/clipboard-utils';
 
 /**
  * Class for managing the feedback response viewer modal.
@@ -148,6 +149,40 @@ export class FeedbackViewer {
         background-color: rgba(200, 50, 50, 0.8);
         color: white;
       }
+
+      /* --- New Copy Button Styles --- */
+      .feedback-fix-copy-btn {
+        position: absolute;
+        top: 2px;
+        right: 24px; /* Position next to the close button */
+        width: 18px;
+        height: 18px;
+        background-color: rgba(80, 80, 80, 0.7);
+        color: #ddd;
+        border: 1px solid #555;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px; /* Add padding for the SVG */
+        box-sizing: border-box; /* Include padding in width/height */
+        z-index: 11;
+        pointer-events: auto;
+        transition: background-color 0.2s, color 0.2s;
+      }
+
+      .feedback-fix-copy-btn svg {
+        width: 10px; /* Adjust SVG size */
+        height: 10px;
+        stroke: currentColor; /* Inherit color */
+      }
+
+      .feedback-fix-copy-btn:hover {
+        background-color: rgba(80, 120, 200, 0.8); /* Different hover color */
+        color: white;
+      }
+      /* --- End Copy Button Styles --- */
 
       #feedback-viewer button:disabled {
         opacity: 0.5;
@@ -720,6 +755,22 @@ export class FeedbackViewer {
           closeButton.addEventListener('click', this.fixWrapperCloseButtonListener);
           this.insertedFixWrapper.appendChild(closeButton);
           
+          // --- Add Copy Button ---
+          const copyButton = document.createElement('span'); // Use span like the close button
+          copyButton.classList.add('feedback-fix-copy-btn');
+          copyButton.title = 'Copy viewport to clipboard';
+          copyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`; // Add SVG
+          copyButton.addEventListener('click', (e) => {
+              e.stopPropagation(); // Prevent triggering other listeners if needed
+              console.log('[FeedbackViewer DEBUG] Copy button clicked.');
+              copyViewportToClipboard().catch(err => {
+                  console.error("Error copying viewport:", err);
+                  // Optionally show an error message to the user here
+              });
+          });
+          this.insertedFixWrapper.appendChild(copyButton);
+          // --- End Add Copy Button ---
+
           this.fixWrapperMouseLeaveListener = () => {
               console.log('[FeedbackViewer DEBUG] Mouse left injected fix wrapper.');
               if (this.insertedFixWrapper) {
@@ -762,15 +813,16 @@ export class FeedbackViewer {
 
             requestAnimationFrame(() => {
                 if (this.insertedFixWrapper) {
-                    this.insertedFixWrapper.style.opacity = '1';
-                    console.log('[FeedbackViewer DEBUG] Triggered fade-in for injected fix.');
+                    // Opacity is handled by CSS animation now
+                    // this.insertedFixWrapper.style.opacity = '1';
+                    console.log('[FeedbackViewer DEBUG] Injected fix is now visible (via CSS animation).');
                 }
             });
 
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
-            this.insertedFixWrapper = null;
-            return;
+            this.insertedFixWrapper = null; // Ensure wrapper is nullified if insertion fails
+            return; // Exit early if insertion failed
           }
       } else {
          console.log('[FeedbackViewer DEBUG] No update needed (wrapper exists and content matches).');
@@ -788,11 +840,14 @@ export class FeedbackViewer {
     // Log the call stack to see who called this function
     console.trace('[FeedbackViewer DEBUG] removeInjectedFix call stack:');
 
+    // Remove specific listeners first
     if (this.insertedFixWrapper && this.fixWrapperMouseLeaveListener) {
         console.log('[FeedbackViewer DEBUG] Removing mouseleave listener from fix wrapper.');
         this.insertedFixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
         this.fixWrapperMouseLeaveListener = null;
     }
+    // Note: Copy button listener is removed implicitly when the wrapper is removed.
+    // Close button listener reference is nullified below.
 
     if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
         console.log('[FeedbackViewer DEBUG] Removing mouseenter listener from original element.');
@@ -800,23 +855,29 @@ export class FeedbackViewer {
         this.originalElementMouseEnterListener = null;
     }
 
+    // Restore original element display *before* removing the wrapper if possible
     if (this.originalElementRef instanceof HTMLElement) {
         console.log(`[FeedbackViewer DEBUG] Restoring original element display: ${this.originalElementDisplayStyle || 'default'}`);
-        this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
+        // Check if the element is still in the DOM before trying to change its style
+        if (document.body.contains(this.originalElementRef)) {
+            this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
+        } else {
+            console.log('[FeedbackViewer DEBUG] Original element no longer in DOM, skipping style restoration.');
+        }
     }
 
+    // Remove the wrapper from the DOM
     if (this.insertedFixWrapper) {
         console.log('[FeedbackViewer DEBUG] Removing insertedFixWrapper from DOM.');
-        this.insertedFixWrapper.remove();
+        this.insertedFixWrapper.remove(); // This also removes the buttons and their listeners
         this.insertedFixWrapper = null;
     }
 
+    // Nullify remaining references
     this.originalElementDisplayStyle = null;
-    // Keep fixWrapperCloseButtonListener removal here if it's only added when wrapper exists
     if (this.fixWrapperCloseButtonListener) {
-        // Assuming the button is removed with the wrapper, just nullify the listener ref
         console.log('[FeedbackViewer DEBUG] Nullifying close button listener reference.');
-        this.fixWrapperCloseButtonListener = null;
+        this.fixWrapperCloseButtonListener = null; // Listener itself is gone with the button
     }
     console.log('[FeedbackViewer DEBUG] <<< Exiting removeInjectedFix >>>');
   }
@@ -900,12 +961,11 @@ export class FeedbackViewer {
     }
     document.removeEventListener('mousedown', this.outsideClickHandler);
     this.promptTextarea?.removeEventListener('keydown', this.handleTextareaKeydown);
-    this.closeButton?.removeEventListener('click', this.hide);
+    this.closeButton?.removeEventListener('click', () => this.hide());
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
     if (this.renderedHtmlPreview && this.renderedHtmlPreview.parentNode) {
-        this.renderedHtmlPreview.replaceWith(this.renderedHtmlPreview.cloneNode(true));
         document.body.removeChild(this.renderedHtmlPreview);
     }
     console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from destroy().');
@@ -927,6 +987,7 @@ export class FeedbackViewer {
     this.originalElementMouseEnterListener = null;
     this.closeButton = null;
     this.previewButton = null;
+    this.isStreamStarted = false;
     console.log('[FeedbackViewer] Instance destroyed.');
   }
 }
