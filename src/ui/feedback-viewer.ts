@@ -19,6 +19,7 @@ export class FeedbackViewer {
   private originalElementBounds: DOMRect | null = null;
   private originalElementRef: Element | null = null;
   private insertedFixWrapper: HTMLDivElement | null = null;
+  private fixContentContainer: HTMLDivElement | null = null;
   private accumulatedResponseText: string = '';
   private fixWrapperCloseButtonListener: (() => void) | null = null;
   private originalElementDisplayStyle: string | null = null;
@@ -27,6 +28,14 @@ export class FeedbackViewer {
   private closeButton: HTMLButtonElement | null = null;
   private previewButton: HTMLButtonElement | null = null;
   private isStreamStarted: boolean = false;
+
+  // --- Dragging State ---
+  private isDragging: boolean = false;
+  private dragStartX: number = 0;
+  private dragStartY: number = 0;
+  private dragInitialLeft: number = 0;
+  private dragInitialTop: number = 0;
+  // --- End Dragging State ---
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
@@ -97,30 +106,20 @@ export class FeedbackViewer {
         margin-bottom: 0.4em;
       }
 
-      /* --- CSS Animation Keyframes --- */
-      @keyframes blinkOutline3TimesThenHold {
-        /* Define 3 blinks (ON-OFF cycles) then hold ON */
-        /* Each ON/OFF segment is ~16.6% for a 1.2s total duration */
-        0%, 33.2%, 66.5% { outline-color: rgba(0, 122, 204, 1); } /* ON */
-        16.6%, 49.9% { outline-color: transparent; } /* OFF */
-        /* From 83.3% to 100%, stay ON */
-        83.3%, 100% { outline-color: rgba(0, 122, 204, 1); } /* Hold ON */
+      /* --- New Fade In Keyframe --- */
+      @keyframes fadeInElement {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
-
-      /* Removed fadeInElement keyframe */
       /* --- End Keyframes --- */
 
       .feedback-injected-fix {
         position: relative;
-        /* opacity: 0; */ /* Content is visible immediately */
-        opacity: 1; /* Ensure content is visible */
-        outline: 2x dashed transparent; 
+        opacity: 0; /* Start transparent for fade-in */
+        outline: 2px dashed transparent; /* Base outline style */
         outline-offset: 6px;
-        /* Apply only the outline blink animation */
         animation:
-          /* Blink the outline color 3 times sharply, hold solid (1.2s) */
-          blinkOutline3TimesThenHold 1.2s steps(1, end) 1 forwards;
-          /* Removed fadeInElement animation */
+          fadeInElement 1.5s ease-out 1 forwards;
       }
 
       .feedback-fix-close-btn {
@@ -243,6 +242,20 @@ export class FeedbackViewer {
         vertical-align: middle; /* Align with text if needed */
         margin-right: 8px; /* Space between spinner and text if any */
       }
+
+      #feedback-viewer {
+        cursor: grab; /* Add grab cursor for the whole viewer */
+      }
+
+      #feedback-viewer.dragging {
+        cursor: grabbing; /* Change cursor while dragging */
+      }
+
+      #feedback-viewer textarea,
+      #feedback-viewer button,
+      #feedback-viewer #feedback-response-content {
+        cursor: auto; /* Keep default cursor for interactive elements */
+      }
     `;
 
     document.head.appendChild(styleElement);
@@ -264,6 +277,10 @@ export class FeedbackViewer {
     this.element.style.fontFamily = 'sans-serif';
     this.element.style.lineHeight = '1.5';
     this.element.style.flexDirection = 'column';
+
+    // --- Add Dragging Listeners ---
+    this.element.addEventListener('mousedown', this.handleDragStart);
+    // --- End Add Dragging Listeners ---
 
     const contentWrapper = document.createElement('div');
     contentWrapper.style.padding = '15px 20px 20px 20px';
@@ -454,53 +471,134 @@ export class FeedbackViewer {
     this.submitButton.style.display = 'flex';
 
     // --- Calculate and Set Position ---
-    const viewer = this.element; // Declare viewer here, outside the if block
+    const viewer = this.element;
+    viewer.style.transform = 'none'; // Ensure transform is removed
+    // Reset position to fixed initially (in case it was changed previously)
+    viewer.style.position = 'fixed';
 
     if (this.originalElementBounds) {
         const target = this.originalElementBounds;
-        const margin = 10; // Space between target and viewer
+        const placementMargin = 10; // Space between target and viewer
         const viewportMargin = 10; // Space from viewport edges
 
-        // Calculate viewer dimensions based on CSS
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        const minWidth = 350;
-        const maxWidth = 500;
-        const vwWidth = viewportWidth * 0.5;
-        const viewerWidth = Math.max(minWidth, Math.min(vwWidth, maxWidth));
-        const viewerHeight = viewportHeight * 0.8; // Estimate using maxHeight
 
-        // Vertical position: Try below first, then above
-        let top: number;
-        const spaceBelow = viewportHeight - target.bottom - margin;
-        const spaceAbove = target.top - margin;
+        // --- Estimate viewer dimensions (using fixed position) ---
+        viewer.style.visibility = 'hidden';
+        viewer.style.display = 'flex';
+        // viewer.style.position = 'fixed'; // Already set above
+        viewer.style.left = '-9999px';
+        viewer.style.top = '-9999px';
 
-        if (spaceBelow >= viewerHeight || spaceBelow >= spaceAbove) {
-            // Place below
-            top = target.bottom + margin;
-        } else {
-            // Place above
-            top = target.top - viewerHeight - margin;
+        const viewerWidth = viewer.offsetWidth;
+        const viewerHeight = viewer.offsetHeight;
+
+        // Hide it again immediately
+        viewer.style.display = 'none';
+        viewer.style.visibility = 'visible';
+        viewer.style.left = ''; // Reset temporary styles
+        viewer.style.top = '';  // Reset temporary styles
+        // --- End dimension estimation ---
+
+
+        if (!viewerWidth || !viewerHeight) {
+            console.warn('[FeedbackViewer] Could not determine viewer dimensions, falling back to center (fixed).');
+            viewer.style.position = 'fixed'; // Ensure fixed for center fallback
+            viewer.style.top = '50%';
+            viewer.style.left = '50%';
+            viewer.style.transform = 'translate(-50%, -50%)';
+            this.element.style.display = 'flex';
+            this.promptTextarea.focus();
+            return; // Exit early
         }
-        // Clamp vertical position to viewport
-        top = Math.max(viewportMargin, Math.min(top, viewportHeight - viewerHeight - viewportMargin));
 
-        // Horizontal position: Try to center relative to target
-        let left = target.left + (target.width / 2) - (viewerWidth / 2);
+        console.log(`[FeedbackViewer] Target Rect:`, target);
+        console.log(`[FeedbackViewer] Estimated Viewer Dimensions: W=${viewerWidth}, H=${viewerHeight}`);
 
-        // Clamp horizontal position to viewport
-        left = Math.max(viewportMargin, Math.min(left, viewportWidth - viewerWidth - viewportMargin));
+        // Helper functions (doesOverlap, fitsInViewport) remain the same
+        const doesOverlap = (rect1: DOMRect, rect2: DOMRect): boolean => {
+            return !(
+                rect1.right < rect2.left ||
+                rect1.left > rect2.right ||
+                rect1.bottom < rect2.top ||
+                rect1.top > rect2.bottom
+            );
+        };
+        const fitsInViewport = (rect: { top: number; left: number; bottom: number; right: number }): boolean => {
+            return (
+                rect.top >= viewportMargin &&
+                rect.left >= viewportMargin &&
+                rect.bottom <= viewportHeight - viewportMargin &&
+                rect.right <= viewportWidth - viewportMargin
+            );
+        };
 
-        viewer.style.top = `${top}px`;
-        viewer.style.left = `${left}px`;
-        // Ensure transform is removed if it was ever set
-        viewer.style.transform = 'none';
 
-        console.log(`[FeedbackViewer] Positioned viewer at top: ${top}px, left: ${left}px`);
+        let bestViewportTop: number | null = null;
+        let bestViewportLeft: number | null = null;
+
+        // Potential positions definition remains the same
+        const potentialPositions = [
+            // 1. Below
+            { top: target.bottom + placementMargin, left: target.left + target.width / 2 - viewerWidth / 2, width: viewerWidth, height: viewerHeight, name: "Below" },
+            // 2. Above
+            { top: target.top - viewerHeight - placementMargin, left: target.left + target.width / 2 - viewerWidth / 2, width: viewerWidth, height: viewerHeight, name: "Above" },
+            // 3. Right
+            { top: target.top + target.height / 2 - viewerHeight / 2, left: target.right + placementMargin, width: viewerWidth, height: viewerHeight, name: "Right" },
+            // 4. Left
+            { top: target.top + target.height / 2 - viewerHeight / 2, left: target.left - viewerWidth - placementMargin, width: viewerWidth, height: viewerHeight, name: "Left" }
+        ];
+
+        // --- Find the first valid position (relative to viewport) ---
+        for (const pos of potentialPositions) {
+            let clampedTop = Math.max(viewportMargin, Math.min(pos.top, viewportHeight - pos.height - viewportMargin));
+            let clampedLeft = Math.max(viewportMargin, Math.min(pos.left, viewportWidth - pos.width - viewportMargin));
+
+            const potentialRect = DOMRect.fromRect({ x: clampedLeft, y: clampedTop, width: pos.width, height: pos.height });
+
+            console.log(`[FeedbackViewer] Checking position: ${pos.name}`, potentialRect);
+            const overlapsTarget = doesOverlap(potentialRect, target);
+            const fitsViewport = fitsInViewport({ top: potentialRect.top, left: potentialRect.left, bottom: potentialRect.bottom, right: potentialRect.right });
+            console.log(`[FeedbackViewer] -> Overlaps Target: ${overlapsTarget}, Fits Viewport: ${fitsViewport}`);
+
+            if (!overlapsTarget && fitsViewport) {
+                bestViewportTop = potentialRect.top; // Store viewport-relative coords
+                bestViewportLeft = potentialRect.left;
+                console.log(`[FeedbackViewer] Found valid viewport position: ${pos.name} at T:${bestViewportTop}, L:${bestViewportLeft}`);
+                break;
+            }
+        }
+
+        // --- Apply the best position or fallback ---
+        if (bestViewportTop !== null && bestViewportLeft !== null) {
+            // Found a good spot - use absolute positioning relative to document
+            viewer.style.position = 'absolute';
+            const finalTop = bestViewportTop + window.scrollY;
+            const finalLeft = bestViewportLeft + window.scrollX;
+            viewer.style.top = `${finalTop}px`;
+            viewer.style.left = `${finalLeft}px`;
+            console.log(`[FeedbackViewer] Applying ABSOLUTE position: top: ${viewer.style.top}, left: ${viewer.style.left}`);
+        } else {
+            // Fallback: Place below and clamp using FIXED positioning
+            console.warn('[FeedbackViewer] No ideal non-overlapping position found. Falling back to placing below (fixed, clamped).');
+            viewer.style.position = 'fixed'; // Ensure fixed for this fallback
+            let fallbackTop = target.bottom + placementMargin;
+            let fallbackLeft = target.left + target.width / 2 - viewerWidth / 2;
+
+            // Clamp fallback position within viewport
+            fallbackTop = Math.max(viewportMargin, Math.min(fallbackTop, viewportHeight - viewerHeight - viewportMargin));
+            fallbackLeft = Math.max(viewportMargin, Math.min(fallbackLeft, viewportWidth - viewerWidth - viewportMargin));
+
+            viewer.style.top = `${fallbackTop}px`;
+            viewer.style.left = `${fallbackLeft}px`;
+            console.log(`[FeedbackViewer] Applying FIXED fallback position: top: ${viewer.style.top}, left: ${viewer.style.left}`);
+        }
+
     } else {
-        // Fallback to center if targetRect is somehow null
-        console.warn('[FeedbackViewer] Target bounds not available, falling back to center position.');
-        // Now 'viewer' is accessible here
+        // Fallback to center if targetRect is somehow null (use fixed)
+        console.warn('[FeedbackViewer] Target bounds not available, falling back to center position (fixed).');
+        viewer.style.position = 'fixed'; // Ensure fixed for center fallback
         viewer.style.top = '50%';
         viewer.style.left = '50%';
         viewer.style.transform = 'translate(-50%, -50%)';
@@ -709,7 +807,6 @@ export class FeedbackViewer {
             while (parsedDoc.body.firstChild) {
                 tempContentContainer.appendChild(parsedDoc.body.firstChild);
             }
-            newContentSourceElement = tempContentContainer;
             newContentHtml = tempContentContainer.innerHTML;
             console.log('[FeedbackViewer DEBUG] Using parsed content directly. innerHTML:', newContentHtml.substring(0, 200) + '...');
         }
@@ -719,28 +816,13 @@ export class FeedbackViewer {
         return;
       }
 
-      if (!newContentSourceElement) {
-          console.error('[FeedbackViewer DEBUG] Failed to create content source element.');
-          return;
-      }
-
-      const needsUpdate = !this.insertedFixWrapper || this.insertedFixWrapper.innerHTML !== newContentHtml;
-      
-      if (needsUpdate) {
-          console.log('[FeedbackViewer DEBUG] Content changed or wrapper missing. Proceeding with update.');
-          console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from tryInjectHtmlFix (before injecting new fix).');
-          this.removeInjectedFix();
+      if (!this.insertedFixWrapper) {
+          console.log('[FeedbackViewer DEBUG] Creating injected fix wrapper for the first time.');
 
           this.insertedFixWrapper = document.createElement('div');
           this.insertedFixWrapper.classList.add('feedback-injected-fix');
-          
           this.insertedFixWrapper.style.display = '';
-
           this.insertedFixWrapper.style.backgroundColor = 'transparent';
-          console.log('[FeedbackViewer DEBUG] Set wrapper background to transparent.');
-
-          // Outline is handled by CSS animation now
-          // this.insertedFixWrapper.style.outline = '1px dashed #007acc';
 
           if (attributesToCopy.length > 0) {
               attributesToCopy.forEach(attr => {
@@ -749,14 +831,16 @@ export class FeedbackViewer {
               });
           }
 
+          this.fixContentContainer = document.createElement('div');
+          this.fixContentContainer.classList.add('feedback-fix-content');
           try {
-            while (newContentSourceElement.firstChild) {
-                this.insertedFixWrapper.appendChild(newContentSourceElement.firstChild);
-            }
-            console.log('[FeedbackViewer DEBUG] Appended processed content to wrapper.');
+              this.fixContentContainer.innerHTML = newContentHtml;
+              this.insertedFixWrapper.appendChild(this.fixContentContainer);
+              console.log('[FeedbackViewer DEBUG] Appended initial content to inner container.');
           } catch (appendError) {
-             console.error('[FeedbackViewer DEBUG] Error appending processed content to wrapper:', appendError);
+             console.error('[FeedbackViewer DEBUG] Error setting initial content for inner container:', appendError);
              this.insertedFixWrapper = null;
+             this.fixContentContainer = null;
              return;
           }
 
@@ -764,42 +848,35 @@ export class FeedbackViewer {
               console.log('[FeedbackViewer DEBUG] Close button clicked on injected fix.');
               this.removeInjectedFix();
           };
-          
           const closeButton = document.createElement('span');
           closeButton.classList.add('feedback-fix-close-btn');
           closeButton.textContent = '✕';
           closeButton.title = 'Dismiss fix suggestion';
-
           closeButton.addEventListener('click', this.fixWrapperCloseButtonListener);
           this.insertedFixWrapper.appendChild(closeButton);
-          
-          // --- Add Copy Button ---
-          const copyButton = document.createElement('span'); // Use span like the close button
+
+          const copyButton = document.createElement('span');
           copyButton.classList.add('feedback-fix-copy-btn');
           copyButton.title = 'Copy viewport to clipboard';
-          copyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`; // Add SVG
+          copyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
           copyButton.addEventListener('click', (e) => {
-              e.stopPropagation(); // Prevent triggering other listeners if needed
+              e.stopPropagation();
               console.log('[FeedbackViewer DEBUG] Copy button clicked.');
               copyViewportToClipboard().catch(err => {
                   console.error("Error copying viewport:", err);
-                  // Optionally show an error message to the user here
               });
           });
           this.insertedFixWrapper.appendChild(copyButton);
-          // --- End Add Copy Button ---
 
           this.fixWrapperMouseLeaveListener = () => {
               console.log('[FeedbackViewer DEBUG] Mouse left injected fix wrapper.');
               if (this.insertedFixWrapper) {
                   this.insertedFixWrapper.style.display = 'none';
               }
-              
               if (this.originalElementRef instanceof HTMLElement) {
                   this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
               }
           };
-          
           this.originalElementMouseEnterListener = () => {
               console.log('[FeedbackViewer DEBUG] Mouse entered original element area.');
               if (this.insertedFixWrapper && this.originalElementRef instanceof HTMLElement) {
@@ -807,18 +884,15 @@ export class FeedbackViewer {
                   this.originalElementRef.style.display = 'none';
               }
           };
-
           this.insertedFixWrapper.addEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
-          
           if (this.originalElementRef instanceof HTMLElement) {
               this.originalElementRef.addEventListener('mouseenter', this.originalElementMouseEnterListener);
               console.log('[FeedbackViewer DEBUG] Added mouseleave listener to wrapper and mouseenter listener to original element.');
-              
+
               this.originalElementDisplayStyle = window.getComputedStyle(this.originalElementRef).display;
               if (this.originalElementDisplayStyle === 'none') {
                   this.originalElementDisplayStyle = 'block';
               }
-              
               this.originalElementRef.style.display = 'none';
           }
 
@@ -827,24 +901,32 @@ export class FeedbackViewer {
               this.insertedFixWrapper,
               this.originalElementRef.nextSibling
             );
-            console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element.');
-
-            requestAnimationFrame(() => {
-                if (this.insertedFixWrapper) {
-                    // Opacity is handled by CSS animation now
-                    // this.insertedFixWrapper.style.opacity = '1';
-                    console.log('[FeedbackViewer DEBUG] Injected fix is now visible (via CSS animation).');
-                }
-            });
-
+            console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element. Animation should start.');
+            if (this.previewButton) {
+                this.previewButton.disabled = false;
+            }
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
-            this.insertedFixWrapper = null; // Ensure wrapper is nullified if insertion fails
-            return; // Exit early if insertion failed
+            this.removeInjectedFix();
+            return;
+          }
+
+      } else if (this.fixContentContainer) {
+          if (this.fixContentContainer.innerHTML !== newContentHtml) {
+              console.log('[FeedbackViewer DEBUG] Updating content of existing inner container.');
+              try {
+                  this.fixContentContainer.innerHTML = newContentHtml;
+              } catch (updateError) {
+                  console.error('[FeedbackViewer DEBUG] Error updating inner container HTML:', updateError);
+              }
+          } else {
+              console.log('[FeedbackViewer DEBUG] No update needed (inner content matches).');
           }
       } else {
-         console.log('[FeedbackViewer DEBUG] No update needed (wrapper exists and content matches).');
+          console.warn('[FeedbackViewer DEBUG] Wrapper exists but inner container reference is missing. Recreating.');
+          this.removeInjectedFix();
       }
+
     } else {
       console.log('[FeedbackViewer DEBUG] Regex did not match. Ensuring fix is removed.');
       console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from tryInjectHtmlFix (regex mismatch).');
@@ -855,17 +937,13 @@ export class FeedbackViewer {
 
   private removeInjectedFix(): void {
     console.log('[FeedbackViewer DEBUG] >>> Entering removeInjectedFix <<<');
-    // Log the call stack to see who called this function
     console.trace('[FeedbackViewer DEBUG] removeInjectedFix call stack:');
 
-    // Remove specific listeners first
     if (this.insertedFixWrapper && this.fixWrapperMouseLeaveListener) {
         console.log('[FeedbackViewer DEBUG] Removing mouseleave listener from fix wrapper.');
         this.insertedFixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
         this.fixWrapperMouseLeaveListener = null;
     }
-    // Note: Copy button listener is removed implicitly when the wrapper is removed.
-    // Close button listener reference is nullified below.
 
     if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
         console.log('[FeedbackViewer DEBUG] Removing mouseenter listener from original element.');
@@ -873,10 +951,8 @@ export class FeedbackViewer {
         this.originalElementMouseEnterListener = null;
     }
 
-    // Restore original element display *before* removing the wrapper if possible
     if (this.originalElementRef instanceof HTMLElement) {
         console.log(`[FeedbackViewer DEBUG] Restoring original element display: ${this.originalElementDisplayStyle || 'default'}`);
-        // Check if the element is still in the DOM before trying to change its style
         if (document.body.contains(this.originalElementRef)) {
             this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
         } else {
@@ -884,18 +960,20 @@ export class FeedbackViewer {
         }
     }
 
-    // Remove the wrapper from the DOM
     if (this.insertedFixWrapper) {
         console.log('[FeedbackViewer DEBUG] Removing insertedFixWrapper from DOM.');
-        this.insertedFixWrapper.remove(); // This also removes the buttons and their listeners
+        this.insertedFixWrapper.remove();
         this.insertedFixWrapper = null;
     }
 
-    // Nullify remaining references
+    this.fixContentContainer = null;
     this.originalElementDisplayStyle = null;
     if (this.fixWrapperCloseButtonListener) {
         console.log('[FeedbackViewer DEBUG] Nullifying close button listener reference.');
-        this.fixWrapperCloseButtonListener = null; // Listener itself is gone with the button
+        this.fixWrapperCloseButtonListener = null;
+    }
+    if (this.previewButton) {
+        this.previewButton.disabled = true;
     }
     console.log('[FeedbackViewer DEBUG] <<< Exiting removeInjectedFix >>>');
   }
@@ -911,9 +989,8 @@ export class FeedbackViewer {
       this.submitButton.disabled = false;
       this.submitButtonTextSpan.textContent = 'Get Feedback';
     }
-    // Enable the preview button only if a fix was likely generated
-    if (this.previewButton && this.insertedFixWrapper) { // <<< Enable only if fix exists
-        this.previewButton.disabled = false;
+    if (this.previewButton) {
+        this.previewButton.disabled = !(this.insertedFixWrapper && document.body.contains(this.insertedFixWrapper));
     }
 
     this.tryRenderHtmlPreview();
@@ -930,12 +1007,11 @@ export class FeedbackViewer {
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
 
-    // Find the response header and show it
     const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
     if (responseHeader) {
-        responseHeader.style.display = 'flex'; // Show header
+        responseHeader.style.display = 'flex';
     }
-    this.previewButton.disabled = true; // Keep preview button disabled on error
+    this.previewButton.disabled = true;
 
     this.responseContentElement.style.display = 'block';
     this.responseContentElement.innerHTML = `<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
@@ -954,10 +1030,8 @@ export class FeedbackViewer {
       this.currentSelectedHtml = null;
       if (this.promptTextarea) this.promptTextarea.value = '';
       if (this.responseContentElement) {
-        this.responseContentElement.innerHTML = '';
-        // Find the response header and hide it
         const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
-        if (responseHeader) responseHeader.style.display = 'none'; // Hide header
+        if (responseHeader) responseHeader.style.display = 'none';
       }
       this.accumulatedResponseText = '';
 
@@ -980,6 +1054,14 @@ export class FeedbackViewer {
     document.removeEventListener('mousedown', this.outsideClickHandler);
     this.promptTextarea?.removeEventListener('keydown', this.handleTextareaKeydown);
     this.closeButton?.removeEventListener('click', () => this.hide());
+
+    // --- Remove Drag Listeners ---
+    this.element?.removeEventListener('mousedown', this.handleDragStart);
+    // Clean up document listeners if dragging was somehow interrupted
+    document.removeEventListener('mousemove', this.handleDragMove);
+    document.removeEventListener('mouseup', this.handleDragEnd);
+    // --- End Remove Drag Listeners ---
+
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -999,6 +1081,7 @@ export class FeedbackViewer {
     this.originalElementBounds = null;
     this.originalElementRef = null;
     this.insertedFixWrapper = null;
+    this.fixContentContainer = null;
     this.fixWrapperCloseButtonListener = null;
     this.originalElementDisplayStyle = null;
     this.fixWrapperMouseLeaveListener = null;
@@ -1006,8 +1089,60 @@ export class FeedbackViewer {
     this.closeButton = null;
     this.previewButton = null;
     this.isStreamStarted = false;
+    // --- Reset Dragging State ---
+    this.isDragging = false;
+    // --- End Reset Dragging State ---
     console.log('[FeedbackViewer] Instance destroyed.');
   }
+
+  // --- Dragging Handlers ---
+  private handleDragStart = (e: MouseEvent): void => {
+    if (!this.element) return;
+
+    // Prevent dragging when clicking on interactive elements or the response area
+    const target = e.target as HTMLElement;
+    if (target.closest('textarea, button, #feedback-response-content')) {
+      return;
+    }
+
+    e.preventDefault(); // Prevent text selection during drag
+
+    this.isDragging = true;
+    this.dragStartX = e.clientX;
+    this.dragStartY = e.clientY;
+    this.dragInitialLeft = this.element.offsetLeft;
+    this.dragInitialTop = this.element.offsetTop;
+
+    // Ensure transform is removed if it was used for centering
+    this.element.style.transform = 'none';
+    // Apply grabbing cursor via class for potentially other style changes
+    this.element.classList.add('dragging');
+
+    document.addEventListener('mousemove', this.handleDragMove);
+    document.addEventListener('mouseup', this.handleDragEnd);
+  };
+
+  private handleDragMove = (e: MouseEvent): void => {
+    if (!this.isDragging || !this.element) return;
+
+    const dx = e.clientX - this.dragStartX;
+    const dy = e.clientY - this.dragStartY;
+
+    // Update position based on drag delta
+    this.element.style.left = `${this.dragInitialLeft + dx}px`;
+    this.element.style.top = `${this.dragInitialTop + dy}px`;
+  };
+
+  private handleDragEnd = (e: MouseEvent): void => {
+    if (!this.isDragging || !this.element) return;
+
+    this.isDragging = false;
+    this.element.classList.remove('dragging'); // Remove dragging class
+
+    document.removeEventListener('mousemove', this.handleDragMove);
+    document.removeEventListener('mouseup', this.handleDragEnd);
+  };
+  // --- End Dragging Handlers ---
 }
 
 export const feedbackViewer = new FeedbackViewer();
