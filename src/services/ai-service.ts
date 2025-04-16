@@ -33,9 +33,6 @@ export const fetchFeedback = async (
       throw new Error(`Feedback request failed: ${response.status} ${response.statusText}`);
     }
 
-    // Signal viewer to clear "Sending..." message and prepare for stream
-    feedbackViewer.prepareForStream();
-
     // Stream the response
     const reader = response.body.getReader();
     const decoder = new TextDecoder();

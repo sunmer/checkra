@@ -25,6 +25,7 @@ export class FeedbackViewer {
   private originalElementMouseEnterListener: (() => void) | null = null;
   private closeButton: HTMLButtonElement | null = null;
   private previewButton: HTMLButtonElement | null = null;
+  private isStreamStarted: boolean = false;
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
@@ -483,6 +484,7 @@ export class FeedbackViewer {
     this.promptTextarea.disabled = true;
     this.submitButton.disabled = true;
     this.submitButtonTextSpan.textContent = 'Sending...';
+    this.isStreamStarted = false;
 
     // --- Replace emoji with SVG spinner ---
     this.responseContentElement.innerHTML = ''; // Clear previous content
@@ -507,13 +509,6 @@ export class FeedbackViewer {
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
   };
 
-  public prepareForStream(): void {
-    if (this.responseContentElement) {
-      this.responseContentElement.innerHTML = '';
-      this.accumulatedResponseText = '';
-    }
-  }
-
   public updateResponse(chunk: string): void {
     if (this.responseContentElement && this.element) {
       const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:last-child');
@@ -522,15 +517,11 @@ export class FeedbackViewer {
       const scrollThreshold = 10;
       const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
-      // --- Remove spinner on first chunk ---
-      if (this.accumulatedResponseText === '') {
-        // Check if the spinner is the first child and remove it
-        const spinnerWrapper = this.responseContentElement.firstChild;
-        if (spinnerWrapper && spinnerWrapper.nodeType === Node.ELEMENT_NODE && (spinnerWrapper as Element).querySelector('.loading-spinner')) {
-            this.responseContentElement.innerHTML = ''; // Clear the spinner
-        }
+      // If this is the first chunk, clear the loading spinner/message
+      if (!this.isStreamStarted) {
+        this.responseContentElement.innerHTML = ''; // Clear previous content (spinner)
+        this.isStreamStarted = true; // Mark stream as started
       }
-      // --- End spinner removal ---
 
       this.accumulatedResponseText += chunk;
       const parsedHtml = marked.parse(this.accumulatedResponseText) as string;
