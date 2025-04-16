@@ -114,7 +114,8 @@ export class FeedbackViewer {
         position: relative;
         /* opacity: 0; */ /* Content is visible immediately */
         opacity: 1; /* Ensure content is visible */
-        outline: 1px dashed transparent; /* Start with transparent outline */
+        outline: 2x dashed transparent; 
+        outline-offset: 6px;
         /* Apply only the outline blink animation */
         animation:
           /* Blink the outline color 3 times sharply, hold solid (1.2s) */
@@ -250,9 +251,6 @@ export class FeedbackViewer {
     this.element.id = 'feedback-viewer';
 
     this.element.style.position = 'fixed';
-    this.element.style.top = '50%';
-    this.element.style.left = '50%';
-    this.element.style.transform = 'translate(-50%, -50%)';
     this.element.style.backgroundColor = 'rgba(35, 45, 75, 0.95)';
     this.element.style.color = 'white';
     this.element.style.padding = '0';
@@ -266,35 +264,6 @@ export class FeedbackViewer {
     this.element.style.fontFamily = 'sans-serif';
     this.element.style.lineHeight = '1.5';
     this.element.style.flexDirection = 'column';
-
-    const header = document.createElement('div');
-    header.style.display = 'flex';
-    header.style.justifyContent = 'space-between';
-    header.style.alignItems = 'center';
-    header.style.padding = '10px 20px';
-    header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.2)';
-    header.style.flexShrink = '0';
-
-    const title = document.createElement('h2');
-    title.textContent = 'Ask for improvements';
-    title.style.margin = '0';
-    title.style.fontSize = '1.2em';
-
-    this.closeButton = document.createElement('button');
-    this.closeButton.innerHTML = '&times;';
-    this.closeButton.style.background = 'none';
-    this.closeButton.style.border = 'none';
-    this.closeButton.style.color = 'white';
-    this.closeButton.style.fontSize = '1.8em';
-    this.closeButton.style.lineHeight = '1';
-    this.closeButton.style.cursor = 'pointer';
-    this.closeButton.style.padding = '0 5px';
-    this.closeButton.title = 'Close Feedback';
-    this.closeButton.addEventListener('click', () => this.hide());
-
-    header.appendChild(title);
-    header.appendChild(this.closeButton);
-    this.element.appendChild(header);
 
     const contentWrapper = document.createElement('div');
     contentWrapper.style.padding = '15px 20px 20px 20px';
@@ -455,11 +424,13 @@ export class FeedbackViewer {
     if (!this.element) this.create();
     if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.previewButton) return;
 
+    // --- Store data ---
     this.currentImageDataUrl = imageDataUrl;
     this.currentSelectedHtml = selectedHtml;
-    this.originalElementBounds = targetRect;
+    this.originalElementBounds = targetRect; // Use this for positioning
     this.originalElementRef = targetElement;
 
+    // --- Reset state ---
     this.promptTextarea.value = '';
     this.promptTextarea.disabled = false;
     this.submitButton.disabled = false;
@@ -467,10 +438,9 @@ export class FeedbackViewer {
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
     this.responseContentElement.style.display = 'none';
-    // Find the response header (parent of responseContentElement) and hide it
     const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
-    if (responseHeader) responseHeader.style.display = 'none'; // Hide header too
-    this.previewButton.disabled = true; // Ensure preview button is disabled
+    if (responseHeader) responseHeader.style.display = 'none';
+    this.previewButton.disabled = true;
 
     this.renderedHtmlPreview.innerHTML = '';
     this.renderedHtmlPreview.style.display = 'none';
@@ -483,7 +453,61 @@ export class FeedbackViewer {
     this.promptTextarea.style.display = 'block';
     this.submitButton.style.display = 'flex';
 
-    this.element.style.display = 'flex';
+    // --- Calculate and Set Position ---
+    const viewer = this.element; // Declare viewer here, outside the if block
+
+    if (this.originalElementBounds) {
+        const target = this.originalElementBounds;
+        const margin = 10; // Space between target and viewer
+        const viewportMargin = 10; // Space from viewport edges
+
+        // Calculate viewer dimensions based on CSS
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const minWidth = 350;
+        const maxWidth = 500;
+        const vwWidth = viewportWidth * 0.5;
+        const viewerWidth = Math.max(minWidth, Math.min(vwWidth, maxWidth));
+        const viewerHeight = viewportHeight * 0.8; // Estimate using maxHeight
+
+        // Vertical position: Try below first, then above
+        let top: number;
+        const spaceBelow = viewportHeight - target.bottom - margin;
+        const spaceAbove = target.top - margin;
+
+        if (spaceBelow >= viewerHeight || spaceBelow >= spaceAbove) {
+            // Place below
+            top = target.bottom + margin;
+        } else {
+            // Place above
+            top = target.top - viewerHeight - margin;
+        }
+        // Clamp vertical position to viewport
+        top = Math.max(viewportMargin, Math.min(top, viewportHeight - viewerHeight - viewportMargin));
+
+        // Horizontal position: Try to center relative to target
+        let left = target.left + (target.width / 2) - (viewerWidth / 2);
+
+        // Clamp horizontal position to viewport
+        left = Math.max(viewportMargin, Math.min(left, viewportWidth - viewerWidth - viewportMargin));
+
+        viewer.style.top = `${top}px`;
+        viewer.style.left = `${left}px`;
+        // Ensure transform is removed if it was ever set
+        viewer.style.transform = 'none';
+
+        console.log(`[FeedbackViewer] Positioned viewer at top: ${top}px, left: ${left}px`);
+    } else {
+        // Fallback to center if targetRect is somehow null
+        console.warn('[FeedbackViewer] Target bounds not available, falling back to center position.');
+        // Now 'viewer' is accessible here
+        viewer.style.top = '50%';
+        viewer.style.left = '50%';
+        viewer.style.transform = 'translate(-50%, -50%)';
+    }
+    // --- End Position Calculation ---
+
+    this.element.style.display = 'flex'; // Make visible *after* positioning
 
     this.promptTextarea.focus();
   }
