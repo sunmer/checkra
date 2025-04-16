@@ -15,6 +15,7 @@ export class FloatingMenu {
    * Creates a new FloatingMenu instance.
    */
   constructor(config: CheckraOptions) {
+    // Only create UI if isVisible is true (passed implicitly via initCheckra logic)
     this.create();
   }
 
@@ -69,36 +70,10 @@ export class FloatingMenu {
       svgElement.style.height = '18px';
     }
 
+    // Add click listener for the feedback button
     this.feedbackButton.addEventListener('click', (e) => {
       e.stopPropagation();
-      console.log('[Feedback] Button clicked, starting screen capture...');
-      screenCapture.startCapture((
-        imageDataUrl,
-        selectedHtml,
-        bounds,
-        targetElement,
-        clickX,
-        clickY,
-        effectiveBackgroundColor
-      ) => {
-        console.log('[Feedback] Screen capture callback executed.');
-        if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml || targetElement) {
-            console.log('[Feedback] Data or valid click/element received. Showing input area...');
-            try {
-                feedbackViewer.showInputArea(
-                    imageDataUrl,
-                    selectedHtml,
-                    bounds,
-                    targetElement
-                );
-                console.log('[Feedback] Feedback input area shown.');
-            } catch (viewerError) {
-                console.error('[Feedback] Error showing feedback input area:', viewerError);
-            }
-        } else {
-            console.warn('[Feedback] Screen capture cancelled or failed. No data received.');
-        }
-      });
+      this.triggerFeedbackCapture(); // Call the public method
     });
 
     // Create Settings button (SVG)
@@ -131,7 +106,7 @@ export class FloatingMenu {
     this.settingsButton.addEventListener('click', (e) => {
       e.stopPropagation();
       console.log('[Settings] Button clicked, opening settings modal...');
-      settingsViewer.showModal();
+      settingsViewer.showModal(); // Assuming settingsViewer is globally accessible or passed in
     });
 
     // Add buttons to the bottom container
@@ -144,34 +119,57 @@ export class FloatingMenu {
       }
     }
 
-    // Append the bottom container once the DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        if (this.bottomContainer) {
-          document.body.appendChild(this.bottomContainer);
-        }
-      });
-    } else {
-      if (this.bottomContainer) {
-        document.body.appendChild(this.bottomContainer);
+    // Append the container to the body
+    document.body.appendChild(this.bottomContainer);
+    console.log('[FloatingMenu] Menu created and added to DOM.');
+  }
+
+  /**
+   * Programmatically triggers the feedback capture process.
+   */
+  public triggerFeedbackCapture(): void {
+    console.log('[Feedback] Triggered programmatically, starting screen capture...');
+    screenCapture.startCapture((
+      imageDataUrl,
+      selectedHtml,
+      bounds,
+      targetElement,
+      clickX,
+      clickY,
+      effectiveBackgroundColor
+    ) => {
+      console.log('[Feedback] Screen capture callback executed.');
+      if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml || targetElement) {
+          console.log('[Feedback] Data or valid click/element received. Showing input area...');
+          try {
+              feedbackViewer.showInputArea(
+                  imageDataUrl,
+                  selectedHtml,
+                  bounds,
+                  targetElement
+              );
+              console.log('[Feedback] Feedback input area shown.');
+          } catch (viewerError) {
+              console.error('[Feedback] Error showing feedback input area:', viewerError);
+          }
+      } else {
+          console.warn('[Feedback] Screen capture cancelled or failed. No data received.');
       }
-    }
+    });
   }
 
   /**
    * Destroys the floating menu component, removing all DOM elements and event listeners.
    */
   public destroy(): void {
-    // Remove event listeners by cloning the nodes
+    // Remove event listeners by cloning the nodes (simple approach)
+    // Note: A more robust approach might involve explicitly removing listeners if needed.
     if (this.feedbackButton) {
         this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
     }
     if (this.settingsButton) {
         this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
     }
-    // It might be sufficient to just remove the container, which contains the buttons
-    // (Cloning the container might not remove listeners attached directly to children)
-    // Let's stick to removing the container directly after handling children.
 
     // Remove the bottom container from the DOM
     if (this.bottomContainer?.parentNode) {
@@ -182,5 +180,6 @@ export class FloatingMenu {
     this.feedbackButton = null;
     this.settingsButton = null;
     this.bottomContainer = null;
+    console.log('[FloatingMenu] Instance destroyed.');
   }
 }
