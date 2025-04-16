@@ -3,6 +3,16 @@ import { fetchFeedback } from '../services/ai-service';
 import { marked } from 'marked';
 import { copyViewportToClipboard } from '../utils/clipboard-utils';
 
+// --- LocalStorage Keys ---
+const LS_WIDTH_KEY = 'feedbackViewerWidth';
+const LS_HEIGHT_KEY = 'feedbackViewerHeight';
+const DEFAULT_WIDTH = 450; // Default width in pixels
+const DEFAULT_HEIGHT = 200; // Default initial height (can adjust)
+const MIN_WIDTH = 300;
+const MIN_HEIGHT = 200;
+const MAX_WIDTH_VW = 80; // Max width as percentage of viewport width
+const MAX_HEIGHT_VH = 90; // Max height as percentage of viewport height
+
 /**
  * Class for managing the feedback response viewer modal.
  */
@@ -28,6 +38,7 @@ export class FeedbackViewer {
   private closeButton: HTMLButtonElement | null = null;
   private previewButton: HTMLButtonElement | null = null;
   private isStreamStarted: boolean = false;
+  private resizeHandle: HTMLDivElement | null = null; // <-- Add resize handle element
 
   // --- Dragging State ---
   private isDragging: boolean = false;
@@ -36,6 +47,14 @@ export class FeedbackViewer {
   private dragInitialLeft: number = 0;
   private dragInitialTop: number = 0;
   // --- End Dragging State ---
+
+  // --- Resizing State ---
+  private isResizing: boolean = false;
+  private resizeStartX: number = 0;
+  private resizeStartY: number = 0;
+  private initialWidth: number = 0;
+  private initialHeight: number = 0;
+  // --- End Resizing State ---
 
   constructor() {
     this.outsideClickHandler = (e: MouseEvent) => {
@@ -51,6 +70,42 @@ export class FeedbackViewer {
     };
   }
 
+  // --- Helper methods for size persistence ---
+  private saveSize(width: number, height: number): void {
+    try {
+      localStorage.setItem(LS_WIDTH_KEY, width.toString());
+      localStorage.setItem(LS_HEIGHT_KEY, height.toString());
+      console.log(`[FeedbackViewer] Saved size: W=${width}, H=${height}`);
+    } catch (e) {
+      console.error("[FeedbackViewer] Error saving size to localStorage:", e);
+    }
+  }
+
+  private loadSize(): { width: number | null; height: number | null } {
+    try {
+      const savedWidth = localStorage.getItem(LS_WIDTH_KEY);
+      const savedHeight = localStorage.getItem(LS_HEIGHT_KEY);
+      const width = savedWidth ? parseInt(savedWidth, 10) : null;
+      const height = savedHeight ? parseInt(savedHeight, 10) : null;
+
+      if (width && height) {
+        console.log(`[FeedbackViewer] Loaded size: W=${width}, H=${height}`);
+        // Basic validation
+        if (width >= MIN_WIDTH && height >= MIN_HEIGHT) {
+             return { width, height };
+        } else {
+            console.warn("[FeedbackViewer] Loaded size out of bounds, using defaults.");
+            localStorage.removeItem(LS_WIDTH_KEY); // Clear invalid stored size
+            localStorage.removeItem(LS_HEIGHT_KEY);
+        }
+      }
+    } catch (e) {
+      console.error("[FeedbackViewer] Error loading size from localStorage:", e);
+    }
+    return { width: null, height: null };
+  }
+  // --- End Helper methods ---
+
   public create(): void {
     if (this.element) return;
 
@@ -63,7 +118,7 @@ export class FeedbackViewer {
       #feedback-response-content .streamed-content h5,
       #feedback-response-content .streamed-content h6 {
         color: #fff;
-        margin-top: 1em;
+        margin-top: 14px;
         margin-bottom: 0.5em;
         font-weight: 600;
       }
@@ -245,10 +300,12 @@ export class FeedbackViewer {
 
       #feedback-viewer {
         cursor: grab; /* Add grab cursor for the whole viewer */
+        position: fixed; /* Or absolute, depending on positioning logic */
+        overflow: hidden; /* Prevent content overflow during resize */
       }
 
       #feedback-viewer.dragging {
-        cursor: grabbing; /* Change cursor while dragging */
+        cursor: grabbing;
       }
 
       #feedback-viewer textarea,
@@ -256,6 +313,26 @@ export class FeedbackViewer {
       #feedback-viewer #feedback-response-content {
         cursor: auto; /* Keep default cursor for interactive elements */
       }
+
+      /* --- Resize Handle Style --- */
+      #feedback-viewer-resize-handle {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 15px;
+        height: 15px;
+        cursor: nwse-resize;
+        background-color: rgba(255, 255, 255, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.3);
+        border-left: 1px solid rgba(255, 255, 255, 0.3);
+        border-bottom-right-radius: 8px; /* Match parent */
+        z-index: 10; /* Above content, below potential modals */
+        transition: background-color 0.2s;
+      }
+      #feedback-viewer-resize-handle:hover {
+        background-color: rgba(255, 255, 255, 0.4);
+      }
+      /* --- End Resize Handle Style --- */
     `;
 
     document.head.appendChild(styleElement);
@@ -263,36 +340,51 @@ export class FeedbackViewer {
     this.element = document.createElement('div');
     this.element.id = 'feedback-viewer';
 
-    this.element.style.position = 'fixed';
+    // --- Load and Apply Persisted Size ---
+    const { width: loadedWidth, height: loadedHeight } = this.loadSize();
+    const initialWidth = loadedWidth ?? DEFAULT_WIDTH;
+    const initialHeight = loadedHeight ?? DEFAULT_HEIGHT; // Use a default height too
+
+    this.element.style.position = 'fixed'; // Keep fixed for initial state/fallback
     this.element.style.backgroundColor = 'rgba(35, 45, 75, 0.95)';
     this.element.style.color = 'white';
-    this.element.style.padding = '0';
+    this.element.style.padding = '0'; // Padding is now on contentWrapper
     this.element.style.borderRadius = '8px';
     this.element.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.4)';
     this.element.style.zIndex = '1002';
-    this.element.style.maxHeight = '80vh';
-    this.element.style.width = 'clamp(350px, 50vw, 500px)';
-    this.element.style.overflow = 'hidden';
+    // Apply loaded/default size
+    this.element.style.width = `${initialWidth}px`;
+    this.element.style.height = `${initialHeight}px`;
+    // Set min/max constraints
+    this.element.style.minWidth = `${MIN_WIDTH}px`;
+    this.element.style.minHeight = `${MIN_HEIGHT}px`;
+    this.element.style.maxWidth = `${MAX_WIDTH_VW}vw`;
+    this.element.style.maxHeight = `${MAX_HEIGHT_VH}vh`;
+    // this.element.style.maxHeight = '80vh'; // Remove or adjust this if using dynamic height
+    // this.element.style.width = 'clamp(350px, 50vw, 500px)'; // Remove clamp
+    this.element.style.overflow = 'hidden'; // Important for resize handle
     this.element.style.display = 'none';
     this.element.style.fontFamily = 'sans-serif';
     this.element.style.lineHeight = '1.5';
-    this.element.style.flexDirection = 'column';
+    this.element.style.flexDirection = 'column'; // Keep flex for layout
 
     // --- Add Dragging Listeners ---
     this.element.addEventListener('mousedown', this.handleDragStart);
     // --- End Add Dragging Listeners ---
 
     const contentWrapper = document.createElement('div');
-    contentWrapper.style.padding = '15px 20px 20px 20px';
-    contentWrapper.style.overflowY = 'auto';
-    contentWrapper.style.flexGrow = '1';
+    contentWrapper.style.padding = '15px 20px 20px 20px'; // Apply padding here
+    contentWrapper.style.overflowY = 'auto'; // Allow content scrolling
+    contentWrapper.style.flexGrow = '1'; // Make content area fill space
+    contentWrapper.style.height = '100%'; // Ensure it tries to take full height for flexbox
+    contentWrapper.style.boxSizing = 'border-box'; // Include padding in height calc
 
     const promptTitle = document.createElement('h4');
     promptTitle.textContent = 'Describe what you need help with';
     promptTitle.style.color = '#a0c8ff';
     promptTitle.style.marginBottom = '8px';
     promptTitle.style.marginTop = '0';
-    promptTitle.style.fontSize = '1em';
+    promptTitle.style.fontSize = '14px';
     promptTitle.style.fontWeight = '600';
     promptTitle.style.paddingBottom = '0';
     contentWrapper.appendChild(promptTitle);
@@ -351,7 +443,7 @@ export class FeedbackViewer {
     const responseTitle = document.createElement('h4');
     responseTitle.textContent = 'Feedback Response';
     responseTitle.style.color = '#a0c8ff';
-    responseTitle.style.fontSize = '1em';
+    responseTitle.style.fontSize = '14px';
     responseTitle.style.fontWeight = '600';
     responseTitle.style.margin = '0'; // Remove default margins
 
@@ -397,7 +489,14 @@ export class FeedbackViewer {
     contentWrapper.appendChild(responseHeader); // Add the header container
     contentWrapper.appendChild(this.responseContentElement); // Add the content area below the header
 
-    this.element.appendChild(contentWrapper);
+    this.element.appendChild(contentWrapper); // Append content wrapper first
+
+    // --- Create and Add Resize Handle ---
+    this.resizeHandle = document.createElement('div');
+    this.resizeHandle.id = 'feedback-viewer-resize-handle';
+    this.resizeHandle.addEventListener('mousedown', this.handleResizeStart);
+    this.element.appendChild(this.resizeHandle); // Append handle AFTER content wrapper
+    // --- End Resize Handle ---
 
     this.renderedHtmlPreview = document.createElement('div');
     this.renderedHtmlPreview.id = 'feedback-rendered-html-preview';
@@ -441,6 +540,24 @@ export class FeedbackViewer {
     if (!this.element) this.create();
     if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.previewButton) return;
 
+    // --- Load size again in case it was created but hidden ---
+    // (Optional: could rely on create, but this ensures it if show is called directly)
+    const { width: loadedWidth, height: loadedHeight } = this.loadSize();
+    if (loadedWidth && loadedHeight) {
+        // Re-apply constraints before setting size
+        this.element.style.minWidth = `${MIN_WIDTH}px`;
+        this.element.style.minHeight = `${MIN_HEIGHT}px`;
+        this.element.style.maxWidth = `${MAX_WIDTH_VW}vw`;
+        this.element.style.maxHeight = `${MAX_HEIGHT_VH}vh`;
+        // Apply loaded size
+        this.element.style.width = `${loadedWidth}px`;
+        this.element.style.height = `${loadedHeight}px`;
+    } else {
+        // Apply defaults if nothing loaded
+        this.element.style.width = `${DEFAULT_WIDTH}px`;
+        this.element.style.height = `${DEFAULT_HEIGHT}px`;
+    }
+
     // --- Store data ---
     this.currentImageDataUrl = imageDataUrl;
     this.currentSelectedHtml = selectedHtml;
@@ -472,9 +589,8 @@ export class FeedbackViewer {
 
     // --- Calculate and Set Position ---
     const viewer = this.element;
-    viewer.style.transform = 'none'; // Ensure transform is removed
-    // Reset position to fixed initially (in case it was changed previously)
-    viewer.style.position = 'fixed';
+    viewer.style.transform = 'none';
+    viewer.style.position = 'fixed'; // Start with fixed for calculations
 
     if (this.originalElementBounds) {
         const target = this.originalElementBounds;
@@ -484,13 +600,13 @@ export class FeedbackViewer {
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
 
-        // --- Estimate viewer dimensions (using fixed position) ---
+        // --- Estimate viewer dimensions (using current style dimensions) ---
         viewer.style.visibility = 'hidden';
         viewer.style.display = 'flex';
-        // viewer.style.position = 'fixed'; // Already set above
-        viewer.style.left = '-9999px';
+        viewer.style.left = '-9999px'; // Position offscreen for measurement
         viewer.style.top = '-9999px';
 
+        // Get dimensions based on current style (loaded or default)
         const viewerWidth = viewer.offsetWidth;
         const viewerHeight = viewer.offsetHeight;
 
@@ -498,16 +614,14 @@ export class FeedbackViewer {
         viewer.style.display = 'none';
         viewer.style.visibility = 'visible';
         viewer.style.left = ''; // Reset temporary styles
-        viewer.style.top = '';  // Reset temporary styles
+        viewer.style.top = '';
         // --- End dimension estimation ---
-
 
         if (!viewerWidth || !viewerHeight) {
             console.warn('[FeedbackViewer] Could not determine viewer dimensions, falling back to center (fixed).');
             viewer.style.position = 'fixed'; // Ensure fixed for center fallback
             viewer.style.top = '50%';
             viewer.style.left = '50%';
-            viewer.style.transform = 'translate(-50%, -50%)';
             this.element.style.display = 'flex';
             this.promptTextarea.focus();
             return; // Exit early
@@ -533,7 +647,6 @@ export class FeedbackViewer {
                 rect.right <= viewportWidth - viewportMargin
             );
         };
-
 
         let bestViewportTop: number | null = null;
         let bestViewportLeft: number | null = null;
@@ -596,17 +709,19 @@ export class FeedbackViewer {
         }
 
     } else {
-        // Fallback to center if targetRect is somehow null (use fixed)
+        // Fallback to center if targetRect is null
         console.warn('[FeedbackViewer] Target bounds not available, falling back to center position (fixed).');
-        viewer.style.position = 'fixed'; // Ensure fixed for center fallback
+        viewer.style.position = 'fixed';
         viewer.style.top = '50%';
         viewer.style.left = '50%';
-        viewer.style.transform = 'translate(-50%, -50%)';
+        // Center using margins now that width/height are explicit
+        viewer.style.marginTop = `-${viewer.offsetHeight / 2}px`;
+        viewer.style.marginLeft = `-${viewer.offsetWidth / 2}px`;
+        // viewer.style.transform = 'translate(-50%, -50%)'; // Avoid transform if using margins
     }
     // --- End Position Calculation ---
 
     this.element.style.display = 'flex'; // Make visible *after* positioning
-
     this.promptTextarea.focus();
   }
 
@@ -1062,6 +1177,13 @@ export class FeedbackViewer {
     document.removeEventListener('mouseup', this.handleDragEnd);
     // --- End Remove Drag Listeners ---
 
+    // --- Remove Resize Listeners ---
+    this.resizeHandle?.removeEventListener('mousedown', this.handleResizeStart);
+    // Clean up document listeners if resizing was somehow interrupted
+    document.removeEventListener('mousemove', this.handleResizeMove);
+    document.removeEventListener('mouseup', this.handleResizeEnd);
+    // --- End Remove Resize Listeners ---
+
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -1089,21 +1211,19 @@ export class FeedbackViewer {
     this.closeButton = null;
     this.previewButton = null;
     this.isStreamStarted = false;
+    this.resizeHandle = null; // <-- Clear resize handle ref
     // --- Reset Dragging State ---
     this.isDragging = false;
+    // --- Reset Resizing State ---
+    this.isResizing = false; // <-- Reset resizing state
     // --- End Reset Dragging State ---
     console.log('[FeedbackViewer] Instance destroyed.');
   }
 
   // --- Dragging Handlers ---
   private handleDragStart = (e: MouseEvent): void => {
-    if (!this.element) return;
-
-    // Prevent dragging when clicking on interactive elements or the response area
-    const target = e.target as HTMLElement;
-    if (target.closest('textarea, button, #feedback-response-content')) {
-      return;
-    }
+    // Prevent starting drag if resize is in progress or target is resize handle
+    if (this.isResizing || !this.element || (this.resizeHandle && this.resizeHandle.contains(e.target as Node))) return;
 
     e.preventDefault(); // Prevent text selection during drag
 
@@ -1115,6 +1235,9 @@ export class FeedbackViewer {
 
     // Ensure transform is removed if it was used for centering
     this.element.style.transform = 'none';
+    // Reset margins if they were used for centering
+    this.element.style.marginTop = '';
+    this.element.style.marginLeft = '';
     // Apply grabbing cursor via class for potentially other style changes
     this.element.classList.add('dragging');
 
@@ -1143,6 +1266,70 @@ export class FeedbackViewer {
     document.removeEventListener('mouseup', this.handleDragEnd);
   };
   // --- End Dragging Handlers ---
+
+  // --- Resizing Handlers ---
+  private handleResizeStart = (e: MouseEvent): void => {
+    if (!this.element) return;
+
+    e.preventDefault(); // Prevent text selection, etc.
+    e.stopPropagation(); // Prevent triggering drag start
+
+    this.isResizing = true;
+    this.resizeStartX = e.clientX;
+    this.resizeStartY = e.clientY;
+    this.initialWidth = this.element.offsetWidth;
+    this.initialHeight = this.element.offsetHeight;
+
+    // Add listeners to the document to capture mouse move everywhere
+    document.addEventListener('mousemove', this.handleResizeMove);
+    document.addEventListener('mouseup', this.handleResizeEnd);
+
+    // Optional: Add a class for visual feedback during resize
+    this.element.classList.add('resizing');
+    // Disable pointer events on content during resize (prevents iframe issues etc.)
+    const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:first-child');
+    if(contentWrapper) contentWrapper.style.pointerEvents = 'none';
+  };
+
+  private handleResizeMove = (e: MouseEvent): void => {
+    if (!this.isResizing || !this.element) return;
+
+    const dx = e.clientX - this.resizeStartX;
+    const dy = e.clientY - this.resizeStartY;
+
+    let newWidth = this.initialWidth + dx;
+    let newHeight = this.initialHeight + dy;
+
+    // Apply constraints (min/max) - Max needs calculation relative to viewport
+    const maxWidthPx = (window.innerWidth * MAX_WIDTH_VW) / 100;
+    const maxHeightPx = (window.innerHeight * MAX_HEIGHT_VH) / 100;
+
+    newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, maxWidthPx));
+    newHeight = Math.max(MIN_HEIGHT, Math.min(newHeight, maxHeightPx));
+
+    this.element.style.width = `${newWidth}px`;
+    this.element.style.height = `${newHeight}px`;
+  };
+
+  private handleResizeEnd = (e: MouseEvent): void => {
+    if (!this.isResizing || !this.element) return;
+
+    this.isResizing = false;
+    document.removeEventListener('mousemove', this.handleResizeMove);
+    document.removeEventListener('mouseup', this.handleResizeEnd);
+
+    // Re-enable pointer events on content
+    const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:first-child');
+     if(contentWrapper) contentWrapper.style.pointerEvents = '';
+
+    // Optional: Remove resizing class
+    this.element.classList.remove('resizing');
+
+    // --- Persist the final size ---
+    this.saveSize(this.element.offsetWidth, this.element.offsetHeight);
+    // --- End Persistence ---
+  };
+  // --- End Resizing Handlers ---
 }
 
 export const feedbackViewer = new FeedbackViewer();
