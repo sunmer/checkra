@@ -95,10 +95,29 @@ export class FeedbackViewer {
         margin-bottom: 0.4em;
       }
 
+      /* --- CSS Animation Keyframes --- */
+      @keyframes blinkOutline3TimesThenHold {
+        /* Define 3 blinks (ON-OFF cycles) then hold ON */
+        /* Each ON/OFF segment is ~16.6% for a 1.2s total duration */
+        0%, 33.2%, 66.5% { outline-color: rgba(0, 122, 204, 1); } /* ON */
+        16.6%, 49.9% { outline-color: transparent; } /* OFF */
+        /* From 83.3% to 100%, stay ON */
+        83.3%, 100% { outline-color: rgba(0, 122, 204, 1); } /* Hold ON */
+      }
+
+      /* Removed fadeInElement keyframe */
+      /* --- End Keyframes --- */
+
       .feedback-injected-fix {
         position: relative;
-        opacity: 0;
-        transition: opacity 0.3s ease-in-out;
+        /* opacity: 0; */ /* Content is visible immediately */
+        opacity: 1; /* Ensure content is visible */
+        outline: 1px dashed transparent; /* Start with transparent outline */
+        /* Apply only the outline blink animation */
+        animation:
+          /* Blink the outline color 3 times sharply, hold solid (1.2s) */
+          blinkOutline3TimesThenHold 1.2s steps(1, end) 1 forwards;
+          /* Removed fadeInElement animation */
       }
 
       .feedback-fix-close-btn {
@@ -676,8 +695,8 @@ export class FeedbackViewer {
           this.insertedFixWrapper.style.backgroundColor = 'transparent';
           console.log('[FeedbackViewer DEBUG] Set wrapper background to transparent.');
 
-          this.insertedFixWrapper.style.outline = '1px dashed #007acc';
-          console.log('[FeedbackViewer DEBUG] Explicitly set outline style on wrapper.');
+          // Outline is handled by CSS animation now
+          // this.insertedFixWrapper.style.outline = '1px dashed #007acc';
 
           if (attributesToCopy.length > 0) {
               attributesToCopy.forEach(attr => {
