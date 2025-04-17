@@ -384,6 +384,43 @@ export class FeedbackViewer {
         background-color: rgba(255, 255, 255, 0.4);
       }
       /* --- End Resize Handle Style --- */
+
+      /* --- Action Buttons Styles (Adjusted for Header) --- */
+      #feedback-action-buttons {
+        display: none; /* Initially hidden */
+        /* Removed margin/padding/border - rely on header padding */
+        /* marginTop: 12px; */
+        /* paddingTop: 10px; */
+        /* borderTop: 1px solid rgba(255, 255, 255, 0.15); */
+        display: flex;
+        gap: 8px;
+        align-items: center; /* Align with header items */
+      }
+
+      #feedback-action-buttons button {
+         padding: 4px 10px; /* Slightly smaller padding */
+         font-size: 0.8rem; /* Slightly smaller font */
+         border-radius: 0.3rem; /* Slightly smaller radius */
+         cursor: pointer;
+         color: white;
+         border: none; /* Remove default border */
+      }
+       #feedback-action-buttons button.apply-fix {
+         background-color: #2563eb;
+       }
+        #feedback-action-buttons button.show-html {
+         background-color: transparent;
+         border: 1px solid #2563eb; /* Keep border for secondary */
+       }
+       #feedback-action-buttons button:hover {
+          opacity: 0.85;
+       }
+       #feedback-action-buttons button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          background-color: rgba(255, 255, 255, 0.1) !important;
+       }
+      /* --- End Action Buttons Styles --- */
     `;
 
     document.head.appendChild(styleElement);
@@ -454,6 +491,32 @@ export class FeedbackViewer {
     // --- Append Title and Loader to Header ---
     responseHeader.appendChild(responseTitle);
     responseHeader.appendChild(this.loadingIndicatorElement); // Add loader
+
+    // --- Create and Add Action Buttons Container (Now in Header) ---
+    this.actionButtonsContainer = document.createElement('div');
+    this.actionButtonsContainer.id = 'feedback-action-buttons';
+    // this.actionButtonsContainer.style.display = 'none'; // Set by CSS ID rule
+
+    // --- Create Apply Fix Button ---
+    this.applyFixButton = document.createElement('button');
+    this.applyFixButton.textContent = 'Apply Fix';
+    this.applyFixButton.classList.add('apply-fix');
+    // Styles are now primarily handled by CSS rules above
+    this.applyFixButton.addEventListener('click', this.handleApplyFixClick);
+    this.actionButtonsContainer.appendChild(this.applyFixButton);
+
+    // --- Create Show HTML Button ---
+    this.showHtmlButton = document.createElement('button');
+    this.showHtmlButton.textContent = 'Show HTML';
+    this.showHtmlButton.classList.add('show-html');
+    // Styles are now primarily handled by CSS rules above
+    this.showHtmlButton.addEventListener('click', this.handleShowHtmlClick);
+    this.actionButtonsContainer.appendChild(this.showHtmlButton);
+
+    // Append Action Buttons Container to the header
+    responseHeader.appendChild(this.actionButtonsContainer);
+    // --- End Action Buttons ---
+
 
     // Append Header directly to the main element
     this.element.appendChild(responseHeader);
@@ -537,49 +600,11 @@ export class FeedbackViewer {
     // contentWrapper.appendChild(responseHeader); // Header is now outside wrapper
     contentWrapper.appendChild(this.responseContentElement); // Add the content area below the header
 
-    // --- Create Action Buttons Container ---
-    this.actionButtonsContainer = document.createElement('div');
-    this.actionButtonsContainer.id = 'feedback-action-buttons';
-    this.actionButtonsContainer.style.display = 'none'; // Initially hidden
-    this.actionButtonsContainer.style.marginTop = '12px';
-    this.actionButtonsContainer.style.paddingTop = '10px';
-    this.actionButtonsContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.15)';
-    this.actionButtonsContainer.style.display = 'flex';
-    this.actionButtonsContainer.style.gap = '8px';
-
-    // --- Create Apply Fix Button ---
-    this.applyFixButton = document.createElement('button');
-    this.applyFixButton.textContent = 'Apply Fix';
-    this.applyFixButton.classList.add('apply-fix');
-    // Basic styling (can be refined with CSS classes)
-    this.applyFixButton.style.padding = '6px 12px';
-    this.applyFixButton.style.backgroundColor = '#2563eb';
-    this.applyFixButton.style.borderRadius = '0.375rem';
-    this.applyFixButton.style.fontSize = '0.875rem';
-    this.applyFixButton.style.color = 'white';
-    this.applyFixButton.style.cursor = 'pointer';
-    this.applyFixButton.addEventListener('click', this.handleApplyFixClick);
-    this.actionButtonsContainer.appendChild(this.applyFixButton);
-
-    // --- Create Show HTML Button ---
-    this.showHtmlButton = document.createElement('button');
-    this.showHtmlButton.textContent = 'Show HTML';
-    this.showHtmlButton.classList.add('show-html');
-    // Basic styling
-    this.showHtmlButton.style.padding = '6px 12px';
-    this.showHtmlButton.style.backgroundColor = 'transparent';
-    this.showHtmlButton.style.borderRadius = '0.375rem';
-    this.showHtmlButton.style.fontSize = '0.875rem';
-    this.showHtmlButton.style.border = '1px solid #2563eb';
-    this.showHtmlButton.style.color = '#fff';
-    // this.showHtmlButton.style.borderRadius = '4px'; // Use rem
-    this.showHtmlButton.style.cursor = 'pointer';
-    this.showHtmlButton.addEventListener('click', this.handleShowHtmlClick);
-    this.actionButtonsContainer.appendChild(this.showHtmlButton);
-
-    // Append Action Buttons Container after response content inside contentWrapper
-    contentWrapper.appendChild(this.actionButtonsContainer);
-    // --- End Action Buttons ---
+    // --- Create Action Buttons Container --- // MOVED TO HEADER
+    // this.actionButtonsContainer = document.createElement('div');
+    // ... (rest of button creation logic is moved) ...
+    // contentWrapper.appendChild(this.actionButtonsContainer); // MOVED TO HEADER
+    // --- End Action Buttons --- // MOVED TO HEADER
 
     // Append content wrapper AFTER the header
     this.element.appendChild(contentWrapper);
@@ -676,7 +701,9 @@ export class FeedbackViewer {
     this.responseContentElement.style.display = 'none';
     responseHeader.style.display = 'none';
     this.loadingIndicatorElement.style.display = 'none';
-    this.updateActionButtonsVisibility(false); // Hide buttons on reset
+    if (this.actionButtonsContainer) {
+        this.actionButtonsContainer.style.display = 'none';
+    }
 
     // Reset content wrapper padding
     contentWrapper.style.paddingTop = '15px'; // Reset to default padding when header is hidden
@@ -890,7 +917,9 @@ export class FeedbackViewer {
         console.error("[FeedbackViewer] Could not find header/wrapper/loader elements during submit.");
     }
 
-    this.updateActionButtonsVisibility(false); // Hide buttons on new submit
+    if (this.actionButtonsContainer) {
+        this.actionButtonsContainer.style.display = 'none';
+    }
     // --- End loader display ---
 
     this.accumulatedResponseText = ''; // Reset accumulated text
@@ -1030,8 +1059,6 @@ export class FeedbackViewer {
     if (!match) {
       match = this.accumulatedResponseText.match(genericHtmlRegex);
     }
-
-    this.updateActionButtonsVisibility(!!match);
 
     if (match && match[1]) {
       const extractedHtml = match[1].trim();
@@ -1245,15 +1272,14 @@ export class FeedbackViewer {
         this.fixWrapperCloseButtonListener = null;
     }
 
-    this.updateActionButtonsVisibility(false);
+    if (this.actionButtonsContainer) {
+        this.actionButtonsContainer.style.display = 'none';
+    }
 
     console.log('[FeedbackViewer DEBUG] <<< Exiting removeInjectedFix >>>');
   }
 
   public finalizeResponse(): void {
-    if (this.responseContentElement && this.accumulatedResponseText === '') {
-      this.responseContentElement.textContent = 'Received empty response.';
-    }
     console.log("Feedback stream finalized in viewer.");
 
     // Hide the loader now that the stream is finished
@@ -1270,6 +1296,10 @@ export class FeedbackViewer {
     this.tryRenderHtmlPreview();
     console.log('[FeedbackViewer DEBUG] Calling tryInjectHtmlFix from finalizeResponse.');
     this.tryInjectHtmlFix();
+
+    // --- Show Action Buttons ONLY if HTML fix is present ---
+    this.updateActionButtonsVisibility(); // Call the check now
+    // --- End Show Action Buttons ---
   }
 
   public showError(error: Error | string): void {
@@ -1280,6 +1310,11 @@ export class FeedbackViewer {
 
     // Hide the loader on error
     this.loadingIndicatorElement.style.display = 'none';
+
+    // Hide action buttons on error
+    if (this.actionButtonsContainer) {
+        this.actionButtonsContainer.style.display = 'none';
+    }
 
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
@@ -1298,7 +1333,7 @@ export class FeedbackViewer {
       this.submitButtonTextSpan.textContent = 'Get Feedback';
     }
 
-    this.updateActionButtonsVisibility(false); // Hide buttons on error
+    this.updateActionButtonsVisibility(); // Hide buttons on error
   }
 
   public hide(): void {
@@ -1316,7 +1351,9 @@ export class FeedbackViewer {
       if (this.loadingIndicatorElement) {
           this.loadingIndicatorElement.style.display = 'none';
       }
-      this.updateActionButtonsVisibility(false); // Hide buttons when viewer hides
+      if (this.actionButtonsContainer) {
+          this.actionButtonsContainer.style.display = 'none';
+      }
 
       console.log('[FeedbackViewer] Main viewer panel hidden.');
     }
@@ -1552,14 +1589,21 @@ export class FeedbackViewer {
   // --- End Action Button Handlers ---
 
   // --- Add Helper for Button Visibility ---
-  private updateActionButtonsVisibility(show: boolean): void {
-      if (this.actionButtonsContainer) {
-          const displayValue = show ? 'flex' : 'none';
-          if (this.actionButtonsContainer.style.display !== displayValue) {
-              this.actionButtonsContainer.style.display = displayValue;
-              console.log(`[FeedbackViewer DEBUG] Action buttons visibility set to: ${displayValue}`);
-          }
-      }
+  private updateActionButtonsVisibility(): void {
+    if (!this.actionButtonsContainer) return;
+
+    // Check if the final accumulated text contains an HTML block
+    const specificHtmlRegex = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
+    const genericHtmlRegex = /```(?:html)?\n([\s\S]*?)\n```/i;
+    const hasHtml = specificHtmlRegex.test(this.accumulatedResponseText) || genericHtmlRegex.test(this.accumulatedResponseText);
+
+    console.log(`[FeedbackViewer] updateActionButtonsVisibility: hasHtml=${hasHtml}`);
+
+    if (hasHtml) {
+      this.actionButtonsContainer.style.display = 'flex';
+    } else {
+      this.actionButtonsContainer.style.display = 'none';
+    }
   }
   // --- End Helper ---
 }
