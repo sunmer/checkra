@@ -175,7 +175,7 @@ export class FeedbackViewer {
       .feedback-injected-fix {
         position: relative;
         opacity: 0; /* Start transparent for fade-in */
-        outline: 2px dashed transparent; /* Base outline style */
+        outline: 2px dashed #196ee6;
         outline-offset: 6px;
         animation:
           fadeInElement 1.5s ease-out 1 forwards;
@@ -499,11 +499,11 @@ export class FeedbackViewer {
     this.applyFixButton.textContent = 'Apply Fix';
     this.applyFixButton.classList.add('apply-fix');
     // Basic styling (can be refined with CSS classes)
-    this.applyFixButton.style.padding = '6px 10px';
-    this.applyFixButton.style.border = '1px solid #555';
-    this.applyFixButton.style.backgroundColor = 'rgba(80, 120, 200, 0.8)';
+    this.applyFixButton.style.padding = '6px 12px';
+    this.applyFixButton.style.backgroundColor = '#2563eb';
+    this.applyFixButton.style.borderRadius = '0.375rem';
+    this.applyFixButton.style.fontSize = '0.875rem';
     this.applyFixButton.style.color = 'white';
-    this.applyFixButton.style.borderRadius = '4px';
     this.applyFixButton.style.cursor = 'pointer';
     this.applyFixButton.addEventListener('click', this.handleApplyFixClick);
     this.actionButtonsContainer.appendChild(this.applyFixButton);
@@ -513,10 +513,12 @@ export class FeedbackViewer {
     this.showHtmlButton.textContent = 'Show HTML';
     this.showHtmlButton.classList.add('show-html');
     // Basic styling
-    this.showHtmlButton.style.padding = '6px 10px';
-    this.showHtmlButton.style.border = '1px solid #555';
-    this.showHtmlButton.style.backgroundColor = 'rgba(80, 80, 80, 0.7)';
-    this.showHtmlButton.style.color = '#ddd';
+    this.showHtmlButton.style.padding = '6px 12px';
+    this.showHtmlButton.style.backgroundColor = 'transparent';
+    this.showHtmlButton.style.borderRadius = '0.375rem';
+    this.showHtmlButton.style.fontSize = '0.875rem';
+    this.showHtmlButton.style.border = '1px solid #2563eb';
+    this.showHtmlButton.style.color = '#fff';
     this.showHtmlButton.style.borderRadius = '4px';
     this.showHtmlButton.style.cursor = 'pointer';
     this.showHtmlButton.addEventListener('click', this.handleShowHtmlClick);
@@ -923,9 +925,7 @@ export class FeedbackViewer {
       match = this.accumulatedResponseText.match(genericHtmlRegex);
     }
 
-    // --- Update Action Buttons Visibility based on match ---
     this.updateActionButtonsVisibility(!!match);
-    // --- End Update Action Buttons ---
 
     if (match && match[1]) {
       const extractedHtml = match[1].trim();
@@ -1019,12 +1019,52 @@ export class FeedbackViewer {
           });
           this.insertedFixWrapper.appendChild(copyButton);
 
+          // --- Add MouseLeave Listener to Hide Fix ---
+          this.fixWrapperMouseLeaveListener = () => {
+              console.log('[FeedbackViewer DEBUG] Mouse left injected fix wrapper.');
+              if (this.insertedFixWrapper && this.originalElementRef instanceof HTMLElement && this.originalElementDisplayStyle !== null) {
+                  this.insertedFixWrapper.style.display = 'none';
+                  // Restore original element only if it was hidden by 'Apply Fix'
+                  if (this.originalElementRef.style.display === 'none') {
+                      this.originalElementRef.style.display = this.originalElementDisplayStyle;
+                      console.log(`[FeedbackViewer DEBUG] Hid fix wrapper, restored original element display to: ${this.originalElementDisplayStyle}`);
+                  } else {
+                      console.log('[FeedbackViewer DEBUG] Hid fix wrapper, original element was already visible.');
+                  }
+              } else {
+                   console.log('[FeedbackViewer DEBUG] MouseLeave: Skipping hide/restore (wrapper missing, original ref invalid, or style not stored).');
+              }
+          };
+          this.insertedFixWrapper.addEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
+          console.log('[FeedbackViewer DEBUG] Added mouseleave listener to fix wrapper.');
+          // --- End Add MouseLeave Listener ---
+
+          // --- Add MouseEnter Listener to Original Element to Show Fix ---
+          if (this.originalElementRef instanceof HTMLElement) {
+              this.originalElementMouseEnterListener = () => {
+                  console.log('[FeedbackViewer DEBUG] Mouse entered original element area.');
+                  // Only show the fix if it exists AND if 'Apply Fix' has been clicked (indicated by originalElementDisplayStyle being set)
+                  if (this.insertedFixWrapper && this.originalElementDisplayStyle !== null) {
+                      this.insertedFixWrapper.style.display = ''; // Show fix
+                      if (this.originalElementRef instanceof HTMLElement) {
+                          this.originalElementRef.style.display = 'none'; // Hide original
+                          console.log('[FeedbackViewer DEBUG] Showed fix wrapper, hid original element (mouseenter).');
+                      }
+                  } else {
+                      console.log('[FeedbackViewer DEBUG] MouseEnter: Skipping show fix (wrapper missing or Apply Fix not clicked yet).');
+                  }
+              };
+              this.originalElementRef.addEventListener('mouseenter', this.originalElementMouseEnterListener);
+              console.log('[FeedbackViewer DEBUG] Added mouseenter listener to original element.');
+          }
+          // --- End Add MouseEnter Listener ---
+
           if (this.originalElementRef && this.originalElementRef.parentNode) {
             this.originalElementRef.parentNode.insertBefore(
               this.insertedFixWrapper,
               this.originalElementRef.nextSibling
             );
-            console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element. Animation should start.');
+            console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element.');
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
             this.removeInjectedFix();
@@ -1059,25 +1099,28 @@ export class FeedbackViewer {
     console.log('[FeedbackViewer DEBUG] >>> Entering removeInjectedFix <<<');
     console.trace('[FeedbackViewer DEBUG] removeInjectedFix call stack:');
 
+    // --- Remove MouseLeave Listener ---
     if (this.insertedFixWrapper && this.fixWrapperMouseLeaveListener) {
         console.log('[FeedbackViewer DEBUG] Removing mouseleave listener from fix wrapper.');
         this.insertedFixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
         this.fixWrapperMouseLeaveListener = null;
     }
+    // --- End Remove MouseLeave Listener ---
 
+    // --- Remove MouseEnter Listener ---
     if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
         console.log('[FeedbackViewer DEBUG] Removing mouseenter listener from original element.');
         this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
         this.originalElementMouseEnterListener = null;
     }
+    // --- End Remove MouseEnter Listener ---
 
     if (this.originalElementRef instanceof HTMLElement) {
         console.log(`[FeedbackViewer DEBUG] Restoring original element display: ${this.originalElementDisplayStyle || 'default'}`);
         if (document.body.contains(this.originalElementRef)) {
-            // Only restore if it was previously hidden by 'Apply Fix'
-            if (this.originalElementDisplayStyle !== null) {
-                 this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
-            }
+            // Restore display style regardless of whether it was hidden or not,
+            // as removeInjectedFix means we are reverting everything.
+            this.originalElementRef.style.display = this.originalElementDisplayStyle || '';
         } else {
             console.log('[FeedbackViewer DEBUG] Original element no longer in DOM, skipping style restoration.');
         }
@@ -1096,9 +1139,7 @@ export class FeedbackViewer {
         this.fixWrapperCloseButtonListener = null;
     }
 
-    // --- Hide action buttons when fix is removed ---
     this.updateActionButtonsVisibility(false);
-    // --- End hide action buttons ---
 
     console.log('[FeedbackViewer DEBUG] <<< Exiting removeInjectedFix >>>');
   }
@@ -1205,6 +1246,17 @@ export class FeedbackViewer {
     document.removeEventListener('mouseup', this.handleResizeEnd);
     // --- End Remove Resize Listeners ---
 
+    // --- Remove MouseLeave Listener (if somehow still attached) ---
+    if (this.insertedFixWrapper && this.fixWrapperMouseLeaveListener) {
+        this.insertedFixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
+    }
+    // --- End Remove MouseLeave Listener ---
+
+    if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
+        this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
+    }
+    // --- End Remove MouseEnter Listener ---
+
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
@@ -1212,7 +1264,7 @@ export class FeedbackViewer {
         document.body.removeChild(this.renderedHtmlPreview);
     }
     console.log('[FeedbackViewer DEBUG] Calling removeInjectedFix from destroy().');
-    this.removeInjectedFix();
+    this.removeInjectedFix(); // Handles listener removal too
     this.element = null;
     this.promptTextarea = null;
     this.submitButton = null;
@@ -1232,14 +1284,14 @@ export class FeedbackViewer {
     this.closeButton = null;
     this.loadingIndicatorElement = null;
     this.isStreamStarted = false;
-    this.resizeHandle = null; // <-- Clear resize handle ref
-    this.actionButtonsContainer = null; // <-- Clear button container ref
-    this.applyFixButton = null; // <-- Clear apply fix button ref
-    this.showHtmlButton = null; // <-- Clear show html button ref
+    this.resizeHandle = null;
+    this.actionButtonsContainer = null;
+    this.applyFixButton = null;
+    this.showHtmlButton = null;
     // --- Reset Dragging State ---
     this.isDragging = false;
     // --- Reset Resizing State ---
-    this.isResizing = false; // <-- Reset resizing state
+    this.isResizing = false;
     // --- End Reset Dragging State ---
     console.log('[FeedbackViewer] Instance destroyed.');
   }
@@ -1362,13 +1414,13 @@ export class FeedbackViewer {
           // Store original display style *before* hiding it, if not already stored
           if (this.originalElementDisplayStyle === null) {
               this.originalElementDisplayStyle = window.getComputedStyle(this.originalElementRef).display;
-              // Handle case where original element might already be 'none' for some reason
               if (this.originalElementDisplayStyle === 'none') {
                   this.originalElementDisplayStyle = 'block'; // Default fallback
               }
+              console.log(`[FeedbackViewer DEBUG] Stored original display style: ${this.originalElementDisplayStyle}`);
           }
           // Show the fix wrapper
-          this.insertedFixWrapper.style.display = ''; // Use default display (likely block or flex based on CSS/browser)
+          this.insertedFixWrapper.style.display = ''; // Use default display
           // Hide the original element
           this.originalElementRef.style.display = 'none';
           console.log('[FeedbackViewer DEBUG] Displayed fix wrapper, hid original element.');
