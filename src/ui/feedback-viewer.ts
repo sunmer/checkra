@@ -148,7 +148,7 @@ export class FeedbackViewer {
         background-color: transparent;
         padding: 0;
         border-radius: 0;
-        font-size: 1em;
+        font-size: 14px;
       }
 
       #feedback-response-content .streamed-content ul,
@@ -409,7 +409,7 @@ export class FeedbackViewer {
     this.promptTextarea.style.border = '1px solid #ccc';
     this.promptTextarea.style.borderRadius = '4px';
     this.promptTextarea.style.fontFamily = 'inherit';
-    this.promptTextarea.style.fontSize = '1em';
+    this.promptTextarea.style.fontSize = '14px';
     this.promptTextarea.style.resize = 'vertical';
     this.promptTextarea.style.boxSizing = 'border-box';
     this.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
