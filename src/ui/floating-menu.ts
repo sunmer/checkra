@@ -51,6 +51,7 @@ export class FloatingMenu {
       <path d="m16 16-1.5-1.5"/>
     </svg>`;
     this.feedbackButton.title = 'Get feedback on design';
+
     this.feedbackButton.style.width = '30px';
     this.feedbackButton.style.height = '30px';
     this.feedbackButton.style.borderRadius = '50%';
@@ -63,6 +64,8 @@ export class FloatingMenu {
     this.feedbackButton.style.backgroundColor = 'rgba(20, 120, 255, 0.85)';
     this.feedbackButton.style.border = '2px solid rgb(52 63 84 / 80%)';
     this.feedbackButton.style.userSelect = 'none';
+    this.feedbackButton.title = 'Get feedback on design';
+    this.feedbackButton.style.cursor = 'pointer';
 
     const svgElement = this.feedbackButton.querySelector('svg');
     if (svgElement) {

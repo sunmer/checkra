@@ -4,7 +4,6 @@ import { CheckraOptions } from './types';
 // Re-export core functions and types
 export { initCheckra } from './core/index';
 export type{ CheckraOptions } from './types';
-export { tooltip } from './ui/tooltip'; // Keep other exports if needed
 
 // --- Auto-initialization logic ---
 

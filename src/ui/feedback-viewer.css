@@ -1,0 +1,378 @@
+/* --- Base Styles & Content Formatting --- */
+#feedback-response-content .streamed-content h1,
+#feedback-response-content .streamed-content h2,
+#feedback-response-content .streamed-content h3,
+#feedback-response-content .streamed-content h4,
+#feedback-response-content .streamed-content h5,
+#feedback-response-content .streamed-content h6 {
+  color: #fff;
+  margin-top: 14px;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+#feedback-response-content .streamed-content p {
+  margin-bottom: 0.8em;
+  line-height: 1.6;
+}
+
+#feedback-response-content .streamed-content code {
+  background-color: #3a3a3a;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+}
+
+#feedback-response-content .streamed-content pre {
+  display: none; /* Keep hidden by default */
+  background-color: #2a2a2a;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+  position: relative; /* Needed for potential copy button */
+}
+
+#feedback-response-content .streamed-content pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 14px;
+}
+
+#feedback-response-content .streamed-content ul,
+#feedback-response-content .streamed-content ol {
+  padding-left: 20px;
+  margin-bottom: 1em;
+}
+
+#feedback-response-content .streamed-content li {
+  margin-bottom: 0.4em;
+}
+
+/* --- Injected Fix Styles --- */
+.feedback-injected-fix {
+  position: relative;
+  outline: 2px dashed #196ee6;
+  outline-offset: 6px;
+  transition: outline 0.2s ease-in-out;
+}
+
+/* Style for when the fix is permanently applied */
+.feedback-injected-fix.fix-applied {
+  outline: none;
+  outline-offset: 0;
+}
+
+.feedback-fix-close-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  background-color: rgba(80, 80, 80, 0.7);
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  z-index: 11;
+  pointer-events: auto;
+  transition: background-color 0.2s, color 0.2s;
+  font-family: sans-serif;
+}
+
+.feedback-fix-close-btn:hover {
+  background-color: rgba(200, 50, 50, 0.8);
+  color: white;
+}
+
+.feedback-fix-copy-btn {
+  position: absolute;
+  top: 2px;
+  /* Adjust position to make space for the apply button */
+  right: 24px;
+  width: 18px;
+  height: 18px;
+  background-color: rgba(80, 80, 80, 0.7);
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px; /* Add padding for the SVG */
+  box-sizing: border-box; /* Include padding in width/height */
+  z-index: 11;
+  pointer-events: auto;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.feedback-fix-copy-btn svg {
+  width: 10px; /* Adjust SVG size */
+  height: 10px;
+  stroke: currentColor; /* Inherit color */
+}
+
+.feedback-fix-copy-btn:hover {
+  background-color: rgba(80, 120, 200, 0.8); /* Different hover color */
+  color: white;
+}
+
+/* New Apply Button Styles */
+.feedback-fix-apply-btn {
+    position: absolute;
+    top: 2px;
+    /* Position next to the copy button */
+    right: 46px;
+    width: 18px;
+    height: 18px;
+    background-color: rgba(80, 80, 80, 0.7);
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    box-sizing: border-box;
+    z-index: 11;
+    pointer-events: auto;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.feedback-fix-apply-btn svg {
+    width: 10px;
+    height: 10px;
+    stroke: currentColor;
+    stroke-width: 2.5; /* Make checkmark slightly bolder */
+}
+
+.feedback-fix-apply-btn:hover {
+    background-color: rgba(50, 180, 50, 0.8); /* Green hover */
+    color: white;
+}
+
+/* --- Viewer Layout & Header --- */
+#feedback-viewer {
+  cursor: grab;
+  position: fixed;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background-color: rgba(35, 45, 75, 0.95);
+  color: white;
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+  z-index: 1002;
+  font-family: sans-serif;
+  line-height: 1.5;
+}
+
+#feedback-viewer.dragging {
+  cursor: grabbing;
+}
+
+#feedback-viewer textarea,
+#feedback-viewer button,
+#feedback-viewer #feedback-response-content {
+  cursor: auto; /* Keep default cursor for interactive elements */
+}
+
+#feedback-response-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px 10px 20px;
+  background-color: rgba(35, 45, 75, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 5;
+  box-sizing: border-box;
+  display: none; /* Initially hidden - controlled by JS */
+}
+
+#feedback-content-wrapper {
+   overflow-y: auto;
+   flex-grow: 1;
+   width: 100%;
+   box-sizing: border-box;
+   /* Default padding when header is hidden */
+   padding: 15px 20px 20px 20px;
+}
+
+/* --- Buttons & Inputs --- */
+#feedback-viewer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+#feedback-viewer button:not(:disabled):hover {
+   background-color: rgba(255, 255, 255, 0.2);
+}
+
+#feedback-viewer #feedback-submit-button {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex; /* Use flex for icon/text alignment */
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  background: #2563eb;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  padding: 6px 8px;
+  cursor: pointer;
+  border: none; /* Remove default border */
+}
+
+#feedback-viewer #feedback-submit-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px #4b5563;
+}
+
+#feedback-viewer #feedback-submit-button:disabled {
+  /* Override the general disabled style to keep the blue background */
+  background-color: #2563eb !important;
+  /* Keep the opacity change to indicate it's disabled */
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#feedback-viewer #feedback-submit-button span:last-child {
+  margin-left: 0;
+  color: #e5e7eb;
+  font-size: 10px; /* Style for shortcut hint */
+}
+
+#feedback-viewer #prompt-textarea {
+    width: 100%;
+    padding: 10px;
+    background-color: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    box-sizing: border-box;
+    min-height: 60px; /* Give it a minimum height */
+}
+
+#feedback-viewer #textarea-container {
+    position: relative; /* For submit button positioning */
+    margin-bottom: 15px; /* Space below textarea */
+}
+
+/* --- Loading Indicator --- */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  width: 1.2em;
+  height: 1.2em;
+  flex-shrink: 0;
+}
+
+#feedback-loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #a0c8ff;
+  font-size: 0.9em;
+  display: none; /* Managed by JS */
+}
+
+#feedback-loading-indicator-text {
+  /* No specific styles needed here unless desired */
+}
+
+/* --- Resize Handle --- */
+#feedback-viewer-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 15px;
+  height: 15px;
+  cursor: nwse-resize;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  border-bottom-right-radius: 8px; /* Match parent */
+  z-index: 10;
+  transition: background-color 0.2s;
+}
+#feedback-viewer-resize-handle:hover {
+  background-color: rgba(255, 255, 255, 0.4);
+}
+
+/* --- Action Buttons (in Header) --- */
+#feedback-action-buttons {
+  display: none; /* Initially hidden */
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#feedback-action-buttons button {
+   padding: 4px 10px;
+   font-size: 0.8rem;
+   border-radius: 0.3rem;
+   cursor: pointer;
+   color: white;
+   border: none;
+}
+ #feedback-action-buttons button.preview-fix {
+   background-color: #2563eb;
+ }
+  #feedback-action-buttons button.show-html {
+   background-color: transparent;
+   border: 1px solid #2563eb;
+ }
+ #feedback-action-buttons button:hover {
+    opacity: 0.85;
+ }
+ #feedback-action-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+ }
+
+/* --- Rendered HTML Preview Popup --- */
+#feedback-rendered-html-preview {
+  position: fixed;
+  display: none;
+  opacity: 0;
+  border: 1px dashed #007acc;
+  background-color: rgba(40, 40, 40, 0.9); /* Slightly different background */
+  color: #d4d4d4;
+  z-index: 1001;
+  padding: 8px;
+  border-radius: 4px;
+  max-width: 450px;
+  max-height: 350px;
+  overflow: auto;
+  transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  font-size: 13px; /* Slightly smaller font for preview */
+  line-height: 1.4;
+}
