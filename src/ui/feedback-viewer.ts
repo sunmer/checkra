@@ -11,7 +11,7 @@ const DEFAULT_HEIGHT = 200; // Default initial height (can adjust)
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 200;
 const MAX_WIDTH_VW = 80; // Max width as percentage of viewport width
-const MAX_HEIGHT_VH = 90; // Max height as percentage of viewport height
+const MAX_HEIGHT_VH = 60; // Max height as percentage of viewport height
 
 /**
  * Class for managing the feedback response viewer modal.
@@ -36,7 +36,7 @@ export class FeedbackViewer {
   private fixWrapperMouseLeaveListener: (() => void) | null = null;
   private originalElementMouseEnterListener: (() => void) | null = null;
   private closeButton: HTMLButtonElement | null = null;
-  private previewButton: HTMLButtonElement | null = null;
+  private loadingIndicatorElement: HTMLDivElement | null = null;
   private isStreamStarted: boolean = false;
   private resizeHandle: HTMLDivElement | null = null; // <-- Add resize handle element
 
@@ -290,12 +290,19 @@ export class FeedbackViewer {
       }
 
       .loading-spinner {
-        display: inline-block; /* Or block, depending on desired layout */
         animation: spin 1s linear infinite;
         width: 1.2em; /* Adjust size as needed */
         height: 1.2em;
-        vertical-align: middle; /* Align with text if needed */
-        margin-right: 8px; /* Space between spinner and text if any */
+        flex-shrink: 0; /* Prevent spinner from shrinking */
+      }
+
+      /* Style for the loading indicator container */
+      #feedback-loading-indicator {
+        display: flex; /* Use flex for alignment */
+        align-items: center;
+        gap: 8px; /* Space between spinner and text */
+        color: #a0c8ff; /* Match response title color */
+        font-size: 0.9em; /* Slightly smaller text */
       }
 
       #feedback-viewer {
@@ -447,42 +454,26 @@ export class FeedbackViewer {
     responseTitle.style.fontWeight = '600';
     responseTitle.style.margin = '0'; // Remove default margins
 
-    // --- Create Preview Button ---
-    this.previewButton = document.createElement('button');
-    this.previewButton.id = 'feedback-preview-button';
-    this.previewButton.disabled = true; // Start disabled
-    this.previewButton.style.display = 'flex';
-    this.previewButton.style.alignItems = 'center';
-    this.previewButton.style.gap = '4px';
-    this.previewButton.style.padding = '4px 8px';
-    this.previewButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-    this.previewButton.style.color = '#a0c8ff';
-    this.previewButton.style.border = '1px solid rgba(255, 255, 255, 0.3)';
-    this.previewButton.style.borderRadius = '4px';
-    this.previewButton.style.cursor = 'pointer';
-    this.previewButton.style.fontSize = '0.85em';
-    this.previewButton.title = 'Preview suggested changes directly on the page';
-    this.previewButton.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></svg>
-      <span>Preview result</span>
+    // --- Create Loading Indicator (Spinner + Text) ---
+    this.loadingIndicatorElement = document.createElement('div');
+    this.loadingIndicatorElement.id = 'feedback-loading-indicator';
+    this.loadingIndicatorElement.style.display = 'none'; // Initially hidden
+    this.loadingIndicatorElement.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      <span>Getting feedback...</span>
     `;
-    // Add listener to hide the modal when clicked (if enabled)
-    this.previewButton.addEventListener('click', () => {
-        if (!this.previewButton?.disabled) {
-            this.hide();
-        }
-    });
+    // --- End Loading Indicator ---
 
-    // --- Append Title and Button to Header ---
+    // --- Append Title and Loader to Header ---
     responseHeader.appendChild(responseTitle);
-    responseHeader.appendChild(this.previewButton);
+    responseHeader.appendChild(this.loadingIndicatorElement); // Add loader instead
 
     // --- Append Header and Content Area ---
     this.responseContentElement = document.createElement('div');
     this.responseContentElement.id = 'feedback-response-content';
     this.responseContentElement.style.wordWrap = 'break-word';
     this.responseContentElement.style.fontFamily = 'inherit';
-    this.responseContentElement.style.fontSize = '0.95em';
+    this.responseContentElement.style.fontSize = '14px';
     this.responseContentElement.style.marginTop = '10px';
     this.responseContentElement.style.display = 'none'; // Content area also starts hidden
 
@@ -538,7 +529,7 @@ export class FeedbackViewer {
     targetElement: Element | null
   ): void {
     if (!this.element) this.create();
-    if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.previewButton) return;
+    if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.loadingIndicatorElement) return;
 
     // --- Load size again in case it was created but hidden ---
     // (Optional: could rely on create, but this ensures it if show is called directly)
@@ -574,7 +565,7 @@ export class FeedbackViewer {
     this.responseContentElement.style.display = 'none';
     const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
     if (responseHeader) responseHeader.style.display = 'none';
-    this.previewButton.disabled = true;
+    this.loadingIndicatorElement.style.display = 'none';
 
     this.renderedHtmlPreview.innerHTML = '';
     this.renderedHtmlPreview.style.display = 'none';
@@ -734,7 +725,7 @@ export class FeedbackViewer {
   };
 
   private handleSubmit = (): void => {
-    if (!this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.previewButton) return;
+    if (!this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.loadingIndicatorElement) return;
     if (!this.currentImageDataUrl && !this.currentSelectedHtml) {
       console.warn('[Feedback] Cannot submit feedback without captured image or HTML.');
       this.showError('Could not capture image or HTML structure.');
@@ -752,24 +743,16 @@ export class FeedbackViewer {
     this.submitButtonTextSpan.textContent = 'Sending...';
     this.isStreamStarted = false;
 
-    // --- Replace emoji with SVG spinner ---
-    this.responseContentElement.innerHTML = ''; // Clear previous content
-    const spinner = document.createElement('div'); // Use a div wrapper for easier styling/removal if needed
-    spinner.style.textAlign = 'center'; // Center the spinner
-    spinner.style.padding = '10px 0'; // Add some padding
-    spinner.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-      <span style="margin-left: 8px; vertical-align: middle; color: #a0c8ff;">Getting feedback...</span>
-    `;
-    this.responseContentElement.appendChild(spinner);
-    // --- End spinner replacement ---
+    // --- Clear previous content and show loader ---
+    this.responseContentElement.innerHTML = ''; // Clear previous response content
+    this.responseContentElement.style.display = 'block'; // Show response area
+    this.loadingIndicatorElement.style.display = 'flex'; // Show the loader in the header
+    // --- End loader display ---
 
     this.accumulatedResponseText = ''; // Reset accumulated text
-    this.responseContentElement.style.display = 'block';
-    this.previewButton.disabled = true;
     const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
     if (responseHeader) {
-        responseHeader.style.display = 'flex';
+        responseHeader.style.display = 'flex'; // Ensure header is visible
     }
 
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
@@ -777,15 +760,16 @@ export class FeedbackViewer {
 
   public updateResponse(chunk: string): void {
     if (this.responseContentElement && this.element) {
-      const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:last-child');
+      const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:first-child');
       if (!contentWrapper) return;
 
       const scrollThreshold = 10;
       const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
-      // If this is the first chunk, clear the loading spinner/message
+      // If this is the first chunk, clear the initial message (if any)
+      // BUT KEEP THE LOADER VISIBLE
       if (!this.isStreamStarted) {
-        this.responseContentElement.innerHTML = ''; // Clear previous content (spinner)
+        this.responseContentElement.innerHTML = ''; // Clear any initial placeholder text
         this.isStreamStarted = true; // Mark stream as started
       }
 
@@ -1017,9 +1001,6 @@ export class FeedbackViewer {
               this.originalElementRef.nextSibling
             );
             console.log('[FeedbackViewer DEBUG] Inserted fix wrapper into DOM after original element. Animation should start.');
-            if (this.previewButton) {
-                this.previewButton.disabled = false;
-            }
           } else {
             console.error('[FeedbackViewer DEBUG] Cannot insert fix: Original element or its parent not found.');
             this.removeInjectedFix();
@@ -1087,9 +1068,6 @@ export class FeedbackViewer {
         console.log('[FeedbackViewer DEBUG] Nullifying close button listener reference.');
         this.fixWrapperCloseButtonListener = null;
     }
-    if (this.previewButton) {
-        this.previewButton.disabled = true;
-    }
     console.log('[FeedbackViewer DEBUG] <<< Exiting removeInjectedFix >>>');
   }
 
@@ -1099,13 +1077,15 @@ export class FeedbackViewer {
     }
     console.log("Feedback stream finalized in viewer.");
 
+    // Hide the loader now that the stream is finished
+    if (this.loadingIndicatorElement) {
+        this.loadingIndicatorElement.style.display = 'none';
+    }
+
     if (this.promptTextarea) this.promptTextarea.disabled = false;
     if (this.submitButton && this.submitButtonTextSpan) {
       this.submitButton.disabled = false;
       this.submitButtonTextSpan.textContent = 'Get Feedback';
-    }
-    if (this.previewButton) {
-        this.previewButton.disabled = !(this.insertedFixWrapper && document.body.contains(this.insertedFixWrapper));
     }
 
     this.tryRenderHtmlPreview();
@@ -1114,19 +1094,21 @@ export class FeedbackViewer {
   }
 
   public showError(error: Error | string): void {
-    if (!this.element || !this.responseContentElement || !this.submitButtonTextSpan || !this.previewButton) return;
+    if (!this.element || !this.responseContentElement || !this.submitButtonTextSpan || !this.loadingIndicatorElement) return;
 
     this.element.style.display = 'flex';
     const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Hide the loader on error
+    this.loadingIndicatorElement.style.display = 'none';
 
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
 
     const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
     if (responseHeader) {
-        responseHeader.style.display = 'flex';
+        responseHeader.style.display = 'flex'; // Keep header visible for title
     }
-    this.previewButton.disabled = true;
 
     this.responseContentElement.style.display = 'block';
     this.responseContentElement.innerHTML = `<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`;
@@ -1149,6 +1131,10 @@ export class FeedbackViewer {
         if (responseHeader) responseHeader.style.display = 'none';
       }
       this.accumulatedResponseText = '';
+      // Ensure loader is hidden when hiding the panel
+      if (this.loadingIndicatorElement) {
+          this.loadingIndicatorElement.style.display = 'none';
+      }
 
       console.log('[FeedbackViewer] Main viewer panel hidden.');
     }
@@ -1209,7 +1195,7 @@ export class FeedbackViewer {
     this.fixWrapperMouseLeaveListener = null;
     this.originalElementMouseEnterListener = null;
     this.closeButton = null;
-    this.previewButton = null;
+    this.loadingIndicatorElement = null;
     this.isStreamStarted = false;
     this.resizeHandle = null; // <-- Clear resize handle ref
     // --- Reset Dragging State ---
@@ -1287,7 +1273,7 @@ export class FeedbackViewer {
     // Optional: Add a class for visual feedback during resize
     this.element.classList.add('resizing');
     // Disable pointer events on content during resize (prevents iframe issues etc.)
-    const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:first-child');
+    const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:not(#feedback-viewer-resize-handle)');
     if(contentWrapper) contentWrapper.style.pointerEvents = 'none';
   };
 
@@ -1319,7 +1305,7 @@ export class FeedbackViewer {
     document.removeEventListener('mouseup', this.handleResizeEnd);
 
     // Re-enable pointer events on content
-    const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:first-child');
+    const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:not(#feedback-viewer-resize-handle)');
      if(contentWrapper) contentWrapper.style.pointerEvents = '';
 
     // Optional: Remove resizing class
