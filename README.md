@@ -1,4 +1,4 @@
-# Checkra, improve your website collaboratively with AI
+# Checkra, a js library for getting inline feedback for your website
 
 Inspect any part of your website and get helpful recommendations, all previewed inline. Checkra aims to make it easier for technical and non-technical people to collaborate on improving websites.
 
