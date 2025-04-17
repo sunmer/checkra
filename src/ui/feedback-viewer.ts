@@ -7,9 +7,9 @@ import { copyViewportToClipboard } from '../utils/clipboard-utils';
 const LS_WIDTH_KEY = 'feedbackViewerWidth';
 const LS_HEIGHT_KEY = 'feedbackViewerHeight';
 const DEFAULT_WIDTH = 450; // Default width in pixels
-const DEFAULT_HEIGHT = 200; // Default initial height (can adjust)
+const DEFAULT_HEIGHT = 220; // Default initial height (can adjust)
 const MIN_WIDTH = 300;
-const MIN_HEIGHT = 200;
+const MIN_HEIGHT = 220;
 const MAX_WIDTH_VW = 80; // Max width as percentage of viewport width
 const MAX_HEIGHT_VH = 60; // Max height as percentage of viewport height
 
@@ -140,12 +140,13 @@ export class FeedbackViewer {
       }
 
       #feedback-response-content .streamed-content pre {
-        display: none;
+        display: none; /* Keep hidden by default */
         background-color: #2a2a2a;
         padding: 10px;
         border-radius: 4px;
         overflow-x: auto;
         margin-bottom: 1em;
+        position: relative; /* Needed for potential copy button */
       }
 
       #feedback-response-content .streamed-content pre code {
@@ -178,7 +179,7 @@ export class FeedbackViewer {
         outline: 2px dashed #196ee6;
         outline-offset: 6px;
         animation:
-          fadeInElement 1.5s ease-out 1 forwards;
+          fadeInElement 1s ease-out 1 forwards;
       }
 
       .feedback-fix-close-btn {
@@ -242,6 +243,37 @@ export class FeedbackViewer {
         color: white;
       }
       /* --- End Copy Button Styles --- */
+
+      /* Style for the response header */
+      #feedback-response-header {
+        position: absolute; /* Position relative to feedback-viewer */
+        top: 0;
+        left: 0;
+        right: 0; /* Stretch across the width */
+        /* display: flex; */ /* Keep using flex for alignment - managed by JS */
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 20px 10px 20px; /* Match original top/side padding, adjust bottom */
+        background-color: rgba(35, 45, 75, 0.95); /* Match viewer background */
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        z-index: 5; /* Ensure it's above the content wrapper */
+        box-sizing: border-box; /* Include padding in width */
+        display: none; /* Initially hidden - controlled by JS */
+      }
+
+      /* Style for the main content wrapper */
+      #feedback-content-wrapper {
+         /* Existing styles */
+         /* padding: 15px 20px 20px 20px; */ /* Padding managed dynamically */
+         overflow-y: auto;
+         flex-grow: 1;
+         /* height: 100%; */ /* Let flexbox handle height */
+         width: 100%; /* Take full width */
+         box-sizing: border-box;
+         /* Add padding-top dynamically later or use a fixed value */
+         /* padding-top: 60px; /* Adjust this value based on header height */
+      }
+
 
       #feedback-viewer button:disabled {
         opacity: 0.5;
@@ -307,12 +339,20 @@ export class FeedbackViewer {
         gap: 8px; /* Space between spinner and text */
         color: #a0c8ff; /* Match response title color */
         font-size: 0.9em; /* Slightly smaller text */
+        /* display: none; */ /* Managed by JS */
       }
+      /* Add ID for the text span */
+      #feedback-loading-indicator-text {
+        /* No specific styles needed here unless desired */
+      }
+
 
       #feedback-viewer {
         cursor: grab; /* Add grab cursor for the whole viewer */
         position: fixed; /* Or absolute, depending on positioning logic */
         overflow: hidden; /* Prevent content overflow during resize */
+        display: flex; /* Use flex for main layout */
+        flex-direction: column; /* Stack header and content vertically */
       }
 
       #feedback-viewer.dragging {
@@ -359,7 +399,7 @@ export class FeedbackViewer {
     this.element.style.position = 'fixed'; // Keep fixed for initial state/fallback
     this.element.style.backgroundColor = 'rgba(35, 45, 75, 0.95)';
     this.element.style.color = 'white';
-    this.element.style.padding = '0'; // Padding is now on contentWrapper
+    this.element.style.padding = '0'; // Padding is now on contentWrapper/header
     this.element.style.borderRadius = '8px';
     this.element.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.4)';
     this.element.style.zIndex = '1002';
@@ -371,37 +411,79 @@ export class FeedbackViewer {
     this.element.style.minHeight = `${MIN_HEIGHT}px`;
     this.element.style.maxWidth = `${MAX_WIDTH_VW}vw`;
     this.element.style.maxHeight = `${MAX_HEIGHT_VH}vh`;
-    // this.element.style.maxHeight = '80vh'; // Remove or adjust this if using dynamic height
-    // this.element.style.width = 'clamp(350px, 50vw, 500px)'; // Remove clamp
-    this.element.style.overflow = 'hidden'; // Important for resize handle
-    this.element.style.display = 'none';
+    this.element.style.overflow = 'hidden'; // Important for resize handle and fixed header
+    this.element.style.display = 'none'; // Initial state
     this.element.style.fontFamily = 'sans-serif';
     this.element.style.lineHeight = '1.5';
-    this.element.style.flexDirection = 'column'; // Keep flex for layout
+    // this.element.style.flexDirection = 'column'; // Already set in CSS
 
     // --- Add Dragging Listeners ---
     this.element.addEventListener('mousedown', this.handleDragStart);
     // --- End Add Dragging Listeners ---
 
+    // --- Create Response Header (Container for Title and Button) ---
+    // Moved outside the contentWrapper
+    const responseHeader = document.createElement('div');
+    responseHeader.id = 'feedback-response-header'; // Use ID for styling
+    // responseHeader.style.display = 'none'; // Initially hidden - set by ID style
+    // responseHeader.style.justifyContent = 'space-between'; // Set by ID style
+    // responseHeader.style.alignItems = 'center'; // Set by ID style
+    // responseHeader.style.marginBottom = '10px'; // Removed, padding handles spacing
+    // responseHeader.style.marginTop = '15px'; // Removed
+    // responseHeader.style.borderBottom = '1px solid rgba(255, 255, 255, 0.15)'; // Set by ID style
+    // responseHeader.style.paddingBottom = '6px'; // Set by ID style padding
+
+    const responseTitle = document.createElement('h4');
+    responseTitle.textContent = 'Feedback Response';
+    responseTitle.style.color = '#a0c8ff';
+    responseTitle.style.fontSize = '14px';
+    responseTitle.style.fontWeight = '600';
+    responseTitle.style.margin = '0'; // Remove default margins
+
+    // --- Create Loading Indicator (Spinner + Text) ---
+    this.loadingIndicatorElement = document.createElement('div');
+    this.loadingIndicatorElement.id = 'feedback-loading-indicator';
+    // this.loadingIndicatorElement.style.display = 'none'; // Initially hidden - managed by JS
+    // Add ID to the text span for easier updates
+    this.loadingIndicatorElement.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      <span id="feedback-loading-indicator-text">Getting feedback...</span>
+    `;
+    // --- End Loading Indicator ---
+
+    // --- Append Title and Loader to Header ---
+    responseHeader.appendChild(responseTitle);
+    responseHeader.appendChild(this.loadingIndicatorElement); // Add loader
+
+    // Append Header directly to the main element
+    this.element.appendChild(responseHeader);
+    // --- End Response Header ---
+
+
+    // --- Create Content Wrapper ---
     const contentWrapper = document.createElement('div');
-    contentWrapper.style.padding = '15px 20px 20px 20px'; // Apply padding here
-    contentWrapper.style.overflowY = 'auto'; // Allow content scrolling
-    contentWrapper.style.flexGrow = '1'; // Make content area fill space
-    contentWrapper.style.height = '100%'; // Ensure it tries to take full height for flexbox
-    contentWrapper.style.boxSizing = 'border-box'; // Include padding in height calc
+    contentWrapper.id = 'feedback-content-wrapper'; // Use ID for styling
+    // contentWrapper.style.padding = '15px 20px 20px 20px'; // Padding managed dynamically/by header
+    // contentWrapper.style.overflowY = 'auto'; // Set by ID style
+    // contentWrapper.style.flexGrow = '1'; // Set by ID style
+    // contentWrapper.style.height = '100%'; // Let flexbox manage height
+    // contentWrapper.style.boxSizing = 'border-box'; // Set by ID style
+    // --- End Content Wrapper ---
+
 
     const promptTitle = document.createElement('h4');
     promptTitle.textContent = 'Describe what you need help with';
     promptTitle.style.color = '#a0c8ff';
     promptTitle.style.marginBottom = '8px';
-    promptTitle.style.marginTop = '0';
+    promptTitle.style.marginTop = '0'; // Reset margin top
     promptTitle.style.fontSize = '14px';
     promptTitle.style.fontWeight = '600';
     promptTitle.style.paddingBottom = '0';
+    // Append prompt title to contentWrapper
     contentWrapper.appendChild(promptTitle);
 
     const textareaContainer = document.createElement('div');
-    textareaContainer.style.position = 'relative';
+    textareaContainer.style.position = 'relative'; // Keep for submit button positioning
 
     this.promptTextarea = document.createElement('textarea');
     this.promptTextarea.rows = 4;
@@ -433,44 +515,15 @@ export class FeedbackViewer {
     shortcutHint.textContent = isMac ? '(Cmd + ⏎)' : '(Ctrl + ⏎)';
     shortcutHint.style.fontSize = '10px';
 
-    this.submitButton.appendChild(buttonText);
+    // this.submitButton.appendChild(buttonText); // Already appended
     this.submitButton.appendChild(shortcutHint);
 
     this.submitButton.addEventListener('click', this.handleSubmit);
-    textareaContainer.appendChild(this.submitButton);
+    textareaContainer.appendChild(this.submitButton); // Append button to textarea container
 
+    // Append textarea container to contentWrapper
     contentWrapper.appendChild(textareaContainer);
 
-    // --- Create Response Header (Container for Title and Button) ---
-    const responseHeader = document.createElement('div');
-    responseHeader.style.display = 'none'; // Initially hidden
-    responseHeader.style.justifyContent = 'space-between';
-    responseHeader.style.alignItems = 'center';
-    responseHeader.style.marginBottom = '10px';
-    responseHeader.style.marginTop = '15px';
-    responseHeader.style.borderBottom = '1px solid rgba(255, 255, 255, 0.15)';
-    responseHeader.style.paddingBottom = '6px';
-
-    const responseTitle = document.createElement('h4');
-    responseTitle.textContent = 'Feedback Response';
-    responseTitle.style.color = '#a0c8ff';
-    responseTitle.style.fontSize = '14px';
-    responseTitle.style.fontWeight = '600';
-    responseTitle.style.margin = '0'; // Remove default margins
-
-    // --- Create Loading Indicator (Spinner + Text) ---
-    this.loadingIndicatorElement = document.createElement('div');
-    this.loadingIndicatorElement.id = 'feedback-loading-indicator';
-    this.loadingIndicatorElement.style.display = 'none'; // Initially hidden
-    this.loadingIndicatorElement.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-      <span>Getting feedback...</span>
-    `;
-    // --- End Loading Indicator ---
-
-    // --- Append Title and Loader to Header ---
-    responseHeader.appendChild(responseTitle);
-    responseHeader.appendChild(this.loadingIndicatorElement); // Add loader instead
 
     // --- Append Header and Content Area ---
     this.responseContentElement = document.createElement('div');
@@ -478,10 +531,10 @@ export class FeedbackViewer {
     this.responseContentElement.style.wordWrap = 'break-word';
     this.responseContentElement.style.fontFamily = 'inherit';
     this.responseContentElement.style.fontSize = '14px';
-    this.responseContentElement.style.marginTop = '10px';
+    this.responseContentElement.style.marginTop = '15px'; // Add margin to separate from input
     this.responseContentElement.style.display = 'none'; // Content area also starts hidden
 
-    contentWrapper.appendChild(responseHeader); // Add the header container
+    // contentWrapper.appendChild(responseHeader); // Header is now outside wrapper
     contentWrapper.appendChild(this.responseContentElement); // Add the content area below the header
 
     // --- Create Action Buttons Container ---
@@ -519,22 +572,23 @@ export class FeedbackViewer {
     this.showHtmlButton.style.fontSize = '0.875rem';
     this.showHtmlButton.style.border = '1px solid #2563eb';
     this.showHtmlButton.style.color = '#fff';
-    this.showHtmlButton.style.borderRadius = '4px';
+    // this.showHtmlButton.style.borderRadius = '4px'; // Use rem
     this.showHtmlButton.style.cursor = 'pointer';
     this.showHtmlButton.addEventListener('click', this.handleShowHtmlClick);
     this.actionButtonsContainer.appendChild(this.showHtmlButton);
 
-    // Append Action Buttons Container after response content
+    // Append Action Buttons Container after response content inside contentWrapper
     contentWrapper.appendChild(this.actionButtonsContainer);
     // --- End Action Buttons ---
 
-    this.element.appendChild(contentWrapper); // Append content wrapper first
+    // Append content wrapper AFTER the header
+    this.element.appendChild(contentWrapper);
 
     // --- Create and Add Resize Handle ---
     this.resizeHandle = document.createElement('div');
     this.resizeHandle.id = 'feedback-viewer-resize-handle';
     this.resizeHandle.addEventListener('mousedown', this.handleResizeStart);
-    this.element.appendChild(this.resizeHandle); // Append handle AFTER content wrapper
+    this.element.appendChild(this.resizeHandle); // Append handle last so it's on top
     // --- End Resize Handle ---
 
     this.renderedHtmlPreview = document.createElement('div');
@@ -577,7 +631,16 @@ export class FeedbackViewer {
     targetElement: Element | null
   ): void {
     if (!this.element) this.create();
-    if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.loadingIndicatorElement) return;
+    if (!this.element || !this.promptTextarea || !this.submitButton || !this.responseContentElement || !this.submitButtonTextSpan || !this.renderedHtmlPreview || !this.loadingIndicatorElement) {
+        console.error("[FeedbackViewer] Failed to initialize required elements.");
+        return;
+    }
+    const responseHeader = this.element.querySelector<HTMLElement>('#feedback-response-header');
+    const contentWrapper = this.element.querySelector<HTMLElement>('#feedback-content-wrapper');
+    if (!responseHeader || !contentWrapper) {
+        console.error("[FeedbackViewer] Failed to find header or content wrapper elements.");
+        return;
+    }
 
     // --- Load size again in case it was created but hidden ---
     // (Optional: could rely on create, but this ensures it if show is called directly)
@@ -611,10 +674,15 @@ export class FeedbackViewer {
     this.responseContentElement.innerHTML = '';
     this.accumulatedResponseText = '';
     this.responseContentElement.style.display = 'none';
-    const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
-    if (responseHeader) responseHeader.style.display = 'none';
+    responseHeader.style.display = 'none';
     this.loadingIndicatorElement.style.display = 'none';
     this.updateActionButtonsVisibility(false); // Hide buttons on reset
+
+    // Reset content wrapper padding
+    contentWrapper.style.paddingTop = '15px'; // Reset to default padding when header is hidden
+    contentWrapper.style.paddingLeft = '20px';
+    contentWrapper.style.paddingRight = '20px';
+    contentWrapper.style.paddingBottom = '20px';
 
     this.renderedHtmlPreview.innerHTML = '';
     this.renderedHtmlPreview.style.display = 'none';
@@ -795,29 +863,57 @@ export class FeedbackViewer {
     // --- Clear previous content and show loader ---
     this.responseContentElement.innerHTML = ''; // Clear previous response content
     this.responseContentElement.style.display = 'block'; // Show response area
-    this.loadingIndicatorElement.style.display = 'flex'; // Show the loader in the header
+
+    // Find header and content wrapper
+    const responseHeader = this.element?.querySelector<HTMLElement>('#feedback-response-header');
+    const contentWrapper = this.element?.querySelector<HTMLElement>('#feedback-content-wrapper');
+    const loadingTextSpan = this.loadingIndicatorElement?.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text');
+
+    if (responseHeader && contentWrapper && this.loadingIndicatorElement && loadingTextSpan) {
+        // Set initial loading text
+        loadingTextSpan.textContent = 'Getting feedback...';
+        this.loadingIndicatorElement.style.display = 'flex'; // Show the loader itself
+        responseHeader.style.display = 'flex'; // Show the header container
+
+        // Calculate header height and set padding for content wrapper
+        // Use requestAnimationFrame to ensure styles are applied before measuring
+        requestAnimationFrame(() => {
+            const headerHeight = responseHeader.offsetHeight;
+            contentWrapper.style.paddingTop = `${headerHeight + 10}px`; // Add some extra space
+            contentWrapper.style.paddingLeft = '20px'; // Keep side/bottom padding
+            contentWrapper.style.paddingRight = '20px';
+            contentWrapper.style.paddingBottom = '20px';
+            console.log(`[FeedbackViewer] Set content wrapper padding-top: ${contentWrapper.style.paddingTop}`);
+        });
+
+    } else {
+        console.error("[FeedbackViewer] Could not find header/wrapper/loader elements during submit.");
+    }
+
     this.updateActionButtonsVisibility(false); // Hide buttons on new submit
     // --- End loader display ---
 
     this.accumulatedResponseText = ''; // Reset accumulated text
-    const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement;
-    if (responseHeader) {
-        responseHeader.style.display = 'flex'; // Ensure header is visible
-    }
+    // const responseHeader = this.responseContentElement.previousElementSibling as HTMLElement; // Already handled above
+    // if (responseHeader) {
+    //     responseHeader.style.display = 'flex'; // Ensure header is visible
+    // }
 
     fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
   };
 
   public updateResponse(chunk: string): void {
     if (this.responseContentElement && this.element) {
-      const contentWrapper = this.element.querySelector<HTMLDivElement>(':scope > div:first-child');
-      if (!contentWrapper) return;
+      const contentWrapper = this.element.querySelector<HTMLDivElement>('#feedback-content-wrapper');
+      const loadingTextSpan = this.loadingIndicatorElement?.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text');
+
+      if (!contentWrapper || !loadingTextSpan) return;
 
       const scrollThreshold = 10;
       const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
       // If this is the first chunk, clear the initial message (if any)
-      // BUT KEEP THE LOADER VISIBLE
+      // Loader is already visible from handleSubmit
       if (!this.isStreamStarted) {
         this.responseContentElement.innerHTML = ''; // Clear any initial placeholder text
         this.isStreamStarted = true; // Mark stream as started
@@ -827,6 +923,16 @@ export class FeedbackViewer {
       const parsedHtml = marked.parse(this.accumulatedResponseText) as string;
       // Wrap parsed HTML to ensure consistent structure for scrolling/styling
       this.responseContentElement.innerHTML = `<div class="streamed-content">${parsedHtml}</div>`;
+
+      // --- Update Loading Text ---
+      const htmlCodeRegex = /```html\b/i; // Check if an HTML block has started
+      if (htmlCodeRegex.test(this.accumulatedResponseText)) {
+          loadingTextSpan.textContent = 'Creating new version...';
+      } else {
+          loadingTextSpan.textContent = 'Getting feedback...';
+      }
+      // --- End Update Loading Text ---
+
 
       if (isScrolledToBottom) {
         contentWrapper.scrollTop = contentWrapper.scrollHeight;
