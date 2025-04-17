@@ -493,11 +493,15 @@ export class FeedbackViewerLogic {
             // 2. Apply permanent styles
             this.domManager.setFixAppliedStyles(true);
 
-            // 3. Close the main feedback viewer
+            // 3. Release the DOM manager's reference to this wrapper
+            this.domManager.releaseAppliedFixWrapper();
+
+            // 4. Close the main feedback viewer
             // hide() will call removeInjectedFixLogic, which will now respect the flag
+            // and removeInjectedFixWrapper won't find the (now released) wrapper reference.
             this.hide();
         };
-        applyButton.addEventListener('click', this.fixWrapperApplyButtonListener);
+        applyButton.addEventListener('click', this.fixWrapperApplyButtonListener as EventListener);
 
 
         // MouseLeave on Wrapper (to hide fix *temporarily* after Apply Fix is clicked, but before checkmark)

@@ -1,8 +1,6 @@
 import './feedback-viewer.css';
 
 // --- LocalStorage Keys & Defaults ---
-const LS_WIDTH_KEY = 'feedbackViewerWidth';
-const LS_HEIGHT_KEY = 'feedbackViewerHeight';
 const DEFAULT_WIDTH = 450;
 const DEFAULT_HEIGHT = 220;
 const MIN_WIDTH = 300;
@@ -539,18 +537,24 @@ export class FeedbackViewerDOM {
     }
 
     /**
-     * Removes the injected fix wrapper from the DOM and resets references.
+     * Removes the injected fix wrapper from the DOM and resets references
+     * IF it hasn't been permanently applied (i.e., if this instance still 'owns' it).
      */
     public removeInjectedFixWrapper(): void {
+        // Only remove the wrapper if this DOM manager instance still has an active reference to it.
+        // If the fix was applied, the reference should have been released via releaseAppliedFixWrapper.
         if (this.injectedFixWrapper) {
             this.injectedFixWrapper.remove();
             console.log('[FeedbackViewerDOM] Removed injected fix wrapper.');
+            // Nullify references only if we actually removed it now
+            this.injectedFixWrapper = null;
+            this.fixContentContainer = null;
+            this.fixCloseButton = null;
+            this.fixCopyButton = null;
+            this.fixApplyButton = null;
+        } else {
+             console.log('[FeedbackViewerDOM] No active injectedFixWrapper reference to remove.');
         }
-        this.injectedFixWrapper = null;
-        this.fixContentContainer = null;
-        this.fixCloseButton = null;
-        this.fixCopyButton = null;
-        this.fixApplyButton = null;
     }
 
     /**
@@ -565,6 +569,22 @@ export class FeedbackViewerDOM {
                 this.injectedFixWrapper.classList.remove('fix-applied');
                  console.log('[FeedbackViewerDOM] Removed fix-applied class.');
             }
+        }
+    }
+
+    /**
+     * Releases the reference to the currently managed fix wrapper,
+     * typically called after a fix has been permanently applied.
+     * This allows the wrapper element to persist in the DOM independently.
+     */
+    public releaseAppliedFixWrapper(): void {
+        if (this.injectedFixWrapper) {
+             console.log('[FeedbackViewerDOM] Releasing reference to applied fix wrapper.');
+            this.injectedFixWrapper = null;
+            this.fixContentContainer = null;
+            this.fixCloseButton = null;
+            this.fixCopyButton = null;
+            this.fixApplyButton = null;
         }
     }
 
