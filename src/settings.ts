@@ -1,5 +1,5 @@
 const SETTINGS_PROD = {
-  API_URL: "https://www.checkra.io/api"
+  API_URL: "https://api.checkra.io/"
 };
 
 const SETTINGS_DEV = {
