@@ -8,15 +8,14 @@ export async function copyViewportToClipboard(): Promise<void> {
   try {
     console.log('[ClipboardUtils] Starting viewport capture...');
     const canvas = await html2canvas(document.body, {
-      logging: true, // Enable logging for debugging
-      useCORS: true, // Important for external images/styles
-      // Consider adding width/height if needed, defaults to window dimensions
-      // width: window.innerWidth,
-      // height: window.innerHeight,
-      scrollX: -window.scrollX, // Capture based on current scroll position
+      logging: true,
+      useCORS: true,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollX: -window.scrollX,
       scrollY: -window.scrollY,
-      windowWidth: document.documentElement.scrollWidth, // Capture full scrollable width
-      windowHeight: document.documentElement.scrollHeight // Capture full scrollable height
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight
     });
     console.log('[ClipboardUtils] Canvas generated.');
 
