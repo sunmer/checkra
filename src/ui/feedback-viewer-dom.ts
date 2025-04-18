@@ -21,8 +21,8 @@ export interface FeedbackViewerElements {
     loadingIndicatorText: HTMLSpanElement;
     resizeHandle: HTMLDivElement;
     actionButtonsContainer: HTMLDivElement;
-    applyFixButton: HTMLButtonElement;
-    showHtmlButton: HTMLButtonElement;
+    previewApplyButton: HTMLButtonElement;
+    cancelButton: HTMLButtonElement;
     responseHeader: HTMLDivElement;
     contentWrapper: HTMLDivElement;
 }
@@ -31,7 +31,6 @@ interface InjectedFixElements {
     wrapper: HTMLDivElement;
     closeButton: HTMLButtonElement;
     copyButton: HTMLButtonElement;
-    applyButton: HTMLButtonElement;
     contentContainer: HTMLDivElement;
 }
 
@@ -45,7 +44,6 @@ export class FeedbackViewerDOM {
     private fixContentContainer: HTMLDivElement | null = null;
     private fixCloseButton: HTMLButtonElement | null = null;
     private fixCopyButton: HTMLButtonElement | null = null;
-    private fixApplyButton: HTMLButtonElement | null = null;
     private readonly originalPromptTitleText = 'Describe what you need help with'; // Store original text
 
     // --- Dragging State ---
@@ -118,15 +116,16 @@ export class FeedbackViewerDOM {
         const actionButtonsContainer = document.createElement('div');
         actionButtonsContainer.id = 'feedback-action-buttons';
 
-        const applyFixButton = document.createElement('button');
-        applyFixButton.textContent = 'Preview Fix';
-        applyFixButton.classList.add('preview-fix');
-        actionButtonsContainer.appendChild(applyFixButton);
+        const previewApplyButton = document.createElement('button');
+        previewApplyButton.textContent = 'Preview Fix';
+        previewApplyButton.classList.add('preview-apply-fix');
+        actionButtonsContainer.appendChild(previewApplyButton);
 
-        const showHtmlButton = document.createElement('button');
-        showHtmlButton.textContent = 'Show HTML';
-        showHtmlButton.classList.add('show-html');
-        actionButtonsContainer.appendChild(showHtmlButton);
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Revert';
+        cancelButton.classList.add('cancel-fix');
+        cancelButton.style.display = 'none';
+        actionButtonsContainer.appendChild(cancelButton);
 
         responseHeader.appendChild(actionButtonsContainer);
         viewer.appendChild(responseHeader);
@@ -140,7 +139,6 @@ export class FeedbackViewerDOM {
         promptTitle.style.color = '#a0c8ff';
         promptTitle.style.marginBottom = '8px';
         promptTitle.style.marginTop = '0';
-        promptTitle.style.fontStyle = 'italic';
         promptTitle.style.fontSize = '14px';
         promptTitle.style.fontWeight = '600';
         promptTitle.style.whiteSpace = 'pre-wrap';
@@ -216,8 +214,8 @@ export class FeedbackViewerDOM {
             loadingIndicatorText,
             resizeHandle,
             actionButtonsContainer,
-            applyFixButton,
-            showHtmlButton,
+            previewApplyButton,
+            cancelButton,
             responseHeader,
             contentWrapper
         };
@@ -442,12 +440,11 @@ export class FeedbackViewerDOM {
             this.updateInjectedFixContent(initialContentHtml); // Update content
             this.positionFixWrapper(originalElement); // Reposition if needed
             // Return existing button references
-            if (this.fixCloseButton && this.fixCopyButton && this.fixApplyButton && this.fixContentContainer) {
+            if (this.fixCloseButton && this.fixCopyButton && this.fixContentContainer) {
                  return {
                      wrapper: this.injectedFixWrapper,
                      closeButton: this.fixCloseButton,
                      copyButton: this.fixCopyButton,
-                     applyButton: this.fixApplyButton,
                      contentContainer: this.fixContentContainer
                  };
             } else {
@@ -498,14 +495,6 @@ export class FeedbackViewerDOM {
         this.fixCopyButton.title = 'Copy Screenshot';
         this.injectedFixWrapper.appendChild(this.fixCopyButton);
 
-        // Create Apply Button (Checkmark)
-        this.fixApplyButton = document.createElement('button');
-        this.fixApplyButton.className = 'feedback-fix-apply-btn';
-        this.fixApplyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-        this.fixApplyButton.title = 'Apply Fix';
-        this.injectedFixWrapper.appendChild(this.fixApplyButton);
-
-
         // Insert the wrapper into the DOM before the original element
         originalElement.parentNode?.insertBefore(this.injectedFixWrapper, originalElement);
 
@@ -518,7 +507,6 @@ export class FeedbackViewerDOM {
             wrapper: this.injectedFixWrapper,
             closeButton: this.fixCloseButton,
             copyButton: this.fixCopyButton,
-            applyButton: this.fixApplyButton,
             contentContainer: this.fixContentContainer
         };
     }
@@ -589,7 +577,6 @@ export class FeedbackViewerDOM {
             this.fixContentContainer = null;
             this.fixCloseButton = null;
             this.fixCopyButton = null;
-            this.fixApplyButton = null;
         } else {
              console.log('[FeedbackViewerDOM] No active injectedFixWrapper reference to remove.');
         }
@@ -622,7 +609,6 @@ export class FeedbackViewerDOM {
             this.fixContentContainer = null;
             this.fixCloseButton = null;
             this.fixCopyButton = null;
-            this.fixApplyButton = null;
         }
     }
 

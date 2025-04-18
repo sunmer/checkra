@@ -96,8 +96,8 @@
 .feedback-fix-copy-btn {
   position: absolute;
   top: 2px;
-  /* Adjust position to make space for the apply button */
-  right: 24px;
+  /* Position next to close button */
+  right: 24px; /* Adjusted from 46px */
   width: 18px;
   height: 18px;
   background-color: rgba(80, 80, 80, 0.7);
@@ -124,41 +124,6 @@
 .feedback-fix-copy-btn:hover {
   background-color: rgba(80, 120, 200, 0.8); /* Different hover color */
   color: white;
-}
-
-/* New Apply Button Styles */
-.feedback-fix-apply-btn {
-    position: absolute;
-    top: 2px;
-    /* Position next to the copy button */
-    right: 46px;
-    width: 18px;
-    height: 18px;
-    background-color: rgba(80, 80, 80, 0.7);
-    color: #ddd;
-    border: 1px solid #555;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px;
-    box-sizing: border-box;
-    z-index: 11;
-    pointer-events: auto;
-    transition: background-color 0.2s, color 0.2s;
-}
-
-.feedback-fix-apply-btn svg {
-    width: 10px;
-    height: 10px;
-    stroke: currentColor;
-    stroke-width: 2.5; /* Make checkmark slightly bolder */
-}
-
-.feedback-fix-apply-btn:hover {
-    background-color: rgba(50, 180, 50, 0.8); /* Green hover */
-    color: white;
 }
 
 /* --- Viewer Layout & Header --- */
@@ -339,22 +304,33 @@
    cursor: pointer;
    color: white;
    border: none;
+   transition: background-color 0.2s, opacity 0.2s; /* Added transition */
 }
- #feedback-action-buttons button.preview-fix {
-   background-color: #2563eb;
- }
-  #feedback-action-buttons button.show-html {
+
+/* Updated class for the preview/apply button */
+#feedback-action-buttons button.preview-apply-fix {
+  background-color: #2563eb;
+}
+
+/* ADDED Cancel Button Style */
+#feedback-action-buttons button.cancel-fix {
    background-color: transparent;
-   border: 1px solid #2563eb;
- }
- #feedback-action-buttons button:hover {
-    opacity: 0.85;
- }
- #feedback-action-buttons button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background-color: rgba(255, 255, 255, 0.1) !important;
- }
+   border: 1px solid #777; /* Grey border */
+   color: #ccc;
+}
+#feedback-action-buttons button.cancel-fix:hover {
+   background-color: rgba(150, 150, 150, 0.2);
+   border-color: #999;
+}
+
+#feedback-action-buttons button:hover:not(:disabled) { /* Ensure hover doesn't conflict with disabled */
+   opacity: 0.85;
+}
+#feedback-action-buttons button:disabled {
+   opacity: 0.5;
+   cursor: not-allowed;
+   background-color: rgba(255, 255, 255, 0.1) !important;
+}
 
 /* --- Rendered HTML Preview Popup --- */
 #feedback-rendered-html-preview {

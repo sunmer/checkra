@@ -25,21 +25,21 @@ export class FeedbackViewerLogic {
     private isStreamStarted: boolean = false;
     private originalElementDisplayStyle: string | null = null; // For restoring after fix preview
     private isFixPermanentlyApplied: boolean = false; // Added: Tracks if the current fix is permanent
+    private isPreviewActive: boolean = false; // Added: Tracks if preview is active
+    private hasPreviewBeenShown: boolean = false; // Added: Tracks if preview has been activated
 
     // --- Listeners ---
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private fixWrapperCloseButtonListener: (() => void) | null = null;
     private fixWrapperCopyButtonListener: ((e: MouseEvent) => void) | null = null;
-    private fixWrapperApplyButtonListener: ((e: MouseEvent) => void) | null = null; // Added
-    private fixWrapperMouseLeaveListener: (() => void) | null = null;
-    private originalElementMouseEnterListener: (() => void) | null = null;
+    private cancelButtonListener: (() => void) | null = null; // ADDED
 
     constructor() {
         // Bind methods used as event handlers
         this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
-        this.handleApplyFixClick = this.handleApplyFixClick.bind(this);
-        this.handleShowHtmlClick = this.handleShowHtmlClick.bind(this);
+        this.handlePreviewApplyClick = this.handlePreviewApplyClick.bind(this);
+        this.handleCancelFixClick = this.handleCancelFixClick.bind(this); // Keep binding
     }
 
     public initialize(elements: FeedbackViewerElements, domManager: FeedbackViewerDOM): void {
@@ -49,8 +49,8 @@ export class FeedbackViewerLogic {
         // --- Setup Listeners ---
         this.domElements.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
         this.domElements.submitButton.addEventListener('click', this.handleSubmit);
-        this.domElements.applyFixButton.addEventListener('click', this.handleApplyFixClick);
-        this.domElements.showHtmlButton.addEventListener('click', this.handleShowHtmlClick);
+        this.domElements.previewApplyButton.addEventListener('click', this.handlePreviewApplyClick);
+        this.domElements.cancelButton.addEventListener('click', this.handleCancelFixClick);
 
         // Outside click handler
         this.outsideClickHandler = (e: MouseEvent) => {
@@ -79,8 +79,8 @@ export class FeedbackViewerLogic {
         // Remove general listeners
         this.domElements.promptTextarea.removeEventListener('keydown', this.handleTextareaKeydown);
         this.domElements.submitButton.removeEventListener('click', this.handleSubmit);
-        this.domElements.applyFixButton.removeEventListener('click', this.handleApplyFixClick);
-        this.domElements.showHtmlButton.removeEventListener('click', this.handleShowHtmlClick);
+        this.domElements.previewApplyButton.removeEventListener('click', this.handlePreviewApplyClick);
+        this.domElements.cancelButton.removeEventListener('click', this.handleCancelFixClick);
         document.removeEventListener('mousedown', this.outsideClickHandler);
 
         // Ensure fix-related listeners are removed, but don't touch DOM during full cleanup
@@ -89,6 +89,7 @@ export class FeedbackViewerLogic {
         this.domElements = null;
         this.domManager = null;
         this.outsideClickHandler = null;
+        this.cancelButtonListener = null;
         console.log('[FeedbackViewerLogic] Cleaned up listeners.');
     }
 
@@ -114,6 +115,8 @@ export class FeedbackViewerLogic {
         // Reset state
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
+        this.isPreviewActive = false; // Reset preview state
+        this.hasPreviewBeenShown = false; // Reset new flag
         this.removeInjectedFixLogic(true); // Clears fix state including isFixPermanentlyApplied
 
         // Reset UI
@@ -122,9 +125,14 @@ export class FeedbackViewerLogic {
         this.domManager.clearResponseContent();
         this.domManager.showPromptInputArea(true);
         this.domManager.updateLoaderVisibility(false);
-        this.domManager.updateActionButtonsVisibility(false);
+        this.domManager.updateActionButtonsVisibility(false); // Hide container initially
         this.domManager.hidePreview();
         this.domManager.setFixAppliedStyles(false);
+        // Reset button states explicitly
+        if (this.domElements) {
+            this.domElements.previewApplyButton.textContent = 'Preview Fix';
+            this.domElements.cancelButton.style.display = 'none';
+        }
 
         // Calculate position and show viewer
         let position: { top: number; left: number; mode: 'fixed' | 'absolute' } | null = null;
@@ -193,26 +201,43 @@ export class FeedbackViewerLogic {
 
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
+        this.hasPreviewBeenShown = false;
         this.removeInjectedFixLogic(true);
     }
 
     public hide(): void {
-        if (!this.domManager) return;
-        this.domManager.hide(); // Hide the viewer UI
+        if (!this.domManager || !this.domElements) return; // Added check for elements
+
+        // Store preview state *before* calling removeInjectedFixLogic
+        const wasPreviewActive = this.isPreviewActive;
+
+        // Hide the viewer UI
+        this.domManager.hide();
 
         // Clean up the logic/state/listeners associated with the cycle that is ending.
         // removeInjectedFixLogic will decide whether to remove the DOM wrapper based on isFixPermanentlyApplied.
         console.log(`[FeedbackViewerLogic] Calling removeInjectedFixLogic from hide.`);
         this.removeInjectedFixLogic(true); // Pass true to attempt DOM removal if not permanent
 
+        // If hiding effectively cancelled an active preview, reset button UI
+        if (wasPreviewActive && !this.isFixPermanentlyApplied) {
+             console.log('[FeedbackViewerLogic] Resetting button UI after hide cancelled preview.');
+             this.domElements.previewApplyButton.textContent = 'Preview Fix';
+             this.domElements.cancelButton.style.display = 'none';
+             this.isPreviewActive = false; // Ensure flag is false
+        }
+
+
         // Reset general state for the next potential cycle
         this.currentImageDataUrl = null;
         this.currentSelectedHtml = null;
         this.originalElementBounds = null;
-        this.originalElementRef = null; // Detach from the previous element
+        this.originalElementRef = null;
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
-        // isFixPermanentlyApplied is reset inside removeInjectedFixLogic
+        this.hasPreviewBeenShown = false;
+        // isFixPermanentlyApplied is handled by removeInjectedFixLogic logic (persists if true)
+        // isPreviewActive should be false now
 
         console.log('[FeedbackViewerLogic] Viewer hidden and state reset.');
     }
@@ -259,6 +284,8 @@ export class FeedbackViewerLogic {
         // Reset response/fix state for this request
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
+        this.isPreviewActive = false; // Ensure preview state is reset
+        this.hasPreviewBeenShown = false; // Reset new flag
         this.removeInjectedFixLogic(true); // Clear previous non-permanent fix
 
         // Call API (using placeholder/actual function)
@@ -267,50 +294,85 @@ export class FeedbackViewerLogic {
         // via the coordinator (feedbackViewer instance)
     }
 
-    private handleApplyFixClick(): void {
-        console.log('[FeedbackViewerLogic] Apply Fix button clicked.');
-        if (!this.domManager || !(this.originalElementRef instanceof HTMLElement)) {
-             console.warn('[FeedbackViewerLogic] Cannot apply fix: DOM Manager or original element ref invalid.');
+    private handlePreviewApplyClick(): void {
+        console.log('[FeedbackViewerLogic] Preview/Apply button clicked.');
+        if (!this.domManager || !this.domElements || !(this.originalElementRef instanceof HTMLElement)) {
+             console.warn('[FeedbackViewerLogic] Cannot preview/apply fix: DOM Manager, elements, or original element ref invalid.');
              return;
         }
 
-        // Ensure the fix wrapper exists (it should have been created by tryInjectHtmlFix)
-        // Access via getter or public property if available, otherwise direct access (carefully)
-        const fixWrapper = this.domManager['injectedFixWrapper'];
-        if (!fixWrapper) {
-            console.warn('[FeedbackViewerLogic] Cannot apply fix: Injected fix wrapper not found.');
-            return;
-        }
+        if (!this.isPreviewActive) {
+            // --- ACTION: Start Preview ---
+            console.log('[FeedbackViewerLogic] Starting preview.');
 
-        // Store original display style *before* hiding it, if not already stored
-        if (this.originalElementDisplayStyle === null) {
-            this.originalElementDisplayStyle = window.getComputedStyle(this.originalElementRef).display;
-            if (this.originalElementDisplayStyle === 'none') {
-                this.originalElementDisplayStyle = 'block'; // Default fallback
+            // Ensure the fix wrapper exists (it should have been created hidden by tryInjectHtmlFix)
+            const fixWrapper = this.domManager['injectedFixWrapper'];
+            if (!fixWrapper) {
+                console.warn('[FeedbackViewerLogic] Cannot start preview: Injected fix wrapper not found.');
+                return;
             }
-            console.log(`[FeedbackViewerLogic] Stored original display style: ${this.originalElementDisplayStyle}`);
+
+            // Store original display style *before* hiding it
+            if (this.originalElementDisplayStyle === null) {
+                this.originalElementDisplayStyle = window.getComputedStyle(this.originalElementRef).display;
+                if (this.originalElementDisplayStyle === 'none') {
+                    this.originalElementDisplayStyle = 'block'; // Default fallback
+                }
+                console.log(`[FeedbackViewerLogic] Stored original display style: ${this.originalElementDisplayStyle}`);
+            }
+
+            // Show the fix wrapper and hide original element
+            this.domManager.setInjectedFixWrapperVisibility(true);
+            this.originalElementRef.style.display = 'none';
+            console.log('[FeedbackViewerLogic] Displayed fix wrapper, hid original element.');
+
+            // Update button states
+            this.domElements.previewApplyButton.textContent = 'Apply Fix';
+            this.domElements.cancelButton.style.display = 'inline-block'; // Show Revert button
+            this.isPreviewActive = true;
+            this.hasPreviewBeenShown = true; // Mark that preview has been shown at least once
+
+        } else {
+            // --- ACTION: Apply Permanently ---
+            console.log('[FeedbackViewerLogic] Applying fix permanently.');
+
+            // 1. Set flag *before* cleanup starts in hide()
+            this.isFixPermanentlyApplied = true;
+            console.log('[FeedbackViewerLogic] Set isFixPermanentlyApplied = true.');
+
+            // 2. Apply permanent styles (removes dashed outline)
+            this.domManager.setFixAppliedStyles(true);
+
+            // 3. Release the DOM manager's reference to this wrapper so it persists
+            this.domManager.releaseAppliedFixWrapper();
+
+            // 4. Close the main feedback viewer
+            // hide() will call removeInjectedFixLogic, which will now respect the flag
+            // and won't remove the (now released) wrapper reference.
+            this.hide();
         }
-
-        // Use DOM Manager to show the *existing hidden* fix wrapper and hide original
-        this.domManager.setInjectedFixWrapperVisibility(true);
-        this.originalElementRef.style.display = 'none';
-        console.log('[FeedbackViewerLogic] Displayed fix wrapper, hid original element.');
-
-        // Add mouse enter listener to original element *after* applying fix for hover effect
-        this.addOriginalElementMouseEnterListener();
     }
 
-    private handleShowHtmlClick(): void {
-        console.log('[FeedbackViewerLogic] Show HTML button clicked.');
-        if (!this.domElements) return;
-        const preElement = this.domElements.responseContent.querySelector('.streamed-content pre') as HTMLPreElement | null;
-        if (preElement) {
-            preElement.style.display = 'block';
-            console.log('[FeedbackViewerLogic] Set pre element display to block.');
-            preElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        } else {
-            console.warn('[FeedbackViewerLogic] Could not find pre element within response content.');
+    private handleCancelFixClick(): void {
+        console.log('[FeedbackViewerLogic] Revert button clicked.');
+        // Only revert if preview is currently active and refs are valid
+        if (!this.isPreviewActive || !this.domManager || !this.domElements || !(this.originalElementRef instanceof HTMLElement) || this.originalElementDisplayStyle === null) {
+             console.warn('[FeedbackViewerLogic] Cannot revert: Preview not active or refs invalid.');
+             return;
         }
+
+        // Hide the fix wrapper
+        this.domManager.setInjectedFixWrapperVisibility(false);
+        // Restore the original element
+        this.originalElementRef.style.display = this.originalElementDisplayStyle;
+        console.log('[FeedbackViewerLogic] Hid fix wrapper, restored original element.');
+
+        // Update state and button text
+        this.isPreviewActive = false; // Preview is no longer showing
+        this.domElements.previewApplyButton.textContent = 'Preview Fix'; // Reset button text
+
+        // DO NOT hide the Revert button (this.domElements.cancelButton)
+        // DO NOT call removeInjectedFixLogic - we want to keep the fix available
     }
 
     // --- HTML Preview and Injection Logic ---
@@ -384,8 +446,7 @@ export class FeedbackViewerLogic {
                 this.attachFixWrapperListeners(
                     fixElements.wrapper,
                     fixElements.closeButton,
-                    fixElements.copyButton,
-                    fixElements.applyButton // Pass the new button
+                    fixElements.copyButton
                 );
                 // Ensure content is up-to-date (create should handle initial)
                 this.domManager.updateInjectedFixContent(newContentHtml);
@@ -409,16 +470,13 @@ export class FeedbackViewerLogic {
     }
 
     private removeInjectedFixLogic(removeFromDOM: boolean = true): void {
-        // Modified logic to handle isFixPermanentlyApplied state
         console.log(`[FeedbackViewerLogic] >>> Entering removeInjectedFixLogic (removeFromDOM: ${removeFromDOM}, isFixPermanentlyApplied: ${this.isFixPermanentlyApplied}) <<<`);
 
         // --- Remove Listeners ---
-        // Always remove listeners associated with the *current* cycle's potential wrapper
-        this.removeFixWrapperListeners(); // Includes close, copy, apply, mouseleave
-        this.removeOriginalElementMouseEnterListener();
+        // Remove listeners associated with the fix wrapper (close/copy)
+        this.removeFixWrapperListeners(); // Only handles close/copy now
 
         // --- Restore Original Element ---
-        // Only restore if the fix for *this cycle* was NOT permanently applied
         if (!this.isFixPermanentlyApplied && this.originalElementRef instanceof HTMLElement && this.originalElementDisplayStyle !== null) {
             if (document.body.contains(this.originalElementRef)) {
                 console.log(`[FeedbackViewerLogic] Restoring original element display to: ${this.originalElementDisplayStyle}`);
@@ -427,36 +485,39 @@ export class FeedbackViewerLogic {
                  console.log('[FeedbackViewerLogic] Original element no longer in DOM, skipping style restoration.');
             }
         }
-        // Always reset the stored style for the *next* cycle
         this.originalElementDisplayStyle = null;
 
         // --- Remove Wrapper from DOM (if requested AND fix wasn't permanent) ---
-        // This assumes domManager.removeInjectedFixWrapper() removes the wrapper associated with the *current* logic instance state
         if (removeFromDOM && !this.isFixPermanentlyApplied && this.domManager) {
             console.log('[FeedbackViewerLogic] Attempting to remove wrapper from DOM.');
             this.domManager.removeInjectedFixWrapper();
+            this.isPreviewActive = false; // Reset preview flag when discarding
         } else {
              console.log(`[FeedbackViewerLogic] Skipping wrapper removal from DOM (removeFromDOM: ${removeFromDOM}, isFixPermanentlyApplied: ${this.isFixPermanentlyApplied}).`);
         }
 
         // --- Reset Listener State ---
-        // Always reset listener function references for the next cycle
         this.fixWrapperCloseButtonListener = null;
         this.fixWrapperCopyButtonListener = null;
-        this.fixWrapperApplyButtonListener = null; // Added reset
-        this.fixWrapperMouseLeaveListener = null;
-        // originalElementMouseEnterListener is reset by its own remover
 
         // --- Reset Permanent Fix Flag ---
-        // Reset the flag *after* using its value for cleanup decisions above.
-        // This prepares the state for the *next* feedback cycle.
-        if (this.isFixPermanentlyApplied) {
-             console.log('[FeedbackViewerLogic] Resetting isFixPermanentlyApplied flag.');
+        // Only reset if we are explicitly discarding (called via cancel/hide/new submit when preview was active)
+        if (removeFromDOM && !this.isFixPermanentlyApplied && this.isFixPermanentlyApplied) {
+             console.log('[FeedbackViewerLogic] Resetting isFixPermanentlyApplied flag (discard scenario).');
              this.isFixPermanentlyApplied = false;
+        } else if (!removeFromDOM && this.isFixPermanentlyApplied) {
+            // If called from cleanup() during permanent apply, don't reset the flag here.
+             console.log('[FeedbackViewerLogic] Keeping isFixPermanentlyApplied flag (permanent apply cleanup).');
+        } else if (this.isFixPermanentlyApplied){
+             // Reset if called during hide after a permanent apply? No, hide should just close the viewer.
+             // Let's simplify: Reset flag ONLY if we are actively discarding a NON-permanent fix.
+              if (removeFromDOM && !this.isFixPermanentlyApplied) {
+                 // Already handled above when removing wrapper.
+              }
         }
 
 
-        this.updateActionButtonsVisibility(); // Update viewer buttons
+        this.updateActionButtonsVisibility(); // Update viewer action button container visibility
 
         console.log('[FeedbackViewerLogic] <<< Exiting removeInjectedFixLogic >>>');
     }
@@ -467,8 +528,7 @@ export class FeedbackViewerLogic {
     private attachFixWrapperListeners(
         wrapper: HTMLElement,
         closeButton: HTMLElement,
-        copyButton: HTMLElement,
-        applyButton: HTMLElement // Added apply button
+        copyButton: HTMLElement
     ): void {
         // Remove any existing listeners first to prevent duplicates
         this.removeFixWrapperListeners();
@@ -476,7 +536,12 @@ export class FeedbackViewerLogic {
         // Close Button (Discard)
         this.fixWrapperCloseButtonListener = () => {
             console.log('[FeedbackViewerLogic] Close (discard) button clicked on injected fix.');
-            // This should just remove the fix and restore original, without closing the main viewer
+            // Reset main viewer button states when fix is discarded via 'x'
+            if(this.domElements) {
+                this.domElements.previewApplyButton.textContent = 'Preview Fix';
+                this.domElements.cancelButton.style.display = 'none';
+            }
+            this.isPreviewActive = false;
             this.isFixPermanentlyApplied = false; // Ensure it's not marked as applied
             this.removeInjectedFixLogic(true); // Remove wrapper, restore original
         };
@@ -492,56 +557,21 @@ export class FeedbackViewerLogic {
         };
         copyButton.addEventListener('click', this.fixWrapperCopyButtonListener);
 
-        // Apply Button (Checkmark) - Added
-        this.fixWrapperApplyButtonListener = (e: MouseEvent) => {
-            e.stopPropagation();
-            console.log('[FeedbackViewerLogic] Apply (check) button clicked.');
-            if (!this.domManager) return;
+        // Apply Button (Checkmark) - REMOVED listener setup
 
-            // 1. Set flag *before* cleanup starts in hide()
-            this.isFixPermanentlyApplied = true;
-            console.log('[FeedbackViewerLogic] Set isFixPermanentlyApplied = true.');
+        // MouseLeave on Wrapper - REMOVED listener setup
+        // this.fixWrapperMouseLeaveListener = () => { ... };
+        // wrapper.addEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
 
-            // 2. Apply permanent styles
-            this.domManager.setFixAppliedStyles(true);
-
-            // 3. Release the DOM manager's reference to this wrapper
-            this.domManager.releaseAppliedFixWrapper();
-
-            // 4. Close the main feedback viewer
-            // hide() will call removeInjectedFixLogic, which will now respect the flag
-            // and removeInjectedFixWrapper won't find the (now released) wrapper reference.
-            this.hide();
-        };
-        applyButton.addEventListener('click', this.fixWrapperApplyButtonListener as EventListener);
-
-
-        // MouseLeave on Wrapper (to hide fix *temporarily* after Apply Fix is clicked, but before checkmark)
-        this.fixWrapperMouseLeaveListener = () => {
-            // Only hide if 'Apply Fix' was clicked BUT checkmark was NOT yet clicked
-            if (!this.isFixPermanentlyApplied && this.originalElementDisplayStyle !== null && this.domManager && this.originalElementRef instanceof HTMLElement) {
-                 console.log('[FeedbackViewerLogic] Mouse left injected fix wrapper (temporarily hiding).');
-                this.domManager.setInjectedFixWrapperVisibility(false);
-                // Restore original element display when hiding the fix temporarily
-                this.originalElementRef.style.display = this.originalElementDisplayStyle;
-                console.log(`[FeedbackViewerLogic] Hid fix wrapper, restored original element display to: ${this.originalElementDisplayStyle}`);
-            } else {
-                 console.log('[FeedbackViewerLogic] MouseLeave: Skipping hide/restore (Fix applied or Apply Fix not clicked).');
-            }
-        };
-        wrapper.addEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
-        console.log('[FeedbackViewerLogic] Added mouseleave listener to fix wrapper.');
-
-        // Note: MouseEnter listener for the *original* element is added separately
-        // in handleApplyFixClick, because we only want that behavior *after* apply is clicked.
+        // Note: MouseEnter listener for the *original* element is removed entirely
     }
 
     private removeFixWrapperListeners(): void {
         // Use the DOM manager to get button references if needed, or rely on stored refs
-        const fixWrapper = this.domManager?.['injectedFixWrapper'];
+        const fixWrapper = this.domManager?.['injectedFixWrapper']; // Keep for potential future use? Currently unused.
         const closeButton = this.domManager?.['fixCloseButton'];
         const copyButton = this.domManager?.['fixCopyButton'];
-        const applyButton = this.domManager?.['fixApplyButton']; // Added
+        // const applyButton = this.domManager?.['fixApplyButton']; // REMOVED
 
         if (closeButton && this.fixWrapperCloseButtonListener) {
             closeButton.removeEventListener('click', this.fixWrapperCloseButtonListener);
@@ -551,93 +581,44 @@ export class FeedbackViewerLogic {
             copyButton.removeEventListener('click', this.fixWrapperCopyButtonListener as EventListener);
             this.fixWrapperCopyButtonListener = null;
         }
-        // Remove Apply button listener - Added
-        if (applyButton && this.fixWrapperApplyButtonListener) {
-            applyButton.removeEventListener('click', this.fixWrapperApplyButtonListener as EventListener);
-            this.fixWrapperApplyButtonListener = null;
-        }
-        if (fixWrapper && this.fixWrapperMouseLeaveListener) {
-            fixWrapper.removeEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
-            this.fixWrapperMouseLeaveListener = null;
-        }
-         console.log('[FeedbackViewerLogic] Removed fix wrapper listeners.');
+        // Remove Apply button listener - REMOVED
+        // if (applyButton && this.fixWrapperApplyButtonListener) { ... }
+
+        // Remove MouseLeave listener - REMOVED
+        // if (fixWrapper && this.fixWrapperMouseLeaveListener) { ... }
+
+         console.log('[FeedbackViewerLogic] Removed fix wrapper listeners (close/copy).');
     }
 
-    private addOriginalElementMouseEnterListener(): void {
-         if (!(this.originalElementRef instanceof HTMLElement)) return;
+    // REMOVED addOriginalElementMouseEnterListener method
+    // private addOriginalElementMouseEnterListener(): void { ... }
 
-         // Remove existing first
-         this.removeOriginalElementMouseEnterListener();
-
-         this.originalElementMouseEnterListener = () => {
-             // Show the fix ONLY if 'Apply Fix' has been clicked BUT checkmark has NOT
-             if (!this.isFixPermanentlyApplied && this.originalElementDisplayStyle !== null && this.domManager && this.originalElementRef instanceof HTMLElement) {
-                 console.log('[FeedbackViewerLogic] Mouse entered original element area (showing temp fix).');
-                 this.domManager.setInjectedFixWrapperVisibility(true); // Show fix
-                 this.originalElementRef.style.display = 'none'; // Hide original
-                 console.log('[FeedbackViewerLogic] Showed fix wrapper, hid original element (mouseenter).');
-             } else {
-                  console.log('[FeedbackViewerLogic] MouseEnter: Skipping show fix (Fix applied or Apply Fix not clicked).');
-             }
-         };
-         this.originalElementRef.addEventListener('mouseenter', this.originalElementMouseEnterListener);
-         console.log('[FeedbackViewerLogic] Added mouseenter listener to original element.');
-    }
-
-     private removeOriginalElementMouseEnterListener(): void {
-         if (this.originalElementRef instanceof HTMLElement && this.originalElementMouseEnterListener) {
-             console.log('[FeedbackViewerLogic] Removing mouseenter listener from original element.');
-             this.originalElementRef.removeEventListener('mouseenter', this.originalElementMouseEnterListener);
-             this.originalElementMouseEnterListener = null; // Reset the stored listener
-         }
-     }
+    // REMOVED removeOriginalElementMouseEnterListener method
+    // private removeOriginalElementMouseEnterListener(): void { ... }
 
 
     // --- Helpers ---
 
     private updateActionButtonsVisibility(): void {
-        if (!this.domManager) return;
-        // Visibility depends only on whether HTML was found in the *response*,
-        // not whether the fix wrapper is currently visible or applied.
+        if (!this.domManager || !this.domElements) return; // Added elements check
+        // Visibility depends only on whether HTML was found in the *response*
         const hasHtml = SPECIFIC_HTML_REGEX.test(this.accumulatedResponseText) || GENERIC_HTML_REGEX.test(this.accumulatedResponseText);
-        console.log(`[FeedbackViewerLogic] updateActionButtonsVisibility: hasHtml=${hasHtml}`);
-        this.domManager.updateActionButtonsVisibility(hasHtml);
+        const showContainer = hasHtml; // Determine if container should be visible
+
+        console.log(`[FeedbackViewerLogic] updateActionButtonsVisibility: hasHtml=${hasHtml}, hasPreviewBeenShown=${this.hasPreviewBeenShown}`);
+        this.domManager.updateActionButtonsVisibility(showContainer);
+
+        // --- EDIT: Update Revert button visibility based on new flag ---
+        // Ensure cancel button visibility aligns with preview state IF container is visible
+         if (showContainer) {
+             // Show Revert button only if Preview has been clicked at least once
+             this.domElements.cancelButton.style.display = this.hasPreviewBeenShown ? 'inline-block' : 'none';
+         } else {
+            this.domElements.cancelButton.style.display = 'none'; // Hide if container hidden
+         }
+         // --- END EDIT ---
     }
 
-    /**
-     * Handles clicking the 'Preview' button in the viewer header.
-     * Shows the injected fix wrapper and hides the original element.
-     */
-    private handlePreviewFixClick(): void {
-        console.log('[FeedbackViewerLogic] Preview button clicked.');
-        if (!this.domManager || !(this.originalElementRef instanceof HTMLElement)) {
-             console.warn('[FeedbackViewerLogic] Cannot start preview: DOM Manager or original element ref invalid.');
-             return;
-        }
-
-        // Ensure the fix wrapper exists (it should have been created by tryInjectHtmlFix)
-        // Access via getter or public property if available, otherwise direct access (carefully)
-        const fixWrapper = this.domManager['injectedFixWrapper'];
-        if (!fixWrapper) {
-            console.warn('[FeedbackViewerLogic] Cannot start preview: Injected fix wrapper not found.');
-            return;
-        }
-
-        // Store original display style *before* hiding it, if not already stored
-        if (this.originalElementDisplayStyle === null) {
-            this.originalElementDisplayStyle = window.getComputedStyle(this.originalElementRef).display;
-            if (this.originalElementDisplayStyle === 'none') {
-                this.originalElementDisplayStyle = 'block'; // Default fallback
-            }
-            console.log(`[FeedbackViewerLogic] Stored original display style: ${this.originalElementDisplayStyle}`);
-        }
-
-        // Use DOM Manager to show the *existing hidden* fix wrapper and hide original
-        this.domManager.setInjectedFixWrapperVisibility(true);
-        this.originalElementRef.style.display = 'none';
-        console.log('[FeedbackViewerLogic] Displayed fix wrapper (preview), hid original element.');
-
-        // Add mouse enter listener to original element *after* starting preview for hover effect
-        this.addOriginalElementMouseEnterListener();
-    }
+    // REMOVED handlePreviewFixClick method (logic merged into handlePreviewApplyClick)
+    // private handlePreviewFixClick(): void { ... }
 }
