@@ -305,11 +305,28 @@
    color: white;
    border: none;
    transition: background-color 0.2s, opacity 0.2s; /* Added transition */
+   /* ADDED: Flexbox for icon alignment */
+   display: inline-flex;
+   align-items: center;
+   gap: 5px; /* Space between text and icon */
+}
+
+/* ADDED: Style for SVGs inside action buttons */
+#feedback-action-buttons button svg {
+  width: 1em; /* Size relative to font size */
+  height: 1em;
+  stroke: currentColor; /* Inherit button color */
 }
 
 /* Updated class for the preview/apply button */
 #feedback-action-buttons button.preview-apply-fix {
   background-color: #2563eb;
+}
+
+/* ADDED: Specific hover for preview/apply button */
+#feedback-action-buttons button.preview-apply-fix:hover:not(:disabled) {
+  background-color: #1d4ed8; /* Darker blue */
+  opacity: 1; /* Override general hover opacity if needed */
 }
 
 /* ADDED Cancel Button Style */
@@ -318,18 +335,34 @@
    border: 1px solid #777; /* Grey border */
    color: #ccc;
 }
-#feedback-action-buttons button.cancel-fix:hover {
+#feedback-action-buttons button.cancel-fix:hover:not(:disabled) { /* Added :not(:disabled) */
    background-color: rgba(150, 150, 150, 0.2);
    border-color: #999;
+   opacity: 1; /* Override general hover opacity */
 }
 
-#feedback-action-buttons button:hover:not(:disabled) { /* Ensure hover doesn't conflict with disabled */
+/* General hover - remove background color change to avoid conflict */
+#feedback-action-buttons button:hover:not(:disabled) {
    opacity: 0.85;
+   /* REMOVED: background-color: rgba(255, 255, 255, 0.2); */
 }
 #feedback-action-buttons button:disabled {
    opacity: 0.5;
    cursor: not-allowed;
-   background-color: rgba(255, 255, 255, 0.1) !important;
+   /* Keep specific background for preview/apply even when disabled */
+   /* background-color: rgba(255, 255, 255, 0.1) !important; */
+}
+/* Ensure disabled preview/apply keeps its blue but dimmed */
+#feedback-action-buttons button.preview-apply-fix:disabled {
+  background-color: #2563eb !important;
+  opacity: 0.5;
+}
+/* Ensure disabled cancel keeps its transparent style */
+#feedback-action-buttons button.cancel-fix:disabled {
+  background-color: transparent !important;
+  border: 1px solid #777;
+  color: #ccc;
+  opacity: 0.5;
 }
 
 /* --- Rendered HTML Preview Popup --- */

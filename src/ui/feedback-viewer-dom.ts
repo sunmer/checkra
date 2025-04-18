@@ -1,4 +1,5 @@
 import './feedback-viewer.css';
+import { escapeHTML } from './utils';
 
 // --- LocalStorage Keys & Defaults ---
 const DEFAULT_WIDTH = 450;
@@ -117,12 +118,18 @@ export class FeedbackViewerDOM {
         actionButtonsContainer.id = 'feedback-action-buttons';
 
         const previewApplyButton = document.createElement('button');
-        previewApplyButton.textContent = 'Preview Fix';
+        previewApplyButton.innerHTML = `
+          <span class="button-text">Preview Fix</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+        `;
         previewApplyButton.classList.add('preview-apply-fix');
         actionButtonsContainer.appendChild(previewApplyButton);
 
         const cancelButton = document.createElement('button');
-        cancelButton.textContent = 'Revert';
+        cancelButton.innerHTML = `
+          <span class="button-text">Undo fix</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2-icon lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
+        `;
         cancelButton.classList.add('cancel-fix');
         cancelButton.style.display = 'none';
         actionButtonsContainer.appendChild(cancelButton);
@@ -793,5 +800,16 @@ export class FeedbackViewerDOM {
         document.removeEventListener('mouseup', this.handleResizeEnd);
         this.elements.contentWrapper.style.pointerEvents = '';
         this.elements.viewer.classList.remove('resizing');
+    }
+
+    /**
+     * Updates the content (text and icon) of the Preview/Apply button.
+     */
+     public updatePreviewApplyButtonContent(text: string, svgIcon: string): void {
+        if (!this.elements) return;
+        this.elements.previewApplyButton.innerHTML = `
+            <span class="button-text">${escapeHTML(text)}</span>
+            ${svgIcon}
+        `;
     }
 }

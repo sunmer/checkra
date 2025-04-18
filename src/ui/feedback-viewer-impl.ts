@@ -9,6 +9,11 @@ import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
 const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
 
+// ADDED: SVG Icon Constants
+const EYE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
+const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-icon lucide-check"><path d="M20 6 9 17l-5-5"/></svg>`;
+const UNDO_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2-icon lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>`; // Added for completeness, though cancel button isn't dynamic
+
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
  */
@@ -70,6 +75,12 @@ export class FeedbackViewerLogic {
         };
         document.addEventListener('mousedown', this.outsideClickHandler);
 
+        // Ensure cancel button SVG is correct if DOM didn't set it initially (belt and braces)
+        elements.cancelButton.innerHTML = `
+            <span class="button-text">Undo fix</span>
+            ${UNDO_ICON_SVG}
+        `;
+
         console.log('[FeedbackViewerLogic] Initialized.');
     }
 
@@ -128,10 +139,10 @@ export class FeedbackViewerLogic {
         this.domManager.updateActionButtonsVisibility(false); // Hide container initially
         this.domManager.hidePreview();
         this.domManager.setFixAppliedStyles(false);
-        // Reset button states explicitly
-        if (this.domElements) {
-            this.domElements.previewApplyButton.textContent = 'Preview Fix';
-            this.domElements.cancelButton.style.display = 'none';
+        // Reset button states explicitly using the new helper
+        if (this.domManager && this.domElements) {
+             this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
+             this.domElements.cancelButton.style.display = 'none'; // Keep hiding cancel button
         }
 
         // Calculate position and show viewer
@@ -222,7 +233,8 @@ export class FeedbackViewerLogic {
         // If hiding effectively cancelled an active preview, reset button UI
         if (wasPreviewActive && !this.isFixPermanentlyApplied) {
              console.log('[FeedbackViewerLogic] Resetting button UI after hide cancelled preview.');
-             this.domElements.previewApplyButton.textContent = 'Preview Fix';
+             // Use the DOM manager helper to reset content
+             this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
              this.domElements.cancelButton.style.display = 'none';
              this.isPreviewActive = false; // Ensure flag is false
         }
@@ -326,9 +338,9 @@ export class FeedbackViewerLogic {
             this.originalElementRef.style.display = 'none';
             console.log('[FeedbackViewerLogic] Displayed fix wrapper, hid original element.');
 
-            // Update button states
-            this.domElements.previewApplyButton.textContent = 'Apply Fix';
-            this.domElements.cancelButton.style.display = 'inline-block'; // Show Revert button
+            // Update button states using the new helper
+            this.domManager.updatePreviewApplyButtonContent('Apply Fix', CHECK_ICON_SVG); // Change text and icon
+            this.domElements.cancelButton.style.display = 'inline-flex'; // Show Revert button (use inline-flex)
             this.isPreviewActive = true;
             this.hasPreviewBeenShown = true; // Mark that preview has been shown at least once
 
@@ -347,8 +359,6 @@ export class FeedbackViewerLogic {
             this.domManager.releaseAppliedFixWrapper();
 
             // 4. Close the main feedback viewer
-            // hide() will call removeInjectedFixLogic, which will now respect the flag
-            // and won't remove the (now released) wrapper reference.
             this.hide();
         }
     }
@@ -367,12 +377,12 @@ export class FeedbackViewerLogic {
         this.originalElementRef.style.display = this.originalElementDisplayStyle;
         console.log('[FeedbackViewerLogic] Hid fix wrapper, restored original element.');
 
-        // Update state and button text
+        // Update state and button text/icon using helper
         this.isPreviewActive = false; // Preview is no longer showing
-        this.domElements.previewApplyButton.textContent = 'Preview Fix'; // Reset button text
+        this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG); // Reset button text/icon
 
-        // DO NOT hide the Revert button (this.domElements.cancelButton)
-        // DO NOT call removeInjectedFixLogic - we want to keep the fix available
+        // Keep the Cancel/Undo button visible (it now says "Undo fix")
+        // this.domElements.cancelButton.style.display = 'inline-flex'; // Keep visible
     }
 
     // --- HTML Preview and Injection Logic ---
@@ -500,6 +510,12 @@ export class FeedbackViewerLogic {
         this.fixWrapperCloseButtonListener = null;
         this.fixWrapperCopyButtonListener = null;
 
+        // Reset button state ONLY IF we are discarding (removeFromDOM is true and not permanent)
+        if (removeFromDOM && !this.isFixPermanentlyApplied && this.domManager && this.domElements) {
+            this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
+            this.domElements.cancelButton.style.display = 'none';
+        }
+
         // --- Reset Permanent Fix Flag ---
         // Only reset if we are explicitly discarding (called via cancel/hide/new submit when preview was active)
         if (removeFromDOM && !this.isFixPermanentlyApplied && this.isFixPermanentlyApplied) {
@@ -537,8 +553,8 @@ export class FeedbackViewerLogic {
         this.fixWrapperCloseButtonListener = () => {
             console.log('[FeedbackViewerLogic] Close (discard) button clicked on injected fix.');
             // Reset main viewer button states when fix is discarded via 'x'
-            if(this.domElements) {
-                this.domElements.previewApplyButton.textContent = 'Preview Fix';
+            if(this.domManager && this.domElements) {
+                this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
                 this.domElements.cancelButton.style.display = 'none';
             }
             this.isPreviewActive = false;
@@ -608,15 +624,14 @@ export class FeedbackViewerLogic {
         console.log(`[FeedbackViewerLogic] updateActionButtonsVisibility: hasHtml=${hasHtml}, hasPreviewBeenShown=${this.hasPreviewBeenShown}`);
         this.domManager.updateActionButtonsVisibility(showContainer);
 
-        // --- EDIT: Update Revert button visibility based on new flag ---
         // Ensure cancel button visibility aligns with preview state IF container is visible
          if (showContainer) {
              // Show Revert button only if Preview has been clicked at least once
-             this.domElements.cancelButton.style.display = this.hasPreviewBeenShown ? 'inline-block' : 'none';
+             // Use inline-flex now for display
+             this.domElements.cancelButton.style.display = this.hasPreviewBeenShown ? 'inline-flex' : 'none';
          } else {
             this.domElements.cancelButton.style.display = 'none'; // Hide if container hidden
          }
-         // --- END EDIT ---
     }
 
     // REMOVED handlePreviewFixClick method (logic merged into handlePreviewApplyClick)
