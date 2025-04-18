@@ -111,25 +111,20 @@ export class FeedbackViewerLogic {
         this.originalElementBounds = targetRect;
         this.originalElementRef = targetElement;
 
-        // Reset state for the new cycle
+        // Reset state
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
-        // isFixPermanentlyApplied is reset within removeInjectedFixLogic
-
-        console.log('[FeedbackViewerLogic] Calling removeInjectedFixLogic from prepareForInput to clear previous state.');
-        // Remove any previous fix injection AND reset state like isFixPermanentlyApplied
-        this.removeInjectedFixLogic(true); // Attempt to remove DOM from previous cycle
+        this.removeInjectedFixLogic(true); // Clears fix state including isFixPermanentlyApplied
 
         // Reset UI
-        this.domManager.setPromptState(true, ''); // Enable textarea and clear value
+        this.domManager.setPromptState(true, '');
         this.domManager.updateSubmitButtonState(true, 'Get Feedback');
         this.domManager.clearResponseContent();
+        this.domManager.showPromptInputArea(true);
         this.domManager.updateLoaderVisibility(false);
         this.domManager.updateActionButtonsVisibility(false);
-        this.domManager.showPromptArea(true); // Ensure prompt area is visible
         this.domManager.hidePreview();
-        this.domManager.setFixAppliedStyles(false); // Ensure new cycle doesn't start with applied styles
-
+        this.domManager.setFixAppliedStyles(false);
 
         // Calculate position and show viewer
         let position: { top: number; left: number; mode: 'fixed' | 'absolute' } | null = null;
@@ -194,9 +189,10 @@ export class FeedbackViewerLogic {
         this.domManager.setResponseContent(`<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`, false);
         this.domManager.setPromptState(true);
         this.domManager.updateSubmitButtonState(true, 'Get Feedback');
+        this.domManager.showPromptInputArea(true);
+
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
-        // Also clean up any potentially half-created fix on error
         this.removeInjectedFixLogic(true);
     }
 
@@ -235,24 +231,40 @@ export class FeedbackViewerLogic {
     private handleSubmit(): void {
         if (!this.domManager || !this.domElements) return;
         if (!this.currentImageDataUrl && !this.currentSelectedHtml) {
-            this.showError('Could not capture image or HTML structure.');
+            this.showError('Could not capture image or HTML structure for context.');
+             // Keep input area visible on context error
             return;
         }
-
         const promptText = this.domElements.promptTextarea.value.trim();
+        if (!promptText) {
+             this.showError('Please enter a description or question.');
+             // Keep input area visible on prompt error
+             return;
+        }
+
         console.log('[FeedbackViewerLogic] Submitting feedback...');
 
-        this.domManager.setPromptState(false);
+        // Update UI for processing state
+        this.domManager.setPromptState(false); // Disable textarea
         this.domManager.updateSubmitButtonState(false, 'Sending...');
         this.domManager.updateLoaderVisibility(true, 'Getting feedback...');
         this.domManager.updateActionButtonsVisibility(false);
         this.domManager.clearResponseContent();
-        this.domManager.showPromptArea(false);
+        this.domManager.hidePreview(); // Hide any previous HTML preview
 
+        // 1. Hide the textarea container AND update the promptTitle text
+        this.domManager.showPromptInputArea(false, promptText);
+        // 2. No need to call showUserPromptDisplay anymore
+
+        // Reset response/fix state for this request
         this.accumulatedResponseText = '';
         this.isStreamStarted = false;
+        this.removeInjectedFixLogic(true); // Clear previous non-permanent fix
 
+        // Call API (using placeholder/actual function)
         fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
+        // Assuming fetchFeedback triggers updateResponse/finalizeResponse/showError calls
+        // via the coordinator (feedbackViewer instance)
     }
 
     private handleApplyFixClick(): void {

@@ -6,7 +6,7 @@ const DEFAULT_HEIGHT = 220;
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 220;
 const MAX_WIDTH_VW = 80;
-const MAX_HEIGHT_VH = 60;
+// const MAX_HEIGHT_VH = 60; // << REMOVE or comment out (no longer used)
 
 export interface FeedbackViewerElements {
     viewer: HTMLDivElement;
@@ -14,6 +14,7 @@ export interface FeedbackViewerElements {
     submitButton: HTMLButtonElement;
     submitButtonTextSpan: HTMLSpanElement;
     textareaContainer: HTMLDivElement;
+    promptTitle: HTMLHeadingElement;
     responseContent: HTMLDivElement;
     renderedHtmlPreview: HTMLDivElement;
     loadingIndicator: HTMLDivElement;
@@ -45,6 +46,7 @@ export class FeedbackViewerDOM {
     private fixCloseButton: HTMLButtonElement | null = null;
     private fixCopyButton: HTMLButtonElement | null = null;
     private fixApplyButton: HTMLButtonElement | null = null;
+    private readonly originalPromptTitleText = 'Describe what you need help with'; // Store original text
 
     // --- Dragging State ---
     private isDragging: boolean = false;
@@ -86,7 +88,7 @@ export class FeedbackViewerDOM {
         viewer.style.minWidth = `${MIN_WIDTH}px`;
         viewer.style.minHeight = `${MIN_HEIGHT}px`;
         viewer.style.maxWidth = `${MAX_WIDTH_VW}vw`;
-        viewer.style.maxHeight = `${MAX_HEIGHT_VH}vh`;
+        // viewer.style.maxHeight = `${MAX_HEIGHT_VH}vh`; // << REMOVE or comment out this line
         viewer.style.display = 'none'; // Initial state
 
         viewer.addEventListener('mousedown', this.handleDragStart);
@@ -134,12 +136,15 @@ export class FeedbackViewerDOM {
         contentWrapper.id = 'feedback-content-wrapper';
 
         const promptTitle = document.createElement('h4');
-        promptTitle.textContent = 'Describe what you need help with';
+        promptTitle.textContent = '"' + this.originalPromptTitleText + '"';
         promptTitle.style.color = '#a0c8ff';
         promptTitle.style.marginBottom = '8px';
         promptTitle.style.marginTop = '0';
+        promptTitle.style.fontStyle = 'italic';
         promptTitle.style.fontSize = '14px';
         promptTitle.style.fontWeight = '600';
+        promptTitle.style.whiteSpace = 'pre-wrap';
+        promptTitle.style.wordWrap = 'break-word';
         contentWrapper.appendChild(promptTitle);
 
         const textareaContainer = document.createElement('div');
@@ -204,6 +209,7 @@ export class FeedbackViewerDOM {
             submitButton,
             submitButtonTextSpan,
             textareaContainer,
+            promptTitle,
             responseContent,
             renderedHtmlPreview,
             loadingIndicator,
@@ -240,16 +246,17 @@ export class FeedbackViewerDOM {
 
     public show(position?: { top: number; left: number; mode: 'fixed' | 'absolute' }): void {
         if (!this.elements) return;
-        const { viewer, promptTextarea, responseHeader, contentWrapper } = this.elements;
+        const { viewer, promptTextarea } = this.elements;
         // Apply persisted size or defaults
         viewer.style.width = `${DEFAULT_WIDTH}px`;
         viewer.style.height = `${DEFAULT_HEIGHT}px`;
 
         // Reset visibility states
+        this.showPromptInputArea(true);
         this.updateLoaderVisibility(false);
         this.updateActionButtonsVisibility(false);
-        responseHeader.style.display = 'none';
-        contentWrapper.style.paddingTop = '15px'; // Reset padding
+        this.elements.responseHeader.style.display = 'none';
+        this.elements.contentWrapper.style.paddingTop = '15px'; // Reset padding
 
         if (position) {
             viewer.style.position = position.mode;
@@ -282,12 +289,11 @@ export class FeedbackViewerDOM {
 
     public updateLoaderVisibility(visible: boolean, text?: string): void {
         if (!this.elements) return;
-        const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper } = this.elements;
+        const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper, actionButtonsContainer } = this.elements;
         if (visible) {
             loadingIndicatorText.textContent = text || 'Processing...';
             loadingIndicator.style.display = 'flex';
             responseHeader.style.display = 'flex'; // Show header when loader is visible
-            // Adjust content padding dynamically
             requestAnimationFrame(() => {
                 const headerHeight = responseHeader.offsetHeight;
                 contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
@@ -295,29 +301,41 @@ export class FeedbackViewerDOM {
         } else {
             loadingIndicator.style.display = 'none';
             // Keep header visible if action buttons are shown, otherwise hide
-            if (this.elements.actionButtonsContainer.style.display === 'none') {
+            if (actionButtonsContainer.style.display === 'none') {
                  responseHeader.style.display = 'none';
                  contentWrapper.style.paddingTop = '15px'; // Reset padding
+            } else {
+                 responseHeader.style.display = 'flex'; // Keep header visible
+                 requestAnimationFrame(() => {
+                     const headerHeight = responseHeader.offsetHeight;
+                     contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
+                 });
             }
         }
     }
 
     public updateActionButtonsVisibility(visible: boolean): void {
         if (!this.elements) return;
-        const { actionButtonsContainer, responseHeader, contentWrapper } = this.elements;
+        const { actionButtonsContainer, responseHeader, contentWrapper, loadingIndicator } = this.elements;
         actionButtonsContainer.style.display = visible ? 'flex' : 'none';
-        // Ensure header stays visible if buttons are shown
+
         if (visible) {
-            responseHeader.style.display = 'flex';
+            responseHeader.style.display = 'flex'; // Show header if buttons are shown
             requestAnimationFrame(() => {
                 const headerHeight = responseHeader.offsetHeight;
                 contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
             });
         } else {
              // Hide header only if loader is also hidden
-             if (this.elements.loadingIndicator.style.display === 'none') {
+             if (loadingIndicator.style.display === 'none') {
                  responseHeader.style.display = 'none';
                  contentWrapper.style.paddingTop = '15px'; // Reset padding
+             } else {
+                  responseHeader.style.display = 'flex'; // Keep header visible if loader is active
+                  requestAnimationFrame(() => {
+                     const headerHeight = responseHeader.offsetHeight;
+                     contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
+                 });
              }
         }
     }
@@ -356,10 +374,30 @@ export class FeedbackViewerDOM {
         }
     }
 
-    public showPromptArea(show: boolean): void {
+    /**
+     * Shows or hides the prompt textarea/button container, and updates
+     * the text content of the prompt title element accordingly.
+     * @param show True to show input area and original title, false to hide input area and show submitted text.
+     * @param submittedPromptText The user's prompt text (only used when show is false).
+     */
+    public showPromptInputArea(show: boolean, submittedPromptText?: string): void {
          if (!this.elements) return;
+         // Toggle textarea container visibility
          this.elements.textareaContainer.style.display = show ? 'block' : 'none';
-         this.elements.submitButton.style.display = show ? 'flex' : 'none';
+
+         // Update the title text
+         if (show) {
+            // Restore original title
+            this.elements.promptTitle.textContent = this.originalPromptTitleText;
+            this.elements.promptTitle.style.display = 'block'; // Ensure title is visible
+         } else if (submittedPromptText) {
+            // Show submitted prompt in the title element
+            this.elements.promptTitle.textContent = submittedPromptText;
+            this.elements.promptTitle.style.display = 'block'; // Ensure title is visible
+         } else {
+             // Hiding without submitted text (e.g., on error before submit), just hide textarea
+             this.elements.promptTitle.style.display = 'none'; // Hide the title too if no text to show
+         }
     }
 
     // --- HTML Preview Popup ---
@@ -752,9 +790,12 @@ export class FeedbackViewerDOM {
         let newWidth = this.initialWidth + dx;
         let newHeight = this.initialHeight + dy;
         const maxWidthPx = (window.innerWidth * MAX_WIDTH_VW) / 100;
-        const maxHeightPx = (window.innerHeight * MAX_HEIGHT_VH) / 100;
+        // const maxHeightPx = (window.innerHeight * MAX_HEIGHT_VH) / 100; // << REMOVE or comment out
+
+        // Clamp width, but only clamp height to the minimum
         newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, maxWidthPx));
-        newHeight = Math.max(MIN_HEIGHT, Math.min(newHeight, maxHeightPx));
+        newHeight = Math.max(MIN_HEIGHT, newHeight); // << REMOVE Math.min(..., maxHeightPx) clamping
+
         this.elements.viewer.style.width = `${newWidth}px`;
         this.elements.viewer.style.height = `${newHeight}px`;
     }
