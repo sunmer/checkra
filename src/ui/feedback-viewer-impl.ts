@@ -35,7 +35,7 @@ export class FeedbackViewerLogic {
 
     // --- Listeners ---
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
-    private fixWrapperCloseButtonListener: (() => void) | null = null;
+    private fixWrapperCloseButtonListener: ((event: MouseEvent) => void) | null = null;
     private fixWrapperCopyButtonListener: ((e: MouseEvent) => void) | null = null;
     private cancelButtonListener: (() => void) | null = null; // ADDED
 
@@ -524,41 +524,51 @@ export class FeedbackViewerLogic {
         this.removeFixWrapperListeners();
 
         // Close Button (Discard)
-        this.fixWrapperCloseButtonListener = () => {
+        this.fixWrapperCloseButtonListener = (event: MouseEvent) => {
             console.log('[FeedbackViewerLogic] Close (discard) button clicked on injected fix.');
-            // Reset main viewer button states when fix is discarded via 'x'
-            if(this.domManager && this.domElements) {
-                this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-                this.domElements.cancelButton.style.display = 'none';
+
+            // --- MODIFIED Logic ---
+            const buttonElement = event.currentTarget as HTMLElement;
+            const wrapperToRemove = buttonElement.closest('.feedback-injected-fix');
+
+            if (wrapperToRemove) {
+                // Find the element immediately following the wrapper in the DOM
+                const originalElementCandidate = wrapperToRemove.nextElementSibling;
+
+                // Check if it's a valid HTML element
+                if (originalElementCandidate instanceof HTMLElement) {
+                    console.log('[FeedbackViewerLogic] Found potential original element (next sibling). Restoring display.');
+                    // Remove any inline 'display: none' style that was added during preview/apply.
+                    // Setting display to '' reverts it to the default specified by CSS.
+                    originalElementCandidate.style.display = '';
+                } else {
+                    console.warn('[FeedbackViewerLogic] Could not find a valid next sibling element to restore display for.');
+                }
+
+                console.log('[FeedbackViewerLogic] Removing wrapper via close button.');
+                wrapperToRemove.remove();
+
+            } else {
+                console.warn('[FeedbackViewerLogic] Could not find parent wrapper to remove.');
             }
-            this.isPreviewActive = false;
-            this.isFixPermanentlyApplied = false; // Ensure it's not marked as applied
-            this.removeInjectedFixLogic(true); // Remove wrapper, restore original
+
+
         };
-        closeButton.addEventListener('click', this.fixWrapperCloseButtonListener);
+        closeButton.addEventListener('click', this.fixWrapperCloseButtonListener as EventListener);
 
         // Copy Button
         this.fixWrapperCopyButtonListener = (e: MouseEvent) => {
-             e.stopPropagation();
-             console.log('[FeedbackViewerLogic] Copy button clicked.');
-             copyViewportToClipboard().catch(err => {
-                 console.error("Error copying viewport:", err);
-             });
+            e.stopPropagation();
+            console.log('[FeedbackViewerLogic] Copy button clicked.');
+            copyViewportToClipboard().catch(err => {
+                console.error("Error copying viewport:", err);
+            });
         };
-        copyButton.addEventListener('click', this.fixWrapperCopyButtonListener);
+        copyButton.addEventListener('click', this.fixWrapperCopyButtonListener as EventListener); // Cast needed
 
-        // Apply Button (Checkmark) - REMOVED listener setup
-
-        // MouseLeave on Wrapper - REMOVED listener setup
-        // this.fixWrapperMouseLeaveListener = () => { ... };
-        // wrapper.addEventListener('mouseleave', this.fixWrapperMouseLeaveListener);
-
-        // Note: MouseEnter listener for the *original* element is removed entirely
     }
 
     private removeFixWrapperListeners(): void {
-        // Use the DOM manager to get button references if needed, or rely on stored refs
-        const fixWrapper = this.domManager?.['injectedFixWrapper']; // Keep for potential future use? Currently unused.
         const closeButton = this.domManager?.['fixCloseButton'];
         const copyButton = this.domManager?.['fixCopyButton'];
         // const applyButton = this.domManager?.['fixApplyButton']; // REMOVED
@@ -571,21 +581,9 @@ export class FeedbackViewerLogic {
             copyButton.removeEventListener('click', this.fixWrapperCopyButtonListener as EventListener);
             this.fixWrapperCopyButtonListener = null;
         }
-        // Remove Apply button listener - REMOVED
-        // if (applyButton && this.fixWrapperApplyButtonListener) { ... }
-
-        // Remove MouseLeave listener - REMOVED
-        // if (fixWrapper && this.fixWrapperMouseLeaveListener) { ... }
 
          console.log('[FeedbackViewerLogic] Removed fix wrapper listeners (close/copy).');
     }
-
-    // REMOVED addOriginalElementMouseEnterListener method
-    // private addOriginalElementMouseEnterListener(): void { ... }
-
-    // REMOVED removeOriginalElementMouseEnterListener method
-    // private removeOriginalElementMouseEnterListener(): void { ... }
-
 
     // --- Helpers ---
 
@@ -608,6 +606,4 @@ export class FeedbackViewerLogic {
          }
     }
 
-    // REMOVED handlePreviewFixClick method (logic merged into handlePreviewApplyClick)
-    // private handlePreviewFixClick(): void { ... }
 }

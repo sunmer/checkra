@@ -65,6 +65,20 @@
   outline-offset: 0;
 }
 
+/* ADDED: Hide close/copy buttons by default */
+.feedback-injected-fix .feedback-fix-close-btn,
+.feedback-injected-fix .feedback-fix-copy-btn {
+  display: none;
+  pointer-events: none; /* Prevent interaction when hidden */
+}
+
+/* ADDED: Show close/copy buttons only when fix is applied */
+.feedback-injected-fix.fix-applied .feedback-fix-close-btn,
+.feedback-injected-fix.fix-applied .feedback-fix-copy-btn {
+  display: flex; /* Or inline-flex, block depending on original styles */
+  pointer-events: auto;
+}
+
 .feedback-fix-close-btn {
   position: absolute;
   top: 2px;
