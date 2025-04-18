@@ -17,7 +17,6 @@ export interface FeedbackViewerElements {
     textareaContainer: HTMLDivElement;
     promptTitle: HTMLHeadingElement;
     responseContent: HTMLDivElement;
-    renderedHtmlPreview: HTMLDivElement;
     loadingIndicator: HTMLDivElement;
     loadingIndicatorText: HTMLSpanElement;
     resizeHandle: HTMLDivElement;
@@ -192,20 +191,6 @@ export class FeedbackViewerDOM {
         resizeHandle.addEventListener('mousedown', this.handleResizeStart);
         viewer.appendChild(resizeHandle);
 
-        // --- Rendered HTML Preview (Separate) ---
-        const renderedHtmlPreview = document.createElement('div');
-        renderedHtmlPreview.id = 'feedback-rendered-html-preview';
-        // Add hover listeners for opacity change
-        renderedHtmlPreview.addEventListener('mouseover', () => {
-            if (renderedHtmlPreview.style.display !== 'none') {
-                renderedHtmlPreview.style.opacity = '1';
-            }
-        });
-        renderedHtmlPreview.addEventListener('mouseout', () => {
-            renderedHtmlPreview.style.opacity = '0';
-        });
-
-        document.body.appendChild(renderedHtmlPreview);
         document.body.appendChild(viewer);
 
         this.elements = {
@@ -216,7 +201,6 @@ export class FeedbackViewerDOM {
             textareaContainer,
             promptTitle,
             responseContent,
-            renderedHtmlPreview,
             loadingIndicator,
             loadingIndicatorText,
             resizeHandle,
@@ -240,9 +224,8 @@ export class FeedbackViewerDOM {
             document.removeEventListener('mouseup', this.handleResizeEnd);
 
             this.elements.viewer.remove();
-            this.elements.renderedHtmlPreview.remove();
         }
-        this.removeInjectedFixWrapper(); // Ensure fix wrapper is removed
+        this.removeInjectedFixWrapper();
         this.elements = null;
         console.log('[FeedbackViewerDOM] Instance destroyed.');
     }
@@ -288,7 +271,6 @@ export class FeedbackViewerDOM {
     public hide(): void {
         if (!this.elements) return;
         this.elements.viewer.style.display = 'none';
-        this.hidePreview();
         console.log('[FeedbackViewerDOM] Viewer hidden.');
     }
 
@@ -403,30 +385,6 @@ export class FeedbackViewerDOM {
              // Hiding without submitted text (e.g., on error before submit), just hide textarea
              this.elements.promptTitle.style.display = 'none'; // Hide the title too if no text to show
          }
-    }
-
-    // --- HTML Preview Popup ---
-
-    public showPreview(html: string, position: { top: number; left: number }): void {
-        if (!this.elements) return;
-        const { renderedHtmlPreview } = this.elements;
-        if (renderedHtmlPreview.innerHTML !== html) {
-            renderedHtmlPreview.innerHTML = html;
-        }
-        renderedHtmlPreview.style.top = `${position.top}px`;
-        renderedHtmlPreview.style.left = `${position.left}px`;
-        renderedHtmlPreview.style.display = 'block';
-        renderedHtmlPreview.style.opacity = '0'; // Start transparent for hover effect
-        renderedHtmlPreview.style.pointerEvents = 'auto';
-    }
-
-    public hidePreview(): void {
-        if (!this.elements) return;
-        const { renderedHtmlPreview } = this.elements;
-        renderedHtmlPreview.style.display = 'none';
-        renderedHtmlPreview.style.opacity = '0';
-        renderedHtmlPreview.style.pointerEvents = 'none';
-        renderedHtmlPreview.innerHTML = '';
     }
 
     // --- Injected Fix Wrapper ---
@@ -686,44 +644,6 @@ export class FeedbackViewerDOM {
         fallbackTop = Math.max(viewportMargin, Math.min(fallbackTop, viewportHeight - viewerHeight - viewportMargin));
         fallbackLeft = Math.max(viewportMargin, Math.min(fallbackLeft, viewportWidth - viewerWidth - viewportMargin));
         return { top: fallbackTop, left: fallbackLeft, mode: 'fixed' };
-    }
-
-    public calculatePreviewPosition(targetRect: DOMRect): { top: number; left: number } | null {
-        if (!this.elements) return null;
-        const { renderedHtmlPreview } = this.elements;
-
-        // Measure preview
-        renderedHtmlPreview.style.visibility = 'hidden';
-        renderedHtmlPreview.style.display = 'block'; // Needs display block to measure
-        renderedHtmlPreview.style.opacity = '1'; // Ensure opacity doesn't affect measurement
-        const previewRect = renderedHtmlPreview.getBoundingClientRect();
-        renderedHtmlPreview.style.display = 'none'; // Hide again
-        renderedHtmlPreview.style.opacity = '0';
-        renderedHtmlPreview.style.visibility = 'visible';
-
-        if (!previewRect.width || !previewRect.height) return null;
-
-        const margin = 8;
-        const viewportMargin = 10;
-
-        let previewTop = targetRect.top - previewRect.height - margin;
-        let previewLeft = targetRect.left;
-
-        // Adjust if out of bounds
-        if (previewTop < viewportMargin) {
-            previewTop = targetRect.bottom + margin;
-        }
-        if (previewLeft < viewportMargin) {
-            previewLeft = viewportMargin;
-        } else if (previewLeft + previewRect.width > window.innerWidth - viewportMargin) {
-            previewLeft = window.innerWidth - previewRect.width - viewportMargin;
-        }
-        if (previewTop + previewRect.height > window.innerHeight - viewportMargin) {
-            previewTop = window.innerHeight - previewRect.height - viewportMargin;
-            if (previewTop < viewportMargin) previewTop = viewportMargin; // Final clamp
-        }
-
-        return { top: previewTop, left: previewLeft };
     }
 
     // --- Dragging Handlers ---

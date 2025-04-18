@@ -62,12 +62,10 @@ export class FeedbackViewerLogic {
             if (this.domElements && this.domManager &&
                 this.domElements.viewer.style.display !== 'none' &&
                 e.target instanceof Node &&
-                !this.domElements.viewer.contains(e.target) &&
-                !this.domElements.renderedHtmlPreview?.contains(e.target))
+                !this.domElements.viewer.contains(e.target))
             {
                 // Check if the click target is part of the injected fix wrapper
-                // Access via getter or public property if available, otherwise direct access (carefully)
-                const fixWrapper = this.domManager['injectedFixWrapper']; // Assuming direct access for example
+                const fixWrapper = this.domManager['injectedFixWrapper'];
                 if (!fixWrapper || !fixWrapper.contains(e.target)) {
                     this.hide();
                 }
@@ -137,7 +135,6 @@ export class FeedbackViewerLogic {
         this.domManager.showPromptInputArea(true);
         this.domManager.updateLoaderVisibility(false);
         this.domManager.updateActionButtonsVisibility(false); // Hide container initially
-        this.domManager.hidePreview();
         this.domManager.setFixAppliedStyles(false);
         // Reset button states explicitly using the new helper
         if (this.domManager && this.domElements) {
@@ -174,8 +171,6 @@ export class FeedbackViewerLogic {
         const hasHtmlCode = GENERIC_HTML_REGEX.test(this.accumulatedResponseText);
         this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Getting feedback...');
 
-        this.tryRenderHtmlPreview(); // Keep the small preview logic
-
         // Try to create/update the *hidden* fix wrapper as HTML comes in
         if (this.accumulatedResponseText.trim()) {
             console.log('[FeedbackViewerLogic] Calling tryInjectHtmlFix from updateResponse.');
@@ -191,7 +186,6 @@ export class FeedbackViewerLogic {
         this.domManager.setPromptState(true);
         this.domManager.updateSubmitButtonState(true, 'Get Feedback');
 
-        this.tryRenderHtmlPreview(); // Ensure preview is up-to-date
         console.log('[FeedbackViewerLogic] Calling tryInjectHtmlFix from finalizeResponse.');
         this.tryInjectHtmlFix(); // Ensure fix injection is created/updated
 
@@ -287,7 +281,6 @@ export class FeedbackViewerLogic {
         this.domManager.updateLoaderVisibility(true, 'Getting feedback...');
         this.domManager.updateActionButtonsVisibility(false);
         this.domManager.clearResponseContent();
-        this.domManager.hidePreview(); // Hide any previous HTML preview
 
         // 1. Hide the textarea container AND update the promptTitle text
         this.domManager.showPromptInputArea(false, promptText);
@@ -386,25 +379,6 @@ export class FeedbackViewerLogic {
     }
 
     // --- HTML Preview and Injection Logic ---
-
-    private tryRenderHtmlPreview(): void {
-        if (!this.domManager || !this.originalElementBounds) return;
-
-        const match = this.accumulatedResponseText.match(SPECIFIC_HTML_REGEX);
-        if (match && match[1]) {
-            const extractedHtml = match[1].trim();
-            const position = this.domManager.calculatePreviewPosition(this.originalElementBounds);
-            if (position) {
-                console.log('[FeedbackViewerLogic] Rendering HTML preview.');
-                this.domManager.showPreview(extractedHtml, position);
-            } else {
-                console.warn('[FeedbackViewerLogic] Could not calculate position for HTML preview.');
-                this.domManager.hidePreview();
-            }
-        } else {
-            this.domManager.hidePreview();
-        }
-    }
 
     private tryInjectHtmlFix(): void {
         console.log('[FeedbackViewerLogic] Entering tryInjectHtmlFix.');

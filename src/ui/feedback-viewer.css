@@ -364,24 +364,3 @@
   color: #ccc;
   opacity: 0.5;
 }
-
-/* --- Rendered HTML Preview Popup --- */
-#feedback-rendered-html-preview {
-  position: fixed;
-  display: none;
-  opacity: 0;
-  border: 1px dashed #007acc;
-  background-color: rgba(40, 40, 40, 0.9); /* Slightly different background */
-  color: #d4d4d4;
-  z-index: 1001;
-  padding: 8px;
-  border-radius: 4px;
-  max-width: 450px;
-  max-height: 350px;
-  overflow: auto;
-  transition: opacity 0.2s ease-in-out;
-  pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  font-size: 13px; /* Slightly smaller font for preview */
-  line-height: 1.4;
-}
