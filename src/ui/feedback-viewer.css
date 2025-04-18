@@ -30,8 +30,8 @@
   border-radius: 4px;
   overflow-x: auto;
   margin-bottom: 1em;
-  position: relative;
   height: 100px;
+  position: relative;
 }
 
 #feedback-response-content .streamed-content pre code {
@@ -183,7 +183,7 @@
 }
 
 #feedback-content-wrapper {
-   overflow-y: auto;
+   overflow-y: scroll;
    flex-grow: 1;
    width: 100%;
    box-sizing: border-box;
@@ -377,4 +377,65 @@
   border: 1px solid #777;
   color: #ccc;
   opacity: 0.5;
+}
+
+/* ADDED: Styles for the code block copy button */
+#feedback-response-content .streamed-content pre .code-copy-btn {
+  position: absolute;
+  top: 4px; /* Adjust as needed */
+  right: 4px; /* Adjust as needed */
+  width: 22px; /* Slightly larger */
+  height: 22px;
+  background-color: rgba(80, 80, 80, 0.7);
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 4px; /* Match pre */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  box-sizing: border-box;
+  z-index: 1; /* Above code content */
+  opacity: 0; /* Hide by default */
+  visibility: hidden; /* Hide completely */
+  transition: background-color 0.2s, color 0.2s, opacity 0.2s, visibility 0.2s; /* Transition visibility/opacity */
+}
+
+/* ADDED: Show button on pre hover */
+#feedback-response-content .streamed-content pre:hover .code-copy-btn {
+  opacity: 0.8; /* Show with slight transparency */
+  visibility: visible; /* Make visible */
+}
+
+/* ADDED: Make fully opaque on button hover (when already visible) */
+#feedback-response-content .streamed-content pre .code-copy-btn:hover {
+  background-color: rgba(80, 120, 200, 0.9);
+  color: white;
+  opacity: 1;
+}
+
+#feedback-response-content .streamed-content pre .code-copy-btn svg {
+  width: 12px; /* Adjust icon size */
+  height: 12px;
+  stroke: currentColor;
+}
+
+#feedback-response-content .streamed-content pre .code-copy-btn.copied {
+  background-color: rgba(50, 180, 50, 0.9); /* Green background */
+  color: white;
+  opacity: 1;
+}
+
+/* ADDED: Style for the checkmark icon inside the copy button */
+#feedback-response-content .streamed-content pre .code-copy-btn.copied svg.copy-icon {
+  display: none; /* Hide original copy icon */
+}
+#feedback-response-content .streamed-content pre .code-copy-btn svg.check-icon {
+  display: none; /* Hide check icon by default */
+}
+#feedback-response-content .streamed-content pre .code-copy-btn.copied svg.check-icon {
+  display: inline-block; /* Show check icon when copied */
+  width: 14px;
+  height: 14px;
 }

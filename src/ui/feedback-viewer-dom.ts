@@ -342,6 +342,67 @@ export class FeedbackViewerDOM {
         responseContent.style.display = 'block';
         responseContent.innerHTML = `<div class="streamed-content">${html}</div>`;
 
+        const preElements = responseContent.querySelectorAll('.streamed-content pre');
+
+        preElements.forEach(pre => {
+            if (pre.querySelector('.code-copy-btn')) {
+                return;
+            }
+            (pre as HTMLElement).style.position = 'relative';
+
+            const copyButton = document.createElement('button');
+            copyButton.className = 'code-copy-btn';
+            copyButton.innerHTML = `
+                <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            `;
+            copyButton.title = 'Copy code';
+
+            copyButton.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                console.log('[Copy Code] Button clicked.');
+
+                const codeElement = pre.querySelector('code.language-html');
+
+                if (codeElement) {
+                    console.log('[Copy Code] Found code element:', codeElement);
+                    const codeToCopy = codeElement.textContent;
+                    console.log('[Copy Code] Text content to copy (length):', codeToCopy?.length);
+
+                    if (codeToCopy) {
+                        try {
+                            if (!navigator.clipboard) {
+                                console.warn('[Copy Code] navigator.clipboard API not available.');
+                                alert('Cannot copy code: Clipboard API not supported or not available in this context (e.g., non-HTTPS).');
+                                return;
+                            }
+
+                            await navigator.clipboard.writeText(codeToCopy);
+                            console.log('[Copy Code] Code successfully copied to clipboard.');
+
+                            copyButton.classList.add('copied');
+                            copyButton.title = 'Copied!';
+                            setTimeout(() => {
+                                copyButton.classList.remove('copied');
+                                copyButton.title = 'Copy code';
+                            }, 1500);
+
+                        } catch (err) {
+                            console.error('[Copy Code] Failed to copy code to clipboard:', err);
+                            alert(`Error copying code: ${err instanceof Error ? err.message : String(err)}`);
+                        }
+                    } else {
+                        console.warn('[Copy Code] Code element (language-html) found, but its textContent is empty or null.');
+                        alert('Cannot copy code: No text content found inside the HTML code block.');
+                    }
+                } else {
+                    console.warn('[Copy Code] Could not find <code class="language-html"> element inside the <pre> block.');
+                }
+            });
+
+            pre.appendChild(copyButton);
+        });
+
         if (scrollToBottom && isScrolledToBottom) {
             contentWrapper.scrollTop = contentWrapper.scrollHeight;
         }
