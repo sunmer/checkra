@@ -3,28 +3,30 @@
 
 <head>
   <meta charset="UTF-8" />
+  
   <link rel="canonical" href="https://checkra.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Checkra - Collaboratively improve any website with AI</title>
-  <meta name="description" content="Collaboratively improve any website with AI">
+  <title>Checkra - Improve UX and conversions with instant AI feedback</title>
+  <meta name="description" content="Improve UX and conversions with instant AI feedback">
 
   <meta property="og:type" content="website" />
   <meta property="og:title" content="checkra.io" />
-  <meta property="og:description" content="Collaboratively improve any website with AI" />
+  <meta property="og:description" content="Improve UX and conversions with instant AI feedback" />
   <meta property="og:image" content="https://checkra.io/og-image.jpg" />
   <meta property="og:url" content="https://checkra.io/" />
   <meta property="og:site_name" content="Checkra" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap"
-    rel="stylesheet">
-
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  
+  <link rel="stylesheet" href="https://unpkg.com/checkra@1.0.5/dist/style.css">
+  <script src="https://unpkg.com/checkra@1.0.5/dist/checkra.umd.cjs"></script>
 
   <style>
     /* Define the glow animation */
@@ -86,9 +88,21 @@
           <div class="mt-5 max-w-3xl">
             <p class="text-lg text-gray-600 mb-4">
               Instant AI suggestions for UX, conversions and accessibility, previewed right on your site. <br />Try it
-              live – click the floating button <span id="show-feedback-viewer-dummy" class="inline-block align-middle max-w-[44px] rounded-[15px] py-[4px] px-[9px] shadow-[2px_2px_3px_rgba(0,0,0,0.4)] bg-gradient-to-b from-[rgba(35,45,75,0.9)] to-[rgba(29,38,55,0.95)]"><span id="show-feedback-viewer" title="Get feedback on design" class="w-[22px] h-[22px] rounded-full text-white flex items-center justify-center cursor-pointer select-none border-2 border-[rgb(52_63_84_/_80%)] bg-[rgba(20,120,255,0.85)] shadow-[0px_-1px_1px_rgba(0,0,0,0.5)]"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-[13px] h-[13px]"><path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" /><path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" /><circle cx="12" cy="12" r="4" /><path d="m16 16-1.5-1.5" /></svg></span></span> 
+              live – click the floating button <span id="show-feedback-viewer-dummy"
+                class="inline-block align-middle max-w-[44px] rounded-[15px] py-[4px] px-[9px] shadow-[2px_2px_3px_rgba(0,0,0,0.4)] bg-gradient-to-b from-[rgba(35,45,75,0.9)] to-[rgba(29,38,55,0.95)]"><span
+                  id="show-feedback-viewer" title="Get feedback on design"
+                  class="w-[22px] h-[22px] rounded-full text-white flex items-center justify-center cursor-pointer select-none border-2 border-[rgb(52_63_84_/_80%)] bg-[rgba(20,120,255,0.85)] shadow-[0px_-1px_1px_rgba(0,0,0,0.5)]"><svg
+                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-[13px] h-[13px]">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="m16 16-1.5-1.5" />
+                  </svg></span></span>
             </p>
-            
+
             <div class="sm:flex auto-cols-max items-center gap-3 md:gap-6 mt-8">
               <span class="block text-xs text-gray-600 font-semibold uppercase mb-3 sm:mb-0">
                 Compatible with:
@@ -203,7 +217,8 @@
                 <p class="font-semibold text-5xl text-white">Solo Developers</p>
                 <h3 class="mt-5 font-medium text-lg text-white">Improve UX & Conversion</h3>
                 <p class="mt-1 text-neutral-400">
-                  Building alone is hard. Checkra reveals blind spots—unclear UI, missing context, or confusing features. Don't let your side project fail because of simple oversights.
+                  Building alone is hard. Checkra reveals blind spots—unclear UI, missing context, or confusing
+                  features. Don't let your side project fail because of simple oversights.
                 </p>
               </div>
             </div>
@@ -227,7 +242,9 @@
                 <p class="font-semibold text-5xl text-white">Designers & PM's</p>
                 <h3 class="mt-5 font-medium text-lg text-white">Streamline Development</h3>
                 <p class="mt-1 text-neutral-400">
-                  Skip lengthy JIRA tickets and Figma handoffs. Checkra captures shareable UX, accessibility, and conversion issues directly on your site, giving engineers clear, visual feedback they can instantly use.
+                  Skip lengthy JIRA tickets and Figma handoffs. Checkra captures shareable UX, accessibility, and
+                  conversion issues directly on your site, giving engineers clear, visual feedback they can instantly
+                  use.
                 </p>
               </div>
             </div>
@@ -395,35 +412,13 @@ const checkra = initCheckra({
     </div>
   </footer>
 
-  <script type="module">
-    import { setupDemo } from '../src/demo.ts'; // No need for initCheckra directly here
+  <!--<script type="module">
+    import { initCheckra } from '../src/index';
 
-    document.addEventListener('DOMContentLoaded', () => {
-      // Initialize demo setup and get the Checkra API instance
-      const checkraInstance = setupDemo();
-
-      // Get reference to the dummy button in the text
-      const dummyButton = document.getElementById('show-feedback-viewer-dummy');
-
-      // Check if the dummy button and the Checkra API instance exist
-      if (dummyButton && checkraInstance) {
-        // Add a click event listener to the dummy button
-        dummyButton.addEventListener('click', (event) => {
-          console.log("Dummy button clicked, calling checkraInstance.showFeedback()");
-          event.stopPropagation();
-          // Directly call the library's API method
-          checkraInstance.showFeedback();
-        });
-      } else {
-        if (!dummyButton) {
-            console.warn('[Demo] Could not find dummy button element (#show-feedback-viewer-dummy).');
-        }
-        if (!checkraInstance) {
-            console.warn('[Demo] Failed to get Checkra API instance from setupDemo().');
-        }
-      }
+    const checkraInstance = initCheckra({
+      isVisible: true
     });
-  </script>
+  </script>-->
 </body>
 
 </html>

@@ -427,8 +427,7 @@ export class FeedbackViewerLogic {
                 // New wrapper created (or recreated), attach listeners
                 this.attachFixWrapperListeners(
                     fixElements.wrapper,
-                    fixElements.closeButton,
-                    fixElements.copyButton
+                    fixElements.closeButton
                 );
                 // Ensure content is up-to-date (create should handle initial)
                 this.domManager.updateInjectedFixContent(newContentHtml);
@@ -511,10 +510,7 @@ export class FeedbackViewerLogic {
     }
 
 
-    // --- Listener Management for Fix Wrapper ---
-
     private attachFixWrapperListeners(
-        wrapper: HTMLElement,
         closeButton: HTMLElement,
         copyButton: HTMLElement
     ): void {
@@ -525,7 +521,6 @@ export class FeedbackViewerLogic {
         this.fixWrapperCloseButtonListener = (event: MouseEvent) => {
             console.log('[FeedbackViewerLogic] Close (discard) button clicked on injected fix.');
 
-            // --- MODIFIED Logic ---
             const buttonElement = event.currentTarget as HTMLElement;
             const wrapperToRemove = buttonElement.closest('.feedback-injected-fix');
 

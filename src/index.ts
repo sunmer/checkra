@@ -36,7 +36,6 @@ function getGlobalConfig(): CheckraOptions | undefined {
 
 // Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  // --- MODIFIED: Wait for DOMContentLoaded ---
   const initialize = () => {
       // Check if already initialized
       if (!(window as any).CheckraInitialized) {
@@ -61,9 +60,4 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       // `DOMContentLoaded` has already fired
       initialize();
   }
-  // --- End Modification ---
 }
-
-// You might want to export other things from your library as well
-// export * from './ui';
-// export * from './utils';
