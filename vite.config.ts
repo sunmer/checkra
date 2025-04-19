@@ -17,6 +17,7 @@ export default defineConfig(({ command, mode }) => {
     // Build mode - build the library
     return {
       build: {
+        cssCodeSplit: false,
         lib: {
           entry: resolve(__dirname, 'src/index.ts'),
           name: 'Checkra',
