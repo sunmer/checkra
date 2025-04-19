@@ -165,19 +165,7 @@
           <div class="mt-5 max-w-3xl">
             <p class="text-lg text-gray-600 mb-4">
               Instant AI suggestions for UX, conversions and accessibility, previewed right on your site. <br />Try it
-              live – click the floating button <span id="show-feedback-viewer-dummy"
-                class="inline-block align-middle max-w-[44px] rounded-[15px] py-[4px] px-[9px] shadow-[2px_2px_3px_rgba(0,0,0,0.4)] bg-gradient-to-b from-[rgba(35,45,75,0.9)] to-[rgba(29,38,55,0.95)]"><span
-                  id="show-feedback-viewer" title="Get feedback on design"
-                  class="w-[22px] h-[22px] rounded-full text-white flex items-center justify-center cursor-pointer select-none border-2 border-[rgb(52_63_84_/_80%)] bg-[rgba(20,120,255,0.85)] shadow-[0px_-1px_1px_rgba(0,0,0,0.5)]"><svg
-                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-[13px] h-[13px]">
-                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="m16 16-1.5-1.5" />
-                  </svg></span></span>
+              live – click the floating button in the bottom of the page
             </p>
 
             <div class="sm:flex auto-cols-max items-center gap-3 md:gap-6 mt-8">
@@ -501,6 +489,51 @@ const checkra = initCheckra({
     }
   </script>
 
+  <!-- Prompt for the Checkra button -->
+  <div id="checkra-prompt" style="position: fixed; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 8px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none;">
+    Try Checkra 👇
+  </div>
+  <script>
+      const promptElement = document.getElementById('checkra-prompt');
+      let observer = null;
+
+      const fadeInTimeout = setTimeout(() => {
+         if (promptElement) promptElement.style.opacity = '1';
+      }, 1500);
+
+      // 2. Set up MutationObserver to watch for #feedback-viewer
+      const observerCallback = (mutationsList, obs) => {
+        for (const mutation of mutationsList) {
+          if (mutation.type === 'childList') {
+            for (const node of mutation.addedNodes) {
+              // Check if the added node *is* #feedback-viewer or *contains* it
+              if (node.nodeType === 1 && (node.id === 'feedback-viewer' || node.querySelector('#feedback-viewer'))) {
+                console.log('#feedback-viewer detected in DOM, removing prompt.');
+                if (promptElement) {
+                  promptElement.remove(); // Remove the prompt
+                }
+                obs.disconnect(); // Stop observing once found
+                clearTimeout(fadeInTimeout); // Prevent fade-in if viewer appears first
+                return; // Exit after finding
+              }
+            }
+          }
+        }
+      };
+
+      // Create and start the observer
+      observer = new MutationObserver(observerCallback);
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      // Optional: Clean up observer if the prompt is removed some other way (e.g., page navigation)
+      // This is less critical here but good practice in complex scenarios
+      window.addEventListener('unload', () => {
+        if (observer) {
+          observer.disconnect();
+        }
+        clearTimeout(fadeInTimeout); // Prevent fade-in if clicked before it appears
+      });
+  </script>
 </body>
 
 </html>
