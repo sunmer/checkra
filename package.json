@@ -1,6 +1,6 @@
 {
   "name": "checkra",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Checkra - Collaboratively improve any website with AI",
   "type": "module",
   "main": "./dist/checkra.umd.cjs",
