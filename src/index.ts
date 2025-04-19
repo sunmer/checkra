@@ -34,21 +34,34 @@ function getGlobalConfig(): CheckraOptions | undefined {
   return defaultAutoInitOptions;
 }
 
-// Check if running in a browser environment and automatically initialize
+// Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  // We are in a browser
-  // Check if already initialized (optional, prevents double init)
-  if (!(window as any).CheckraInitialized) {
-    try {
-      const options = getGlobalConfig();
-      console.log('[Checkra] Auto-initializing...'); // Optional: for debugging
-      initCheckra(options); // Call the updated initCheckra
-      (window as any).CheckraInitialized = true; // Set initialization flag
-    } catch (e) {
-      // Fallback to basic console if init fails
-      console.error("[Checkra] Failed to auto-initialize:", e);
-    }
+  // --- MODIFIED: Wait for DOMContentLoaded ---
+  const initialize = () => {
+      // Check if already initialized
+      if (!(window as any).CheckraInitialized) {
+          try {
+              const options = getGlobalConfig();
+              console.log('[Checkra] DOM ready, auto-initializing...');
+              initCheckra(options);
+              (window as any).CheckraInitialized = true;
+          } catch (e) {
+              console.error("[Checkra] Failed to auto-initialize:", e);
+          }
+      } else {
+          console.log("[Checkra] Already initialized, skipping auto-init.");
+      }
+  };
+
+  // Check if DOM is already loaded (e.g., script loaded async defer or at end of body)
+  if (document.readyState === 'loading') {
+      // Loading hasn't finished yet
+      document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+      // `DOMContentLoaded` has already fired
+      initialize();
   }
+  // --- End Modification ---
 }
 
 // You might want to export other things from your library as well

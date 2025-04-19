@@ -86,7 +86,16 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
   try {
     // Only initialize UI components if isVisible is true
     if (config.isVisible) {
-      feedbackMenuInstance = new FloatingMenu(config); // Assuming FloatingMenu constructor accepts CheckraOptions
+      feedbackMenuInstance = new FloatingMenu(config);
+      // --- ADDED: Explicitly create the menu DOM ---
+      const created = feedbackMenuInstance.create();
+      if (!created) {
+          // Handle case where menu creation failed (e.g., body wasn't ready - shouldn't happen if called after DOMContentLoaded)
+          console.error("[Checkra] Failed to create FloatingMenu DOM.");
+          // Depending on desired behavior, you might nullify the instance or throw error
+          feedbackMenuInstance = null;
+      }
+      // --- End Added Call ---
     }
 
     console.log(`[Checkra] Initialized. UI Visible: ${config.isVisible}`);
@@ -97,14 +106,14 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
         if (feedbackMenuInstance) {
           feedbackMenuInstance.triggerFeedbackCapture();
         } else if (config.isVisible) {
-          console.warn('[Checkra API] Feedback menu instance not found, cannot show feedback.');
+          console.warn('[Checkra API] Feedback menu instance not found or creation failed, cannot show feedback.');
         } else {
           console.log('[Checkra API] UI is hidden, showFeedback() ignored.');
         }
       },
       showSettings: () => {
         if (config.isVisible) {
-          // Assuming settingsViewer has a global/singleton showModal method
+          // Lazy creation happens inside showModal now
           settingsViewer.showModal();
         } else {
            console.log('[Checkra API] UI is hidden, showSettings() ignored.');
@@ -116,9 +125,8 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
           feedbackMenuInstance.destroy();
           feedbackMenuInstance = null;
         }
-        // Also destroy other global/singleton UI components if they exist
-        // feedbackViewer.destroy(); // REMOVED: Assume singleton handles destruction internally
-        // settingsViewer.destroy(); // REMOVED: Assume singleton handles destruction internally
+        // No need to call destroy on singletons like settingsViewer here,
+        // unless you want to provide a way to fully reset the library state.
         console.log('[Checkra API] Cleanup complete.');
       }
     };

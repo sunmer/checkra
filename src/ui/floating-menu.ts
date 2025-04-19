@@ -10,19 +10,37 @@ export class FloatingMenu {
   private feedbackButton: HTMLSpanElement | null = null;
   private settingsButton: HTMLSpanElement | null = null;
   private bottomContainer: HTMLDivElement | null = null;
+  private isCreated: boolean = false;
 
   /**
    * Creates a new FloatingMenu instance.
+   * Does NOT create DOM elements immediately.
    */
   constructor(config: CheckraOptions) {
-    // Only create UI if isVisible is true (passed implicitly via initCheckra logic)
-    this.create();
+    console.log('[FloatingMenu] Constructed, DOM not created yet.');
   }
 
   /**
-   * Creates the floating menu DOM elements.
+   * Creates the floating menu DOM elements if they don't exist.
+   * Returns true if created successfully or already existed, false otherwise.
    */
-  private create(): void {
+  public create(): boolean {
+    if (this.isCreated || document.getElementById('floating-menu-container')) {
+      this.isCreated = true;
+      this.bottomContainer = document.getElementById('floating-menu-container') as HTMLDivElement | null;
+      if (this.bottomContainer) {
+          this.feedbackButton = this.bottomContainer.querySelector('#show-feedback-viewer');
+          this.settingsButton = this.bottomContainer.querySelector('#show-settings-modal');
+      }
+      console.log('[FloatingMenu] Already created or found existing element.');
+      return true;
+    }
+
+    if (!document.body) {
+        console.error('[FloatingMenu] Cannot create menu: document.body is not available yet.');
+        return false;
+    }
+
     // Create bottom container for feedback button
     this.bottomContainer = document.createElement('div');
     this.bottomContainer.id = 'floating-menu-container';
@@ -73,12 +91,6 @@ export class FloatingMenu {
       svgElement.style.height = '18px';
     }
 
-    // Add click listener for the feedback button
-    this.feedbackButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.triggerFeedbackCapture(); // Call the public method
-    });
-
     // Create Settings button (SVG)
     this.settingsButton = document.createElement('span');
     this.settingsButton.id = 'show-settings-modal';
@@ -105,12 +117,18 @@ export class FloatingMenu {
       settingsSvgElement.style.height = '18px';
     }
 
-    // Add click listener for the settings button
-    this.settingsButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      console.log('[Settings] Button clicked, opening settings modal...');
-      settingsViewer.showModal(); // Assuming settingsViewer is globally accessible or passed in
-    });
+    const feedbackClickHandler = (e: MouseEvent) => {
+        e.stopPropagation();
+        this.triggerFeedbackCapture();
+    };
+    const settingsClickHandler = (e: MouseEvent) => {
+        e.stopPropagation();
+        console.log('[Settings] Button clicked, opening settings modal...');
+        settingsViewer.showModal();
+    };
+
+    this.feedbackButton.addEventListener('click', feedbackClickHandler);
+    this.settingsButton.addEventListener('click', settingsClickHandler);
 
     // Add buttons to the bottom container
     if (this.bottomContainer) {
@@ -124,13 +142,20 @@ export class FloatingMenu {
 
     // Append the container to the body
     document.body.appendChild(this.bottomContainer);
+    this.isCreated = true;
     console.log('[FloatingMenu] Menu created and added to DOM.');
+    return true;
   }
 
   /**
    * Programmatically triggers the feedback capture process.
    */
   public triggerFeedbackCapture(): void {
+    if (!this.isCreated) {
+        console.warn('[FloatingMenu] Cannot trigger feedback capture, menu not created.');
+        return;
+    }
+
     console.log('[Feedback] Triggered programmatically, starting screen capture...');
     screenCapture.startCapture((
       imageDataUrl,
@@ -165,24 +190,14 @@ export class FloatingMenu {
    * Destroys the floating menu component, removing all DOM elements and event listeners.
    */
   public destroy(): void {
-    // Remove event listeners by cloning the nodes (simple approach)
-    // Note: A more robust approach might involve explicitly removing listeners if needed.
-    if (this.feedbackButton) {
-        this.feedbackButton.replaceWith(this.feedbackButton.cloneNode(true));
-    }
-    if (this.settingsButton) {
-        this.settingsButton.replaceWith(this.settingsButton.cloneNode(true));
-    }
-
-    // Remove the bottom container from the DOM
     if (this.bottomContainer?.parentNode) {
       this.bottomContainer.parentNode.removeChild(this.bottomContainer);
     }
 
-    // Nullify references
     this.feedbackButton = null;
     this.settingsButton = null;
     this.bottomContainer = null;
+    this.isCreated = false;
     console.log('[FloatingMenu] Instance destroyed.');
   }
 }
