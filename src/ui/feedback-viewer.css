@@ -280,10 +280,6 @@
   display: none; /* Managed by JS */
 }
 
-#feedback-loading-indicator-text {
-  /* No specific styles needed here unless desired */
-}
-
 /* --- Resize Handle --- */
 #feedback-viewer-resize-handle {
   position: absolute;
