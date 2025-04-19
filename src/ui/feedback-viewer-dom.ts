@@ -464,7 +464,6 @@ export class FeedbackViewerDOM {
         if (this.injectedFixWrapper && document.body.contains(this.injectedFixWrapper)) {
             console.log('[FeedbackViewerDOM] Fix wrapper already exists. Updating content and position.');
             this.updateInjectedFixContent(initialContentHtml); // Update content
-            this.positionFixWrapper(originalElement); // Reposition if needed
             // Return existing button references
             if (this.fixCloseButton && this.fixCopyButton && this.fixContentContainer) {
                  return {
@@ -524,8 +523,6 @@ export class FeedbackViewerDOM {
         // Insert the wrapper into the DOM before the original element
         originalElement.parentNode?.insertBefore(this.injectedFixWrapper, originalElement);
 
-        this.positionFixWrapper(originalElement); // Position it correctly
-
         // Ensure it's initially hidden (redundant but safe)
         this.setInjectedFixWrapperVisibility(false);
 
@@ -540,42 +537,11 @@ export class FeedbackViewerDOM {
     public updateInjectedFixContent(newHtml: string): void {
         if (this.fixContentContainer) {
             this.fixContentContainer.innerHTML = newHtml;
-             // Re-apply positioning potentially needed if content changes size drastically
-             const originalElement = this.injectedFixWrapper?.nextElementSibling;
-             if (originalElement) {
-                 this.positionFixWrapper(originalElement);
-             }
         } else if (this.injectedFixWrapper) {
              // Fallback if container reference lost but wrapper exists
              this.injectedFixWrapper.innerHTML = newHtml; // Less ideal, might wipe out buttons if not careful
              console.warn("[FeedbackViewerDOM] Fix content container reference lost, updating wrapper innerHTML directly.");
         }
-    }
-
-    /**
-     * Positions the fix wrapper over the original element.
-     * Now primarily sets dimensions, assuming insertion order handles position.
-     */
-    private positionFixWrapper(originalElement: Element): void {
-        if (!this.injectedFixWrapper) return;
-
-        const originalRect = originalElement.getBoundingClientRect();
-        // const parentRect = (this.injectedFixWrapper.offsetParent || document.body).getBoundingClientRect(); // No longer needed for top/left
-
-        // Calculate position relative to the offset parent - REMOVED
-        // const top = originalRect.top - parentRect.top + (this.injectedFixWrapper.offsetParent?.scrollTop || 0);
-        // const left = originalRect.left - parentRect.left + (this.injectedFixWrapper.offsetParent?.scrollLeft || 0);
-
-        // REMOVED: this.injectedFixWrapper.style.top = `${top}px`;
-        // REMOVED: this.injectedFixWrapper.style.left = `${left}px`;
-
-        // Match dimensions - COMMENT OUT OR REMOVE THESE LINES
-        // this.injectedFixWrapper.style.width = `${originalRect.width}px`;
-        // this.injectedFixWrapper.style.height = `${originalRect.height}px`;
-
-        // Update the log message if you remove the sizing
-        console.log(`[FeedbackViewerDOM] Positioned fix wrapper near element.`);
-        // console.log(`[FeedbackViewerDOM] Sized fix wrapper to match element. W: ${originalRect.width}, H: ${originalRect.height}`); // Old log
     }
 
     /**

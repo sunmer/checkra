@@ -37,7 +37,6 @@ export class FeedbackViewerLogic {
     private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private fixWrapperCloseButtonListener: ((event: MouseEvent) => void) | null = null;
     private fixWrapperCopyButtonListener: ((e: MouseEvent) => void) | null = null;
-    private cancelButtonListener: (() => void) | null = null; // ADDED
 
     constructor() {
         // Bind methods used as event handlers
@@ -98,7 +97,6 @@ export class FeedbackViewerLogic {
         this.domElements = null;
         this.domManager = null;
         this.outsideClickHandler = null;
-        this.cancelButtonListener = null;
         console.log('[FeedbackViewerLogic] Cleaned up listeners.');
     }
 
