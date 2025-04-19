@@ -3,14 +3,14 @@
 
 <head>
   <meta charset="UTF-8" />
-  
+
   <link rel="canonical" href="https://checkra.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Checkra - Improve UX and conversions with instant AI feedback</title>
+  <title>Checkra - PreProd Test</title>
   <meta name="description" content="Improve UX and conversions with instant AI feedback">
 
   <meta property="og:type" content="website" />
@@ -22,11 +22,79 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  
-  <link rel="stylesheet" href="https://unpkg.com/checkra@1.0.5/dist/style.css">
-  <script src="https://unpkg.com/checkra@1.0.5/dist/checkra.umd.cjs"></script>
+
+  <script type="module">
+    // Vite provides import.meta.env automatically
+    const isDev = import.meta.env.DEV;          // True during 'vite dev'
+    const isPreprod = import.meta.env.MODE === 'preprod'; // True during 'vite build --mode preprod'
+    // Assume anything else is production (e.g., deployed demo) or needs CDN
+    const isProductionLike = !isDev && !isPreprod;
+
+    console.log(`[Checkra Loader] Mode: ${import.meta.env.MODE}, Dev: ${isDev}, Preprod: ${isPreprod}, Prod-Like: ${isProductionLike}`);
+
+    function loadScript(src, type) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        if (type) script.type = type;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    function loadStyle(href) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      document.head.appendChild(link);
+    }
+
+    function initializeCheckra() {
+      // Standard UMD initialization (for preprod/production-like)
+      if (window.checkra && typeof window.checkra.initCheckra === 'function') {
+        console.log('[Checkra Loader] Initializing Checkra (UMD)...');
+        window.checkra.initCheckra({ isVisible: true });
+      } else {
+        console.error('[Checkra Loader] Checkra UMD global not found for initialization.');
+      }
+    }
+
+    if (isDev) {
+      // DEV MODE: Load directly from source using module script below.
+      console.log('[Checkra Loader] Dev mode: Loading from source via module script.');
+      // The <script type="module"> at the bottom handles this.
+
+    } else if (isPreprod) {
+      // PREPROD MODE: Load built UMD files from ../dist relative to the *built* demo/index.html
+      console.log('[Checkra Loader] Preprod mode: Loading from local ../dist');
+
+      // Path Explanation:
+      // - 'npm run build:demo' builds 'demo/index.html' into 'demo-dist/index.html'.
+      // - 'npm run preview:demo' serves the 'demo-dist' directory.
+      // - Therefore, from 'demo-dist/index.html', the path to the library build output
+      //   in the 'dist' folder is indeed '../dist/'.
+      loadStyle('../dist/style.css'); // Assuming your build produces this CSS file
+
+      // *** CORRECTION HERE: Use the correct UMD filename from vite.config.ts ***
+      loadScript('../dist/checkra.umd.cjs')
+        .then(initializeCheckra)
+        .catch(err => console.error('[Checkra Loader] Failed to load preprod script:', err));
+
+    } else { // isProductionLike (or static hosting)
+      // PRODUCTION-LIKE / STATIC: Fallback to loading from CDN (unpkg)
+      console.log('[Checkra Loader] Production-like mode: Loading from CDN.');
+      const version = '1.0.5'; // Specify the version you want to load, maybe read from package.json?
+      loadStyle(`https://unpkg.com/checkra@${version}/dist/style.css`);
+      // *** CORRECTION HERE: Use the correct UMD filename from unpkg ***
+      loadScript(`https://unpkg.com/checkra@${version}/dist/checkra.umd.cjs`)
+        .then(initializeCheckra)
+        .catch(err => console.error('[Checkra Loader] Failed to load CDN script:', err));
+    }
+  </script>
 
   <style>
     /* Define the glow animation */
@@ -58,6 +126,15 @@
     }
   </style>
 </head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-258DRQTY3V"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-258DRQTY3V');
+</script>
 
 <body class="relative flex flex-col min-h-screen bg-gray-50">
   <div class="absolute inset-0 z-[-1] opacity-30"
@@ -260,8 +337,7 @@
 // Initialize with custom options
 const checkra = initCheckra({
   isVisible: true
-});
-</code></pre>
+});</code></pre>
           </div>
         </div>
 
@@ -329,7 +405,7 @@ const checkra = initCheckra({
               <p class="mb-3"><span
                   class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs uppercase font-semibold bg-blue-100 text-blue-800 dark:bg-blue-600 dark:text-white">Coming
                   soon</span></p>
-              <h4 class="font-medium text-lg text-gray-800">Startup</h4>
+              <h4 class="font-medium text-lg text-gray-800">Solo</h4>
               <span class="mt-5 font-bold text-5xl text-gray-800">
                 <span class="font-bold text-2xl -me-2">$</span>
                 9<p class="mt-2 text-sm text-gray-500">/month</p>
@@ -344,7 +420,7 @@ const checkra = initCheckra({
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                   <span class="text-gray-800">
-                    2 users
+                    1 user
                   </span>
                 </li>
 
@@ -377,7 +453,7 @@ const checkra = initCheckra({
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                   <span class="text-gray-800">
-                    Sharing of suggestions
+                    Github and Jira integrations for sharing suggestions + change notes
                   </span>
                 </li>
               </ul>
@@ -412,13 +488,19 @@ const checkra = initCheckra({
     </div>
   </footer>
 
-  <!--<script type="module">
-    import { initCheckra } from '../src/index';
+  <script type="module">
+    if (import.meta.env.DEV) {
+      import('../src/index.ts')
+        .then(({ initCheckra }) => {
+          const checkraInstance = initCheckra({
+            isVisible: true
+          });
+        }).catch(err => {
+          console.error('[Checkra Loader] Failed to dynamically load dev module:', err);
+        });
+    }
+  </script>
 
-    const checkraInstance = initCheckra({
-      isVisible: true
-    });
-  </script>-->
 </body>
 
 </html>

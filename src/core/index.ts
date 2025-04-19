@@ -59,27 +59,20 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
   // --- Determine Effective API Key ---
   if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.trim() !== '') {
     effectiveApiKey = config.apiKey.trim();
-    console.log('[Checkra] Using provided API key.');
   } else {
-    console.log('[Checkra] No API key provided, using anonymous ID.');
     try {
       let anonymousId = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (anonymousId) {
         effectiveApiKey = anonymousId;
-        console.log('[Checkra] Using stored anonymous ID from localStorage.');
       } else {
         anonymousId = generateUUID();
         localStorage.setItem(LOCAL_STORAGE_KEY, anonymousId);
         effectiveApiKey = anonymousId;
-        console.log('[Checkra] Generated and stored new anonymous ID in localStorage.');
       }
     } catch (error) {
-      // localStorage might be unavailable (e.g., private browsing)
-      console.warn('[Checkra] localStorage access failed. Generating ephemeral anonymous ID.', error);
       effectiveApiKey = generateUUID(); // Generate one for this session only
     }
   }
-  // --- End Determine Effective API Key ---
 
   let feedbackMenuInstance: FloatingMenu | null = null;
 

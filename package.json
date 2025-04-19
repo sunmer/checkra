@@ -22,13 +22,15 @@
     "README.md"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "build:demo": "vite build demo",
+    "dev": "vite dev demo",
+    "build:lib": "vite build --mode production",
+    "build:demo": "vite build --mode preprod demo",
+    "preview:demo": "vite preview --outDir demo-dist --open",
+    "preprod": "npm run build:lib && npm run build:demo && npm run preview:demo",
+    "publish-checkra": "npm run build:lib && npm version patch && npm publish",
+    "build": "npm run build:lib",
     "lint": "eslint .",
-    "test": "jest",
-    "prepublishOnly": "npm run build"
+    "test": "jest"
   },
   "keywords": [
     "feedback",
