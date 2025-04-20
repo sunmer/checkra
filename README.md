@@ -47,9 +47,14 @@ if (checkraInstance) {
 
 ### Using CDN (UMD)
 
+Add the following lines inside the `<head>` section of your HTML file:
+
 ```html
-<-- Replace 'latest' with a specific version for production -->
-<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs"></script>
+<!-- Inside the <head> section -->
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
+<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
+<!-- Replace 'latest' with a specific version for production -->
+
 <script>
   // Optional: Configure Checkra directly via window.CheckraOptions
   // The library reads this *before* initializing if found.

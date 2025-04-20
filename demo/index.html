@@ -26,6 +26,66 @@
     rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
+  <!-- CSS-only Tab Styles (Standard CSS) -->
+  <style>
+    /* Hide the actual radio buttons */
+    .css-tab-radio {
+      display: none;
+    }
+
+    /* Style the labels to look like tabs */
+    .css-tab-label {
+      padding-top: 1rem;
+      padding-bottom: 1rem;
+      padding-left: 0.25rem;
+      padding-right: 0.25rem;
+      display: inline-flex;
+      align-items: center;
+      column-gap: 0.5rem;
+      border-bottom-width: 2px;
+      border-color: transparent;
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+      white-space: nowrap;
+      color: #6B7280;
+      cursor: pointer;
+      transition: color 0.2s ease-in-out, border-color 0.2s ease-in-out, font-weight 0.2s ease-in-out;
+      font-weight: 400;
+    }
+
+    /* Hover effect for labels */
+    .css-tab-label:hover {
+       color: #2563EB; /* hover:text-blue-600 */
+    }
+
+    /* Style the ACTIVE tab label based on the checked radio using general sibling selector */
+    #tab-radio-1:checked ~ div nav label[for="tab-radio-1"],
+    #tab-radio-2:checked ~ div nav label[for="tab-radio-2"] {
+      font-weight: 600; /* Use 600 for semibold or 'bold' for bold */
+      border-color: #2563EB;
+      color: #2563EB;
+    }
+
+    /* Add focus styles for accessibility */
+     .css-tab-label:focus {
+        outline: 2px solid transparent;
+        outline-offset: 2px;
+     }
+
+    /* Hide tab panels by default */
+    .css-tab-panel {
+      display: none;
+      margin-top: 0.75rem; /* mt-3 (applied from the container previously) */
+    }
+
+    /* Show the corresponding panel when its radio button is checked */
+    /* Using general sibling combinator (~) to find the panels container */
+    #tab-radio-1:checked ~ .css-tab-panels #tabs-with-underline-1,
+    #tab-radio-2:checked ~ .css-tab-panels #tabs-with-underline-2 {
+      display: block;
+    }
+  </style>
+
   <script type="module">
     // Vite provides import.meta.env automatically
     const isDev = import.meta.env.DEV;          // True during 'vite dev'
@@ -210,7 +270,7 @@
                     <g id="SVGRepo_iconCarrier">
                       <circle cx="512" cy="512" r="512" style="fill:#4353ff"></circle>
                       <path
-                        d="M399.57 494.6c0-11.39-11.07-23.48-30.24-23.48-21.52 0-45.16 15.79-48.77 47.28-3.69 31.81 16.1 45.95 36 45.95s30.39-7.78 41.08-18.14c-9.19-11.55-21-6.2-23.33-5a23.88 23.88 0 0 1-12.33 3c-7.7 0-15.55-3.46-15.55-17.83 49.37-4.92 53.14-20.38 53.14-31.78zm-24.43 1.88c-.31 3.53-1.73 9.58-26.7 13 5.26-18.69 15.32-20.11 19.95-20.11a6.52 6.52 0 0 1 6.76 7.12zm-83.57 3.06s-10.6 33.3-11.47 36c-.3-2.77-8.1-62.54-8.1-62.54-18.06 0-27.72 12.88-32.83 26.47 0 0-12.88 33.38-14 36.21-.08-2.59-2-35.81-2-35.81-1.1-16.65-16.34-26.78-28.67-26.78l14.92 90.56c18.93-.08 29.14-12.88 34.48-26.47 0 0 11.39-29.45 11.86-30.79.08 1.26 8.17 57.26 8.17 57.26 19 0 29.22-12 34.71-25.13l26.62-65.42c-18.68-.02-28.58 12.79-33.68 26.45zM469.31 471c-11.7 0-20.66 6.36-28.2 15.71v-.08l6.75-54.43c-15.55 0-28.2 13.51-30.63 33.61l-11.78 97.15c9 0 18.46-2.59 23.56-9.19a26.09 26.09 0 0 0 21.52 10.6c26.23 0 44.22-30.47 44.22-59.06C494.6 479.21 482 471 469.31 471zm-2.43 46.73c-2.75 15.94-11.62 26.78-20.18 26.78s-12.33-3.85-12.33-3.85c1.65-14 2.67-22.54 5.81-29.92s10.6-19.16 18.38-19.16c7.61-.04 11.07 10.09 8.32 26.11zm93.38-44.61H542l.08-.94c1.26-11.94 4.08-18.22 13.43-19.24 6.36-.63 9.19-3.93 9.9-7.54.55-2.83 2.28-12.64 2.28-12.64-36.76-.24-48.3 15.63-51.29 39.82l-.08.55h-.39c-6 0-12.57 6.75-13.67 15.32l-.39 3.14h12.25l-10.29 85-3.14 15.24c.39 0 .86.08 1.26.08 17.2-.63 28.2-14.22 30.63-33.93l8-66.37h5.73c5.65 0 12.25-5.65 13.43-15.08zm95.19-1.57c-21.13 0-41.08 15.55-47.2 40s3.14 53.33 34.24 53.33 48.93-30.08 48.93-55.13c0-24.96-16.88-38.24-35.97-38.24zm8.56 45.4c-1.1 11.07-6 27.88-19.32 27.88s-11.55-19.63-10.21-29c1.41-10 7-24.19 19-24.19 10.77-.02 11.79 12.78 10.52 25.27zm131.79-17.4s-10.6 33.3-11.47 36c-.31-2.83-8.09-62.6-8.09-62.6-18.06 0-27.72 12.88-32.83 26.47 0 0-12.88 33.38-14 36.21-.08-2.59-2-35.81-2-35.81-1.1-16.65-16.34-26.78-28.67-26.78l14.84 90.56c18.93-.08 29.14-12.88 34.48-26.47 0 0 11.39-29.45 11.78-30.79.16 1.26 8.17 57.26 8.17 57.26 19 0 29.22-12 34.71-25.13l26.62-65.42c-18.62.03-28.51 12.84-33.54 26.5zm-218.26-66.84-15.39 124.18L559 572.2c.39 0 .86.08 1.26.08 16.57-.24 28.35-14.77 30.55-33.07l8.88-71.21c2.67-21.78-10.29-35.29-22.15-35.29z"
+                        d="M399.57 494.6c0-11.39-11.07-23.48-30.24-23.48-21.52 0-45.16 15.79-48.77 47.28-3.69 31.81 16.1 45.95 36 45.95s30.39-7.78 41.08-18.14c-9.19-11.55-21-6.2-23.33-5a23.88 23.88 0 0 1-12.33 3c-7.7 0-15.55-3.46-15.55-17.83 49.37-4.92 53.14-20.38 53.14-31.78zm-24.43 1.88c-.31 3.53-1.73 9.58-26.7 13 5.26-18.69 15.32-20.11 19.95-20.11a6.52 6.52 0 0 1 6.76 7.12zm-83.57 3.06s-10.6 33.3-11.47 36c-.3-2.77-8.1-62.54-8.1-62.54-18.06 0-27.72 12.88-32.83 26.47 0 0-12.88 33.38-14 36.21-.08-2.59-2-35.81-2-35.81-1.1-16.65-16.34-26.78-28.67-26.78l14.92 90.56c18.93-.08 29.14-12.88 34.48-26.47 0 0 11.39-29.45 11.78-30.79.08 1.26 8.17 57.26 8.17 57.26 19 0 29.22-12 34.71-25.13l26.62-65.42c-18.68-.02-28.58 12.79-33.68 26.45zM469.31 471c-11.7 0-20.66 6.36-28.2 15.71v-.08l6.75-54.43c-15.55 0-28.2 13.51-30.63 33.61l-11.78 97.15c9 0 18.46-2.59 23.56-9.19a26.09 26.09 0 0 0 21.52 10.6c26.23 0 44.22-30.47 44.22-59.06C494.6 479.21 482 471 469.31 471zm-2.43 46.73c-2.75 15.94-11.62 26.78-20.18 26.78s-12.33-3.85-12.33-3.85c1.65-14 2.67-22.54 5.81-29.92s10.6-19.16 18.38-19.16c7.61-.04 11.07 10.09 8.32 26.11zm93.38-44.61H542l.08-.94c1.26-11.94 4.08-18.22 13.43-19.24 6.36-.63 9.19-3.93 9.9-7.54.55-2.83 2.28-12.64 2.28-12.64-36.76-.24-48.3 15.63-51.29 39.82l-.08.55h-.39c-6 0-12.57 6.75-13.67 15.32l-.39 3.14h12.25l-10.29 85-3.14 15.24c.39 0 .86.08 1.26.08 17.2-.63 28.2-14.22 30.63-33.93l8-66.37h5.73c5.65 0 12.25-5.65 13.43-15.08zm95.19-1.57c-21.13 0-41.08 15.55-47.2 40s3.14 53.33 34.24 53.33 48.93-30.08 48.93-55.13c0-24.96-16.88-38.24-35.97-38.24zm8.56 45.4c-1.1 11.07-6 27.88-19.32 27.88s-11.55-19.63-10.21-29c1.41-10 7-24.19 19-24.19 10.77-.02 11.79 12.78 10.52 25.27zm131.79-17.4s-10.6 33.3-11.47 36c-.31-2.83-8.09-62.6-8.09-62.6-18.06 0-27.72 12.88-32.83 26.47 0 0-12.88 33.38-14 36.21-.08-2.59-2-35.81-2-35.81-1.1-16.65-16.34-26.78-28.67-26.78l14.84 90.56c18.93-.08 29.14-12.88 34.48-26.47 0 0 11.39-29.45 11.78-30.79.16 1.26 8.17 57.26 8.17 57.26 19 0 29.22-12 34.71-25.13l26.62-65.42c-18.62.03-28.51 12.84-33.54 26.5zm-218.26-66.84-15.39 124.18L559 572.2c.39 0 .86.08 1.26.08 16.57-.24 28.35-14.77 30.55-33.07l8.88-71.21c2.67-21.78-10.29-35.29-22.15-35.29z"
                         style="fill:#fff"></path>
                     </g>
                   </svg>
@@ -253,8 +313,8 @@
                 <p class="font-semibold text-5xl text-white">Solo Developers</p>
                 <h3 class="mt-5 font-medium text-lg text-white">Improve UX & Conversion</h3>
                 <p class="mt-1 text-neutral-400">
-                  Building alone is hard. Checkra reveals blind spots—unclear UI, missing context, or confusing
-                  features. Don't let your side project fail because of simple oversights.
+                  Building alone is hard. Checkra's AI reveals blind spots such as unclear UI, missing instructions, or confusing
+                  features – without leaving your website. Don't let your side project fail because of simple oversights.
                 </p>
               </div>
             </div>
@@ -278,9 +338,7 @@
                 <p class="font-semibold text-5xl text-white">Designers & PM's</p>
                 <h3 class="mt-5 font-medium text-lg text-white">Streamline Development</h3>
                 <p class="mt-1 text-neutral-400">
-                  Skip lengthy JIRA tickets and Figma handoffs. Checkra captures shareable UX, accessibility, and
-                  conversion issues directly on your site, giving engineers clear, visual feedback they can instantly
-                  use.
+                  Ask Checkra for insights on UX, accessibility, and conversion issues directly on your website. Get previews for fixes and easily share them with engineers, giving clear and actionable feedback.
                 </p>
               </div>
             </div>
@@ -290,14 +348,62 @@
         <!-- End Card Grid -->
         <div class="section bg-white p-6 rounded-lg shadow">
           <h2 class="text-xl font-semibold text-gray-800 mb-4">Usage Example:</h2>
-          <div class="code-block bg-gray-100 p-4 rounded overflow-x-auto">
-            <pre><code class="text-sm text-gray-800">import { initCheckra } from 'checkra';
 
-// Initialize with custom options
-const checkra = initCheckra({
-  isVisible: true
-});</code></pre>
+          <input type="radio" name="css-tabs" id="tab-radio-1" class="css-tab-radio" checked>
+          <input type="radio" name="css-tabs" id="tab-radio-2" class="css-tab-radio">
+
+          <div class="border-b border-gray-200 dark:border-neutral-700">
+            <nav class="-mb-0.5 flex space-x-6" aria-label="Tabs" role="tablist">
+              
+              <label for="tab-radio-1" class="css-tab-label" role="tab" aria-selected="true" aria-controls="tabs-with-underline-1" tabindex="0">
+                Easy install
+              </label>
+
+              <label for="tab-radio-2" class="css-tab-label" role="tab" aria-selected="false" aria-controls="tabs-with-underline-2" tabindex="0">
+                NPM install
+              </label>
+            </nav>
           </div>
+
+          <!-- Tab Panels Container (Now a direct sibling of the radio inputs) -->
+          <div class="mt-3 css-tab-panels">
+            <!-- Panel 1 -->
+            <div id="tabs-with-underline-1" class="css-tab-panel" role="tabpanel" aria-labelledby="tab-radio-1">
+              <p class="">
+                Copy these two lines and paste them inside the &lt;head&gt; section of your HTML file. Checkra will appear automatically!
+              </p>
+                <pre><code class="text-sm text-gray-800 bg-gray-100 p-2 rounded block overflow-x-auto mt-2">&lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
+&lt;script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer&gt;&lt;/script&gt;
+</code></pre>
+            </div>
+            <!-- Panel 2 -->
+            <div id="tabs-with-underline-2" class="css-tab-panel" role="tabpanel" aria-labelledby="tab-radio-2">
+              <p class="">
+                1. Install the package using your preferred package manager.<br>
+                2. Import `initCheckra` and the CSS file in your project's entry point.<br>
+                3. Call `initCheckra()` when your application mounts or the DOM is ready.
+              </p>
+              <div class="code-block bg-gray-100 p-4 rounded overflow-x-auto mt-2">
+                <pre><code class="text-sm text-gray-800"># 1. Install
+npm install checkra
+# or yarn add checkra
+# or pnpm add checkra
+
+# 2. Import in your main JS/TS file
+import { initCheckra } from 'checkra';
+import 'checkra/dist/style.css'; // Import the CSS
+
+# 3. Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  const checkraInstance = initCheckra({
+    isVisible: true // Default is true
+  });
+});</code></pre>
+              </div>
+            </div>
+          </div>
+          <!-- CSS-Only Tabs End -->
+
         </div>
 
         <!-- Pricing -->
