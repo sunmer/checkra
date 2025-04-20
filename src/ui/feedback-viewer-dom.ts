@@ -27,24 +27,13 @@ export interface FeedbackViewerElements {
     contentWrapper: HTMLDivElement;
 }
 
-interface InjectedFixElements {
-    wrapper: HTMLDivElement;
-    closeButton: HTMLButtonElement;
-    copyButton: HTMLButtonElement;
-    contentContainer: HTMLDivElement;
-}
-
 /**
  * Manages the DOM elements, styling, positioning, dragging, and resizing
  * of the feedback viewer.
  */
 export class FeedbackViewerDOM {
     private elements: FeedbackViewerElements | null = null;
-    private injectedFixWrapper: HTMLDivElement | null = null;
-    private fixContentContainer: HTMLDivElement | null = null;
-    private fixCloseButton: HTMLButtonElement | null = null;
-    private fixCopyButton: HTMLButtonElement | null = null;
-    private readonly originalPromptTitleText = 'Describe what you need help with'; // Store original text
+    private readonly originalPromptTitleText = 'Describe what you need help with';
 
     // --- Dragging State ---
     private isDragging: boolean = false;
@@ -225,7 +214,6 @@ export class FeedbackViewerDOM {
 
             this.elements.viewer.remove();
         }
-        this.removeInjectedFixWrapper();
         this.elements = null;
         console.log('[FeedbackViewerDOM] Instance destroyed.');
     }
@@ -446,162 +434,6 @@ export class FeedbackViewerDOM {
              // Hiding without submitted text (e.g., on error before submit), just hide textarea
              this.elements.promptTitle.style.display = 'none'; // Hide the title too if no text to show
          }
-    }
-
-    // --- Injected Fix Wrapper ---
-
-    public createInjectedFixWrapper(
-        initialContentHtml: string,
-        attributesToCopy: { name: string; value: string }[],
-        originalElement: Element
-    ): InjectedFixElements | null {
-        if (!document.body.contains(originalElement)) {
-            console.warn('[FeedbackViewerDOM] Original element is not in the DOM. Cannot create fix wrapper.');
-            this.removeInjectedFixWrapper(); // Clean up any old one
-            return null;
-        }
-
-        if (this.injectedFixWrapper && document.body.contains(this.injectedFixWrapper)) {
-            console.log('[FeedbackViewerDOM] Fix wrapper already exists. Updating content and position.');
-            this.updateInjectedFixContent(initialContentHtml); // Update content
-            // Return existing button references
-            if (this.fixCloseButton && this.fixCopyButton && this.fixContentContainer) {
-                 return {
-                     wrapper: this.injectedFixWrapper,
-                     closeButton: this.fixCloseButton,
-                     copyButton: this.fixCopyButton,
-                     contentContainer: this.fixContentContainer
-                 };
-            } else {
-                // Should not happen if wrapper exists, but handle defensively
-                console.error("[FeedbackViewerDOM] Wrapper exists but button references are missing. Recreating.");
-                this.removeInjectedFixWrapper();
-                // Fall through to create new wrapper
-            }
-        }
-
-        console.log('[FeedbackViewerDOM] Creating new fix wrapper.');
-        this.injectedFixWrapper = document.createElement('div');
-        this.injectedFixWrapper.className = 'checkra-feedback-injected-fix';
-        this.injectedFixWrapper.style.position = 'relative'; // Positioned relative to offset parent
-        this.injectedFixWrapper.style.boxSizing = 'border-box';
-        this.injectedFixWrapper.style.zIndex = '1000'; // Below viewer/modal but above most content
-        this.injectedFixWrapper.style.display = 'none'; // Start hidden
-
-        // Create content container inside the wrapper
-        this.fixContentContainer = document.createElement('div');
-        this.fixContentContainer.style.width = '100%';
-        this.fixContentContainer.style.height = '100%';
-        this.fixContentContainer.innerHTML = initialContentHtml;
-        this.injectedFixWrapper.appendChild(this.fixContentContainer);
-
-        // Copy relevant attributes (excluding style and class potentially)
-        attributesToCopy.forEach(attr => {
-            if (attr.name.toLowerCase() !== 'class' && attr.name.toLowerCase() !== 'id') { // Avoid copying class/id directly
-                 try {
-                    this.injectedFixWrapper!.setAttribute(attr.name, attr.value);
-                 } catch (e) {
-                    console.warn(`[FeedbackViewerDOM] Could not set attribute ${attr.name}:`, e);
-                 }
-            }
-        });
-
-        // Create Close Button
-        this.fixCloseButton = document.createElement('button');
-        this.fixCloseButton.className = 'checkra-feedback-fix-close-btn';
-        this.fixCloseButton.innerHTML = '&times;';
-        this.fixCloseButton.title = 'Discard Fix';
-        this.injectedFixWrapper.appendChild(this.fixCloseButton);
-
-        // Create Copy Button
-        this.fixCopyButton = document.createElement('button');
-        this.fixCopyButton.className = 'checkra-feedback-fix-copy-btn';
-        this.fixCopyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-        this.fixCopyButton.title = 'Copy Screenshot';
-        this.injectedFixWrapper.appendChild(this.fixCopyButton);
-
-        // Insert the wrapper into the DOM before the original element
-        originalElement.parentNode?.insertBefore(this.injectedFixWrapper, originalElement);
-
-        // Ensure it's initially hidden (redundant but safe)
-        this.setInjectedFixWrapperVisibility(false);
-
-        return {
-            wrapper: this.injectedFixWrapper,
-            closeButton: this.fixCloseButton,
-            copyButton: this.fixCopyButton,
-            contentContainer: this.fixContentContainer
-        };
-    }
-
-    public updateInjectedFixContent(newHtml: string): void {
-        if (this.fixContentContainer) {
-            this.fixContentContainer.innerHTML = newHtml;
-        } else if (this.injectedFixWrapper) {
-             // Fallback if container reference lost but wrapper exists
-             this.injectedFixWrapper.innerHTML = newHtml; // Less ideal, might wipe out buttons if not careful
-             console.warn("[FeedbackViewerDOM] Fix content container reference lost, updating wrapper innerHTML directly.");
-        }
-    }
-
-    /**
-     * Sets the visibility of the injected fix wrapper.
-     */
-    public setInjectedFixWrapperVisibility(visible: boolean): void {
-        if (this.injectedFixWrapper) {
-            this.injectedFixWrapper.style.display = visible ? 'block' : 'none';
-             console.log(`[FeedbackViewerDOM] Set injected fix wrapper visibility to ${visible}`);
-        }
-    }
-
-    /**
-     * Removes the injected fix wrapper from the DOM and resets references
-     * IF it hasn't been permanently applied (i.e., if this instance still 'owns' it).
-     */
-    public removeInjectedFixWrapper(): void {
-        // Only remove the wrapper if this DOM manager instance still has an active reference to it.
-        // If the fix was applied, the reference should have been released via releaseAppliedFixWrapper.
-        if (this.injectedFixWrapper) {
-            this.injectedFixWrapper.remove();
-            console.log('[FeedbackViewerDOM] Removed injected fix wrapper.');
-            // Nullify references only if we actually removed it now
-            this.injectedFixWrapper = null;
-            this.fixContentContainer = null;
-            this.fixCloseButton = null;
-            this.fixCopyButton = null;
-        } else {
-             console.log('[FeedbackViewerDOM] No active injectedFixWrapper reference to remove.');
-        }
-    }
-
-    /**
-     * Adds or removes the 'fix-applied' class for styling.
-     */
-    public setFixAppliedStyles(applied: boolean): void {
-        if (this.injectedFixWrapper) {
-            if (applied) {
-                this.injectedFixWrapper.classList.add('fix-applied');
-                console.log('[FeedbackViewerDOM] Added fix-applied class.');
-            } else {
-                this.injectedFixWrapper.classList.remove('fix-applied');
-                 console.log('[FeedbackViewerDOM] Removed fix-applied class.');
-            }
-        }
-    }
-
-    /**
-     * Releases the reference to the currently managed fix wrapper,
-     * typically called after a fix has been permanently applied.
-     * This allows the wrapper element to persist in the DOM independently.
-     */
-    public releaseAppliedFixWrapper(): void {
-        if (this.injectedFixWrapper) {
-             console.log('[FeedbackViewerDOM] Releasing reference to applied fix wrapper.');
-            this.injectedFixWrapper = null;
-            this.fixContentContainer = null;
-            this.fixCloseButton = null;
-            this.fixCopyButton = null;
-        }
     }
 
     // --- Positioning ---

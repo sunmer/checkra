@@ -51,93 +51,98 @@
   margin-bottom: 0.4em;
 }
 
-/* --- Injected Fix Styles --- */
-.checkra-feedback-injected-fix {
-  position: relative;
-  outline: 2px dashed #196ee6;
-  outline-offset: 6px;
-  transition: outline 0.2s ease-in-out;
+/* --- Fix Preview State --- */
+.checkra-fix-previewing {
+  outline: 2px dashed #196ee6; /* Add outline during preview */
+  outline-offset: 2px;
+  box-shadow: 0 0 10px rgba(25, 110, 230, 0.5); /* Optional glow */
 }
 
-/* Style for when the fix is permanently applied */
-.checkra-feedback-injected-fix.fix-applied {
-  outline: none;
-  outline-offset: 0;
+/* --- Applied Fix Styles (New Wrapper) --- */
+.checkra-feedback-applied-fix {
+  position: relative; /* Needed for absolute positioning of buttons */
+  outline: none; /* No outline by default when applied */
+  /* Add any other base styling needed for the wrapper itself */
+  box-sizing: border-box;
 }
 
-/* ADDED: Hide close/copy buttons by default */
-.checkra-feedback-injected-fix .feedback-fix-close-btn,
-.checkra-feedback-injected-fix .feedback-fix-copy-btn {
-  display: none;
-  pointer-events: none; /* Prevent interaction when hidden */
+/* Container for the actual content inside the applied fix wrapper */
+.checkra-feedback-applied-fix .checkra-applied-fix-content {
+  /* Content takes up full space, buttons overlay */
+  width: 100%;
+  height: 100%;
 }
 
-/* ADDED: Show close/copy buttons only when fix is applied */
-.checkra-feedback-injected-fix.fix-applied .feedback-fix-close-btn,
-.checkra-feedback-injected-fix.fix-applied .feedback-fix-copy-btn {
-  display: flex; /* Or inline-flex, block depending on original styles */
-  pointer-events: auto;
-}
-
-.checkra-feedback-fix-close-btn {
+/* --- Buttons on Applied Fix Wrapper --- */
+/* Position and style all buttons similarly */
+.checkra-feedback-applied-fix .feedback-fix-close-btn,
+.checkra-feedback-applied-fix .feedback-fix-copy-btn,
+.checkra-feedback-applied-fix .feedback-fix-toggle {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  background-color: rgba(80, 80, 80, 0.7);
-  color: #ddd;
-  border: 1px solid #555;
+  top: 3px; /* Adjust positioning */
+  width: 20px; /* Adjust size */
+  height: 20px;
+  background-color: rgba(50, 50, 50, 0.8);
+  color: #eee;
+  border: 1px solid #666;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 12px; /* For close button 'x' */
   font-weight: bold;
   line-height: 1;
-  z-index: 11;
+  z-index: 11; /* Ensure buttons are above content */
   pointer-events: auto;
-  transition: background-color 0.2s, color 0.2s;
-  font-family: sans-serif;
+  transition: background-color 0.2s, color 0.2s, transform 0.1s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  padding: 2px; /* Add padding for SVGs */
+  box-sizing: border-box;
+}
+.checkra-feedback-applied-fix .feedback-fix-close-btn:hover,
+.checkra-feedback-applied-fix .feedback-fix-copy-btn:hover,
+.checkra-feedback-applied-fix .feedback-fix-toggle:hover {
+   transform: scale(1.1);
 }
 
-.checkra-feedback-fix-close-btn:hover {
-  background-color: rgba(200, 50, 50, 0.8);
+/* Specific positioning */
+.checkra-feedback-applied-fix .feedback-fix-close-btn {
+  right: 3px; /* Furthest right */
+}
+.checkra-feedback-applied-fix .feedback-fix-copy-btn {
+  right: 28px; /* Next to close */
+}
+.checkra-feedback-applied-fix .feedback-fix-toggle {
+  right: 53px; /* Next to copy */
+}
+
+/* Specific hover colors */
+.checkra-feedback-applied-fix .feedback-fix-close-btn:hover {
+  background-color: rgba(220, 60, 60, 0.9);
+  color: white;
+}
+.checkra-feedback-applied-fix .feedback-fix-copy-btn:hover {
+  background-color: rgba(60, 110, 200, 0.9);
+  color: white;
+}
+.checkra-feedback-applied-fix .feedback-fix-toggle:hover {
+  background-color: rgba(60, 180, 110, 0.9);
   color: white;
 }
 
-.checkra-feedback-fix-copy-btn {
-  position: absolute;
-  top: 2px;
-  /* Position next to close button */
-  right: 24px; /* Adjusted from 46px */
-  width: 18px;
-  height: 18px;
-  background-color: rgba(80, 80, 80, 0.7);
-  color: #ddd;
-  border: 1px solid #555;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px; /* Add padding for the SVG */
-  box-sizing: border-box; /* Include padding in width/height */
-  z-index: 11;
-  pointer-events: auto;
-  transition: background-color 0.2s, color 0.2s;
+/* Icon sizing within buttons */
+.checkra-feedback-applied-fix .feedback-fix-copy-btn svg,
+.checkra-feedback-applied-fix .feedback-fix-toggle svg {
+  width: 12px; /* Adjust SVG size */
+  height: 12px;
+  stroke: currentColor;
 }
 
-.checkra-feedback-fix-copy-btn svg {
-  width: 10px; /* Adjust SVG size */
-  height: 10px;
-  stroke: currentColor; /* Inherit color */
-}
-
-.checkra-feedback-fix-copy-btn:hover {
-  background-color: rgba(80, 120, 200, 0.8); /* Different hover color */
-  color: white;
+/* Optional: Style toggle button when showing original */
+.checkra-feedback-applied-fix .feedback-fix-toggle.showing-original {
+   /* Example: change background or add indicator */
+   background-color: rgba(200, 150, 50, 0.8);
 }
 
 /* --- Viewer Layout & Header --- */
