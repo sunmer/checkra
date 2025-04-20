@@ -127,7 +127,7 @@
   color: white;
 }
 .checkra-feedback-applied-fix .feedback-fix-toggle:hover {
-  background-color: rgba(60, 180, 110, 0.9);
+  background-color: rgba(60, 180, 110, 0.9) !important; /* Use !important to override inline style */
   color: white;
 }
 
@@ -137,12 +137,6 @@
   width: 12px; /* Adjust SVG size */
   height: 12px;
   stroke: currentColor;
-}
-
-/* Optional: Style toggle button when showing original */
-.checkra-feedback-applied-fix .feedback-fix-toggle.showing-original {
-   /* Example: change background or add indicator */
-   background-color: rgba(200, 150, 50, 0.8);
 }
 
 /* --- Viewer Layout & Header --- */

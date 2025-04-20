@@ -14,8 +14,9 @@ const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/
 // ADDED: SVG Icon Constants
 const EYE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-icon lucide-check"><path d="M20 6 9 17l-5-5"/></svg>`;
-const UNDO_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2-icon lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>`; // Added for completeness, though cancel button isn't dynamic
-const TOGGLE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`;
+const UNDO_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
+const DISPLAY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
+const HIDE_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
 
 // --- Interface for Applied Fix Data ---
 interface AppliedFixInfo {
@@ -210,22 +211,23 @@ export class FeedbackViewerImpl {
     const hasHtmlCode = GENERIC_HTML_REGEX.test(this.accumulatedResponseText);
     this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Getting feedback...');
 
-    // NEW: Attempt to extract the fix HTML as it comes in, but don't inject/replace yet
-    this.extractAndStoreFixHtml();
+    // REMOVED: Don't try to extract HTML or show buttons mid-stream
+    // this.extractAndStoreFixHtml();
   }
 
   public finalizeResponse(): void {
     console.log("[FeedbackViewerLogic] Feedback stream finalized.");
     if (!this.domManager) return;
 
-    this.domManager.updateLoaderVisibility(false);
+    this.domManager.updateLoaderVisibility(false); // Hide loader first
     this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true, 'Get Feedback');
 
     // Ensure fix extraction happens on final response
     this.extractAndStoreFixHtml();
 
-    this.updateActionButtonsVisibility(); // Show/hide based on whether fixed HTML was extracted
+    // Update button visibility *after* loader is hidden and final extraction is attempted
+    this.updateActionButtonsVisibility();
   }
 
   public showError(error: Error | string): void {
@@ -529,10 +531,11 @@ export class FeedbackViewerImpl {
         const fixInfo = this.appliedFixes.get(fixId);
         const wrapperElement = document.querySelector(`.checkra-feedback-applied-fix[data-checkra-fix-id="${fixId}"]`);
         const contentContainer = wrapperElement?.querySelector('.checkra-applied-fix-content');
+        const toggleButton = wrapperElement?.querySelector<HTMLButtonElement>('.feedback-fix-toggle'); // Get button reference
 
-        if (fixInfo && wrapperElement && contentContainer) {
+        if (fixInfo && wrapperElement && contentContainer && toggleButton) { // Check toggleButton too
             try {
-                 const htmlToInsert = fixInfo.isCurrentlyFixed
+                const htmlToInsert = fixInfo.isCurrentlyFixed
                      ? fixInfo.originalOuterHTML
                      : fixInfo.fixedOuterHTML;
 
@@ -547,12 +550,18 @@ export class FeedbackViewerImpl {
                  fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
                  console.log(`[FeedbackViewerLogic] Toggled ${fixId}. Currently showing fixed: ${fixInfo.isCurrentlyFixed}`);
 
-                 // Optionally update toggle button appearance (e.g., add/remove class)
-                 const toggleButton: HTMLButtonElement | null = wrapperElement.querySelector('.feedback-fix-toggle');
-                 if (toggleButton) {
-                     toggleButton.classList.toggle('showing-original', !fixInfo.isCurrentlyFixed);
-                     toggleButton.title = fixInfo.isCurrentlyFixed ? "Toggle Original Version" : "Toggle Fixed Version";
+                 // --- Update toggle button appearance ---
+                 if (fixInfo.isCurrentlyFixed) {
+                     // State is now FIXED: Show icon to toggle TO original, set active background
+                     toggleButton.innerHTML = HIDE_FIX_SVG;
+                     toggleButton.title = "Toggle Original Version";
+                 } else {
+                     // State is now ORIGINAL: Show icon to toggle TO fixed, set default background
+                     toggleButton.innerHTML = DISPLAY_FIX_SVG;
+                     toggleButton.title = "Toggle Fixed Version";
+                     toggleButton.style.backgroundColor = ''; // Reset to default CSS background
                  }
+                 // REMOVED: toggleButton.classList.toggle('showing-original', !fixInfo.isCurrentlyFixed);
 
             } catch (error) {
                 console.error(`[FeedbackViewerLogic] Error toggling fix ${fixId}:`, error);
@@ -571,7 +580,7 @@ export class FeedbackViewerImpl {
                 }
             }
         } else {
-            console.warn(`[FeedbackViewerLogic] Could not find fix info, wrapper, or content container for Fix ID: ${fixId} during toggle.`);
+            console.warn(`[FeedbackViewerLogic] Could not find fix info, wrapper, content container, or toggle button for Fix ID: ${fixId} during toggle.`);
         }
     }
 
@@ -776,8 +785,11 @@ export class FeedbackViewerImpl {
                 break;
             case 'toggle':
                 button.className = 'feedback-fix-toggle';
-                button.innerHTML = TOGGLE_ICON_SVG;
-                button.title = 'Toggle Original/Fixed Version';
+                // Initial state is FIXED, so show the icon to toggle TO original (ROTATE_CCW)
+                button.innerHTML = HIDE_FIX_SVG;
+                button.title = 'Toggle Original Version'; // Initial title
+                // Apply the "active" background color initially
+                button.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // Same as hover
                 break;
         }
         return button;
