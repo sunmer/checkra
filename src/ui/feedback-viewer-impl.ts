@@ -8,6 +8,8 @@ import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 // Regex patterns for extracting HTML
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
 const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
+// Regex for finding SVG placeholders during restoration - UPDATED
+const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/svg>/g;
 
 // ADDED: SVG Icon Constants
 const EYE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -17,7 +19,7 @@ const UNDO_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
  */
-export class FeedbackViewerLogic {
+export class FeedbackViewerImpl {
   private domElements: FeedbackViewerElements | null = null;
   private domManager: FeedbackViewerDOM | null = null; // Use the imported type
 
@@ -31,7 +33,9 @@ export class FeedbackViewerLogic {
   private originalElementDisplayStyle: string | null = null; // For restoring after fix preview
   private isFixPermanentlyApplied: boolean = false; // Added: Tracks if the current fix is permanent
   private isPreviewActive: boolean = false; // Added: Tracks if preview is active
-  private hasPreviewBeenShown: boolean = false; // Added: Tracks if preview has been activated
+  private hasPreviewBeenShown: boolean = false; // Added: Tracks if preview has been shown
+  private originalSvgsMap: Map<string, string> = new Map(); // Map to store original SVGs
+  private svgPlaceholderCounter: number = 0; // Counter for generating unique IDs
 
   // --- Listeners ---
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
@@ -123,6 +127,8 @@ export class FeedbackViewerLogic {
     this.isStreamStarted = false;
     this.isPreviewActive = false; // Reset preview state
     this.hasPreviewBeenShown = false; // Reset new flag
+    this.originalSvgsMap.clear(); // Clear stored SVGs for the new cycle
+    this.svgPlaceholderCounter = 0; // Reset counter
     this.removeInjectedFixLogic(true); // Clears fix state including isFixPermanentlyApplied
 
     // Reset UI
@@ -258,7 +264,10 @@ export class FeedbackViewerLogic {
 
   private handleSubmit(): void {
     if (!this.domManager || !this.domElements) return;
-    if (!this.currentImageDataUrl && !this.currentSelectedHtml) {
+    // Use a local variable for the processed HTML
+    let processedHtmlForAI: string | null = this.currentSelectedHtml;
+
+    if (!this.currentImageDataUrl && !processedHtmlForAI) {
       this.showError('Could not capture image or HTML structure for context.');
       // Keep input area visible on context error
       return;
@@ -271,6 +280,24 @@ export class FeedbackViewerLogic {
     }
 
     console.log('[FeedbackViewerLogic] Submitting feedback...');
+
+    // --- Preprocess HTML: Replace SVGs with placeholders ---
+    this.originalSvgsMap.clear(); // Ensure map is clear before processing
+    this.svgPlaceholderCounter = 0; // Reset counter
+    if (processedHtmlForAI) {
+        try {
+             console.log('[FeedbackViewerLogic] Preprocessing HTML to replace SVGs...');
+             processedHtmlForAI = this.preprocessHtmlForAI(processedHtmlForAI);
+             console.log(`[FeedbackViewerLogic] Preprocessing complete. Stored ${this.originalSvgsMap.size} SVGs.`);
+             // Log the processed HTML (optional, can be large)
+             // console.log('[FeedbackViewerLogic] HTML sent to AI (placeholders):', processedHtmlForAI);
+        } catch(e) {
+             console.error('[FeedbackViewerLogic] Error preprocessing HTML for AI:', e);
+             this.showError('Failed to process HTML before sending.');
+             return;
+        }
+    }
+    // --- End Preprocessing ---
 
     // Update UI for processing state
     this.domManager.setPromptState(false); // Disable textarea
@@ -290,10 +317,8 @@ export class FeedbackViewerLogic {
     this.hasPreviewBeenShown = false; // Reset new flag
     this.removeInjectedFixLogic(true); // Clear previous non-permanent fix
 
-    // Call API (using placeholder/actual function)
-    fetchFeedback(this.currentImageDataUrl, promptText, this.currentSelectedHtml);
-    // Assuming fetchFeedback triggers updateResponse/finalizeResponse/showError calls
-    // via the coordinator (feedbackViewer instance)
+    // Call API with the processed HTML
+    fetchFeedback(this.currentImageDataUrl, promptText, processedHtmlForAI);
   }
 
   private handlePreviewApplyClick(): void {
@@ -377,6 +402,67 @@ export class FeedbackViewerLogic {
 
   // --- HTML Preview and Injection Logic ---
 
+  /**
+   * Parses HTML, finds SVGs, replaces them with placeholders, stores originals.
+   */
+  private preprocessHtmlForAI(htmlString: string): string {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    const svgs = doc.querySelectorAll('svg');
+    this.svgPlaceholderCounter = 0; // Ensure counter starts at 0
+
+    svgs.forEach(svg => {
+      const placeholderId = `checkra-svg-${this.svgPlaceholderCounter++}`;
+      this.originalSvgsMap.set(placeholderId, svg.outerHTML);
+
+      // Create placeholder element
+      const placeholder = doc.createElement('svg');
+      placeholder.setAttribute('data-checkra-id', placeholderId);
+      // Add potentially useful but low-token attributes if needed by LLM?
+      // placeholder.setAttribute('viewBox', svg.getAttribute('viewBox') || '');
+      // placeholder.setAttribute('role', svg.getAttribute('role') || 'img');
+
+      svg.parentNode?.replaceChild(placeholder, svg);
+    });
+
+    // Return the modified HTML. Use body.innerHTML if the original was a fragment,
+    // or outerHTML of the root element if it was a full element.
+    // Assuming the original selection is likely a single element or fragment within body.
+    // If htmlString represents a full document fragment, doc.body.innerHTML is best.
+    // If htmlString is outerHTML of a single element, need to get that element.
+    // Let's default to body.innerHTML for simplicity, assuming fragments are common.
+    // If the input was outerHTML of a single node, this might add an extra container.
+    // A safer approach might be needed depending on exact `selectedHtml` content.
+    return doc.body.innerHTML;
+  }
+
+  /**
+   * Parses AI-generated HTML, finds placeholders, and replaces them with stored SVGs.
+   * Uses the updated regex to match non-self-closing placeholder tags.
+   */
+  private postprocessHtmlFromAI(aiHtmlString: string): string {
+    if (this.originalSvgsMap.size === 0) {
+        console.log('[FeedbackViewerLogic] No original SVGs stored, skipping postprocessing.');
+        return aiHtmlString; // No SVGs were replaced initially
+    }
+    console.log(`[FeedbackViewerLogic] Postprocessing AI HTML to restore ${this.originalSvgsMap.size} SVGs...`);
+
+    // Use the UPDATED SVG_PLACEHOLDER_REGEX
+    let restoredHtml = aiHtmlString.replace(SVG_PLACEHOLDER_REGEX, (match, placeholderId) => {
+        const originalSvg = this.originalSvgsMap.get(placeholderId);
+        if (originalSvg) {
+            console.log(`[FeedbackViewerLogic] Restoring SVG for ID: ${placeholderId}`);
+            return originalSvg;
+        } else {
+            console.warn(`[FeedbackViewerLogic] Original SVG not found for placeholder ID: ${placeholderId}. Leaving placeholder.`);
+            return match; // Keep the placeholder if original is missing
+        }
+    });
+
+    console.log('[FeedbackViewerLogic] Postprocessing complete.');
+    return restoredHtml;
+  }
+
   private tryInjectHtmlFix(): void {
     console.log('[FeedbackViewerLogic] Entering tryInjectHtmlFix.');
     if (!this.domManager || !this.originalElementRef || !document.body.contains(this.originalElementRef)) {
@@ -391,8 +477,19 @@ export class FeedbackViewerLogic {
     }
 
     if (match && match[1]) {
-      const extractedHtml = match[1].trim();
-      console.log('[FeedbackViewerLogic] Regex matched HTML for injection.');
+      let extractedHtml = match[1].trim();
+      console.log('[FeedbackViewerLogic] Regex matched HTML from AI response.');
+
+      // --- Postprocess HTML: Restore SVGs ---
+      try {
+        extractedHtml = this.postprocessHtmlFromAI(extractedHtml);
+        // Log the restored HTML (optional, can be large)
+        // console.log('[FeedbackViewerLogic] HTML after restoring SVGs:', extractedHtml);
+      } catch (e) {
+        console.error('[FeedbackViewerLogic] Error postprocessing HTML from AI:', e);
+        // Optionally show error or just proceed with potentially broken HTML
+      }
+      // --- End Postprocessing ---
 
       let newContentHtml = '';
       let attributesToCopy: { name: string; value: string }[] = [];

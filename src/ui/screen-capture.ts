@@ -331,7 +331,7 @@ class ScreenCapture {
               backgroundColor: effectiveBackgroundColor,
               useCORS: true,
               logging: false,
-              onclone: (clonedDoc, clonedElement) => {
+              onclone: (_clonedDoc, clonedElement) => {
                 if (clonedElement) {
                     // Ensure clone definitely doesn't have styles for screenshot
                     clonedElement.style.removeProperty('outline');

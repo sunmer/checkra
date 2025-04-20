@@ -1,17 +1,17 @@
 import { FeedbackViewerDOM } from './feedback-viewer-dom';
-import { FeedbackViewerLogic } from './feedback-viewer-impl';
+import { FeedbackViewerImpl } from './feedback-viewer-impl';
 
 /**
  * Main class coordinating the Feedback Viewer's DOM and Logic.
  */
 class FeedbackViewerCoordinator {
     private domManager: FeedbackViewerDOM;
-    private logicManager: FeedbackViewerLogic;
+    private logicManager: FeedbackViewerImpl;
     private isInitialized = false;
 
     constructor() {
         this.domManager = new FeedbackViewerDOM();
-        this.logicManager = new FeedbackViewerLogic();
+        this.logicManager = new FeedbackViewerImpl();
     }
 
     private initializeIfNeeded(): void {
