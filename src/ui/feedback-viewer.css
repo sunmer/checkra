@@ -1,22 +1,22 @@
 /* --- Base Styles & Content Formatting --- */
-#feedback-response-content .streamed-content h1,
-#feedback-response-content .streamed-content h2,
-#feedback-response-content .streamed-content h3,
-#feedback-response-content .streamed-content h4,
-#feedback-response-content .streamed-content h5,
-#feedback-response-content .streamed-content h6 {
+#checkra-feedback-response-content .checkra-streamed-content h1,
+#checkra-feedback-response-content .checkra-streamed-content h2,
+#checkra-feedback-response-content .checkra-streamed-content h3,
+#checkra-feedback-response-content .checkra-streamed-content h4,
+#checkra-feedback-response-content .checkra-streamed-content h5,
+#checkra-feedback-response-content .checkra-streamed-content h6 {
   color: #fff;
   margin-top: 14px;
   margin-bottom: 0.5em;
   font-weight: 600;
 }
 
-#feedback-response-content .streamed-content p {
+#checkra-feedback-response-content .checkra-streamed-content p {
   margin-bottom: 0.8em;
   line-height: 1.6;
 }
 
-#feedback-response-content .streamed-content code {
+#checkra-feedback-response-content .checkra-streamed-content code {
   background-color: #3a3a3a;
   padding: 0.2em 0.4em;
   border-radius: 3px;
@@ -24,7 +24,7 @@
   font-size: 0.9em;
 }
 
-#feedback-response-content .streamed-content pre {
+#checkra-feedback-response-content .checkra-streamed-content pre {
   background-color: #2a2a2a;
   padding: 10px;
   border-radius: 4px;
@@ -34,25 +34,25 @@
   position: relative;
 }
 
-#feedback-response-content .streamed-content pre code {
+#checkra-feedback-response-content .checkra-streamed-content pre code {
   background-color: transparent;
   padding: 0;
   border-radius: 0;
   font-size: 14px;
 }
 
-#feedback-response-content .streamed-content ul,
-#feedback-response-content .streamed-content ol {
+#checkra-feedback-response-content .checkra-streamed-content ul,
+#checkra-feedback-response-content .checkra-streamed-content ol {
   padding-left: 20px;
   margin-bottom: 1em;
 }
 
-#feedback-response-content .streamed-content li {
+#checkra-feedback-response-content .checkra-streamed-content li {
   margin-bottom: 0.4em;
 }
 
 /* --- Injected Fix Styles --- */
-.feedback-injected-fix {
+.checkra-feedback-injected-fix {
   position: relative;
   outline: 2px dashed #196ee6;
   outline-offset: 6px;
@@ -60,26 +60,26 @@
 }
 
 /* Style for when the fix is permanently applied */
-.feedback-injected-fix.fix-applied {
+.checkra-feedback-injected-fix.fix-applied {
   outline: none;
   outline-offset: 0;
 }
 
 /* ADDED: Hide close/copy buttons by default */
-.feedback-injected-fix .feedback-fix-close-btn,
-.feedback-injected-fix .feedback-fix-copy-btn {
+.checkra-feedback-injected-fix .feedback-fix-close-btn,
+.checkra-feedback-injected-fix .feedback-fix-copy-btn {
   display: none;
   pointer-events: none; /* Prevent interaction when hidden */
 }
 
 /* ADDED: Show close/copy buttons only when fix is applied */
-.feedback-injected-fix.fix-applied .feedback-fix-close-btn,
-.feedback-injected-fix.fix-applied .feedback-fix-copy-btn {
+.checkra-feedback-injected-fix.fix-applied .feedback-fix-close-btn,
+.checkra-feedback-injected-fix.fix-applied .feedback-fix-copy-btn {
   display: flex; /* Or inline-flex, block depending on original styles */
   pointer-events: auto;
 }
 
-.feedback-fix-close-btn {
+.checkra-feedback-fix-close-btn {
   position: absolute;
   top: 2px;
   right: 2px;
@@ -102,12 +102,12 @@
   font-family: sans-serif;
 }
 
-.feedback-fix-close-btn:hover {
+.checkra-feedback-fix-close-btn:hover {
   background-color: rgba(200, 50, 50, 0.8);
   color: white;
 }
 
-.feedback-fix-copy-btn {
+.checkra-feedback-fix-copy-btn {
   position: absolute;
   top: 2px;
   /* Position next to close button */
@@ -129,19 +129,19 @@
   transition: background-color 0.2s, color 0.2s;
 }
 
-.feedback-fix-copy-btn svg {
+.checkra-feedback-fix-copy-btn svg {
   width: 10px; /* Adjust SVG size */
   height: 10px;
   stroke: currentColor; /* Inherit color */
 }
 
-.feedback-fix-copy-btn:hover {
+.checkra-feedback-fix-copy-btn:hover {
   background-color: rgba(80, 120, 200, 0.8); /* Different hover color */
   color: white;
 }
 
 /* --- Viewer Layout & Header --- */
-#feedback-viewer {
+#checkra-feedback-viewer {
   cursor: grab;
   position: fixed;
   overflow: hidden;
@@ -157,17 +157,17 @@
   line-height: 1.5;
 }
 
-#feedback-viewer.dragging {
+#checkra-feedback-viewer.dragging {
   cursor: grabbing;
 }
 
-#feedback-viewer textarea,
-#feedback-viewer button,
-#feedback-viewer #feedback-response-content {
+#checkra-feedback-viewer textarea,
+#checkra-feedback-viewer button,
+#checkra-feedback-viewer #checkra-feedback-response-content {
   cursor: auto; /* Keep default cursor for interactive elements */
 }
 
-#feedback-response-header {
+#checkra-feedback-response-header {
   position: absolute;
   top: 0;
   left: 0;
@@ -182,7 +182,7 @@
   display: none; /* Initially hidden - controlled by JS */
 }
 
-#feedback-content-wrapper {
+#checkra-feedback-content-wrapper {
    overflow-y: scroll;
    flex-grow: 1;
    width: 100%;
@@ -192,16 +192,16 @@
 }
 
 /* --- Buttons & Inputs --- */
-#feedback-viewer button:disabled {
+#checkra-feedback-viewer button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
-#feedback-viewer button:not(:disabled):hover {
+#checkra-feedback-viewer button:not(:disabled):hover {
    background-color: rgba(255, 255, 255, 0.2);
 }
 
-#feedback-viewer #feedback-submit-button {
+#checkra-feedback-viewer #checkra-feedback-submit-button {
   position: absolute;
   bottom: 10px;
   right: 10px;
@@ -220,12 +220,12 @@
   border: none; /* Remove default border */
 }
 
-#feedback-viewer #feedback-submit-button:focus {
+#checkra-feedback-viewer #checkra-feedback-submit-button:focus {
   outline: none;
   box-shadow: 0 0 0 1px #4b5563;
 }
 
-#feedback-viewer #feedback-submit-button:disabled {
+#checkra-feedback-viewer #checkra-feedback-submit-button:disabled {
   /* Override the general disabled style to keep the blue background */
   background-color: #2563eb !important;
   /* Keep the opacity change to indicate it's disabled */
@@ -233,13 +233,13 @@
   cursor: not-allowed;
 }
 
-#feedback-viewer #feedback-submit-button span:last-child {
+#checkra-feedback-viewer #checkra-feedback-submit-button span:last-child {
   margin-left: 0;
   color: #e5e7eb;
   font-size: 10px; /* Style for shortcut hint */
 }
 
-#feedback-viewer #prompt-textarea {
+#checkra-feedback-viewer #checkra-prompt-textarea {
     width: 100%;
     padding: 10px;
     background-color: #fff;
@@ -253,7 +253,7 @@
     min-height: 60px; /* Give it a minimum height */
 }
 
-#feedback-viewer #textarea-container {
+#checkra-feedback-viewer #checkra-textarea-container {
     position: relative; /* For submit button positioning */
     margin-bottom: 15px; /* Space below textarea */
 }
@@ -271,7 +271,7 @@
   flex-shrink: 0;
 }
 
-#feedback-loading-indicator {
+#checkra-feedback-loading-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -281,7 +281,7 @@
 }
 
 /* --- Resize Handle --- */
-#feedback-viewer-resize-handle {
+#checkra-feedback-viewer-resize-handle {
   position: absolute;
   bottom: 0;
   right: 0;
@@ -295,19 +295,19 @@
   z-index: 10;
   transition: background-color 0.2s;
 }
-#feedback-viewer-resize-handle:hover {
+#checkra-feedback-viewer-resize-handle:hover {
   background-color: rgba(255, 255, 255, 0.4);
 }
 
 /* --- Action Buttons (in Header) --- */
-#feedback-action-buttons {
+#checkra-feedback-action-buttons {
   display: none; /* Initially hidden */
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-#feedback-action-buttons button {
+#checkra-feedback-action-buttons button {
    padding: 4px 10px;
    font-size: 0.8rem;
    border-radius: 0.3rem;
@@ -321,54 +321,53 @@
    gap: 5px; /* Space between text and icon */
 }
 
-/* ADDED: Style for SVGs inside action buttons */
-#feedback-action-buttons button svg {
+#checkra-feedback-action-buttons button svg {
   width: 1em; /* Size relative to font size */
   height: 1em;
   stroke: currentColor; /* Inherit button color */
 }
 
 /* Updated class for the preview/apply button */
-#feedback-action-buttons button.preview-apply-fix {
+#checkra-feedback-action-buttons button.preview-apply-fix {
   background-color: #2563eb;
 }
 
 /* ADDED: Specific hover for preview/apply button */
-#feedback-action-buttons button.preview-apply-fix:hover:not(:disabled) {
+#checkra-feedback-action-buttons button.preview-apply-fix:hover:not(:disabled) {
   background-color: #1d4ed8; /* Darker blue */
   opacity: 1; /* Override general hover opacity if needed */
 }
 
 /* ADDED Cancel Button Style */
-#feedback-action-buttons button.cancel-fix {
+#checkra-feedback-action-buttons button.cancel-fix {
    background-color: transparent;
    border: 1px solid #777; /* Grey border */
    color: #ccc;
 }
-#feedback-action-buttons button.cancel-fix:hover:not(:disabled) { /* Added :not(:disabled) */
+#checkra-feedback-action-buttons button.cancel-fix:hover:not(:disabled) { /* Added :not(:disabled) */
    background-color: rgba(150, 150, 150, 0.2);
    border-color: #999;
    opacity: 1; /* Override general hover opacity */
 }
 
 /* General hover - remove background color change to avoid conflict */
-#feedback-action-buttons button:hover:not(:disabled) {
+#checkra-feedback-action-buttons button:hover:not(:disabled) {
    opacity: 0.85;
    /* REMOVED: background-color: rgba(255, 255, 255, 0.2); */
 }
-#feedback-action-buttons button:disabled {
+#checkra-feedback-action-buttons button:disabled {
    opacity: 0.5;
    cursor: not-allowed;
    /* Keep specific background for preview/apply even when disabled */
    /* background-color: rgba(255, 255, 255, 0.1) !important; */
 }
 /* Ensure disabled preview/apply keeps its blue but dimmed */
-#feedback-action-buttons button.preview-apply-fix:disabled {
+#checkra-feedback-action-buttons button.preview-apply-fix:disabled {
   background-color: #2563eb !important;
   opacity: 0.5;
 }
 /* Ensure disabled cancel keeps its transparent style */
-#feedback-action-buttons button.cancel-fix:disabled {
+#checkra-feedback-action-buttons button.cancel-fix:disabled {
   background-color: transparent !important;
   border: 1px solid #777;
   color: #ccc;
@@ -376,7 +375,7 @@
 }
 
 /* ADDED: Styles for the code block copy button */
-#feedback-response-content .streamed-content pre .code-copy-btn {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn {
   position: absolute;
   top: 4px; /* Adjust as needed */
   right: 4px; /* Adjust as needed */
@@ -399,38 +398,38 @@
 }
 
 /* ADDED: Show button on pre hover */
-#feedback-response-content .streamed-content pre:hover .code-copy-btn {
+#checkra-feedback-response-content .checkra-streamed-content pre:hover .checkra-code-copy-btn {
   opacity: 0.8; /* Show with slight transparency */
   visibility: visible; /* Make visible */
 }
 
 /* ADDED: Make fully opaque on button hover (when already visible) */
-#feedback-response-content .streamed-content pre .code-copy-btn:hover {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn:hover {
   background-color: rgba(80, 120, 200, 0.9);
   color: white;
   opacity: 1;
 }
 
-#feedback-response-content .streamed-content pre .code-copy-btn svg {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn svg {
   width: 12px; /* Adjust icon size */
   height: 12px;
   stroke: currentColor;
 }
 
-#feedback-response-content .streamed-content pre .code-copy-btn.copied {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn.copied {
   background-color: rgba(50, 180, 50, 0.9); /* Green background */
   color: white;
   opacity: 1;
 }
 
 /* ADDED: Style for the checkmark icon inside the copy button */
-#feedback-response-content .streamed-content pre .code-copy-btn.copied svg.copy-icon {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn.copied svg.copy-icon {
   display: none; /* Hide original copy icon */
 }
-#feedback-response-content .streamed-content pre .code-copy-btn svg.check-icon {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn svg.check-icon {
   display: none; /* Hide check icon by default */
 }
-#feedback-response-content .streamed-content pre .code-copy-btn.copied svg.check-icon {
+#checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn.copied svg.check-icon {
   display: inline-block; /* Show check icon when copied */
   width: 14px;
   height: 14px;

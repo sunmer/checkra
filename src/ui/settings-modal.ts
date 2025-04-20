@@ -30,7 +30,7 @@ class SettingsModal {
     }
 
     this.modalContainer = document.createElement('div');
-    this.modalContainer.id = 'settings-modal-container';
+    this.modalContainer.id = 'checkra-settings-modal-container';
     this.modalContainer.style.position = 'fixed';
     this.modalContainer.style.top = '50%';
     this.modalContainer.style.left = '50%';
@@ -82,7 +82,7 @@ class SettingsModal {
     selectLabel.htmlFor = 'ai-model-select';
 
     this.modelSelect = document.createElement('select');
-    this.modelSelect.id = 'ai-model-select';
+    this.modelSelect.id = 'checkra-ai-model-select';
     this.modelSelect.style.width = '100%';
     this.modelSelect.style.padding = '8px';
     this.modelSelect.style.borderRadius = '4px';

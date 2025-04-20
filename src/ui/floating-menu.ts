@@ -25,12 +25,12 @@ export class FloatingMenu {
    * Returns true if created successfully or already existed, false otherwise.
    */
   public create(): boolean {
-    if (this.isCreated || document.getElementById('floating-menu-container')) {
+    if (this.isCreated || document.getElementById('checkra-floating-menu-container')) {
       this.isCreated = true;
-      this.bottomContainer = document.getElementById('floating-menu-container') as HTMLDivElement | null;
+      this.bottomContainer = document.getElementById('checkra-floating-menu-container') as HTMLDivElement | null;
       if (this.bottomContainer) {
-          this.feedbackButton = this.bottomContainer.querySelector('#show-feedback-viewer');
-          this.settingsButton = this.bottomContainer.querySelector('#show-settings-modal');
+          this.feedbackButton = this.bottomContainer.querySelector('#checkra-show-feedback-viewer');
+          this.settingsButton = this.bottomContainer.querySelector('#checkra-show-settings-modal');
       }
       console.log('[FloatingMenu] Already created or found existing element.');
       return true;
@@ -43,7 +43,7 @@ export class FloatingMenu {
 
     // Create bottom container for feedback button
     this.bottomContainer = document.createElement('div');
-    this.bottomContainer.id = 'floating-menu-container';
+    this.bottomContainer.id = 'checkra-floating-menu-container';
     this.bottomContainer.style.position = 'fixed';
     this.bottomContainer.style.bottom = '10px';
     this.bottomContainer.style.left = '10px';
@@ -59,7 +59,7 @@ export class FloatingMenu {
 
     // Create Feedback button (SVG)
     this.feedbackButton = document.createElement('span');
-    this.feedbackButton.id = 'show-feedback-viewer';
+    this.feedbackButton.id = 'checkra-show-feedback-viewer';
     this.feedbackButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
       <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
@@ -93,7 +93,7 @@ export class FloatingMenu {
 
     // Create Settings button (SVG)
     this.settingsButton = document.createElement('span');
-    this.settingsButton.id = 'show-settings-modal';
+    this.settingsButton.id = 'checkra-show-settings-modal';
     this.settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>`;
     this.settingsButton.title = 'Open Settings';
 

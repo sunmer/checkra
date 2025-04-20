@@ -76,7 +76,7 @@ export class FeedbackViewerDOM {
         if (this.elements) return this.elements;
 
         const viewer = document.createElement('div');
-        viewer.id = 'feedback-viewer';
+        viewer.id = 'checkra-feedback-viewer';
 
         const initialWidth = DEFAULT_WIDTH;
         const initialHeight = DEFAULT_HEIGHT;
@@ -93,7 +93,7 @@ export class FeedbackViewerDOM {
 
         // --- Header ---
         const responseHeader = document.createElement('div');
-        responseHeader.id = 'feedback-response-header';
+        responseHeader.id = 'checkra-feedback-response-header';
 
         const responseTitle = document.createElement('h4');
         responseTitle.textContent = 'Feedback Response';
@@ -104,7 +104,7 @@ export class FeedbackViewerDOM {
         responseHeader.appendChild(responseTitle);
 
         const loadingIndicator = document.createElement('div');
-        loadingIndicator.id = 'feedback-loading-indicator';
+        loadingIndicator.id = 'checkra-feedback-loading-indicator';
         loadingIndicator.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
           <span id="feedback-loading-indicator-text">Getting feedback...</span>
@@ -114,7 +114,7 @@ export class FeedbackViewerDOM {
 
         // --- Action Buttons (in Header) ---
         const actionButtonsContainer = document.createElement('div');
-        actionButtonsContainer.id = 'feedback-action-buttons';
+        actionButtonsContainer.id = 'checkra-feedback-action-buttons';
 
         const previewApplyButton = document.createElement('button');
         previewApplyButton.innerHTML = `
@@ -138,7 +138,7 @@ export class FeedbackViewerDOM {
 
         // --- Content Wrapper ---
         const contentWrapper = document.createElement('div');
-        contentWrapper.id = 'feedback-content-wrapper';
+        contentWrapper.id = 'checkra-feedback-content-wrapper';
 
         const promptTitle = document.createElement('h4');
         promptTitle.textContent = '"' + this.originalPromptTitleText + '"';
@@ -152,16 +152,16 @@ export class FeedbackViewerDOM {
         contentWrapper.appendChild(promptTitle);
 
         const textareaContainer = document.createElement('div');
-        textareaContainer.id = 'textarea-container';
+        textareaContainer.id = 'checkra-textarea-container';
 
         const promptTextarea = document.createElement('textarea');
-        promptTextarea.id = 'prompt-textarea';
+        promptTextarea.id = 'checkra-prompt-textarea';
         promptTextarea.rows = 4;
         promptTextarea.placeholder = 'e.g., "How can I improve the conversion of this page?"';
         textareaContainer.appendChild(promptTextarea);
 
         const submitButton = document.createElement('button');
-        submitButton.id = 'feedback-submit-button';
+        submitButton.id = 'checkra-feedback-submit-button';
         const submitButtonTextSpan = document.createElement('span');
         submitButtonTextSpan.textContent = 'Get Feedback';
         submitButton.appendChild(submitButtonTextSpan);
@@ -175,7 +175,7 @@ export class FeedbackViewerDOM {
 
         // --- Response Area ---
         const responseContent = document.createElement('div');
-        responseContent.id = 'feedback-response-content';
+        responseContent.id = 'checkra-feedback-response-content';
         responseContent.style.wordWrap = 'break-word';
         responseContent.style.fontFamily = 'inherit';
         responseContent.style.fontSize = '14px';
@@ -187,7 +187,7 @@ export class FeedbackViewerDOM {
 
         // --- Resize Handle ---
         const resizeHandle = document.createElement('div');
-        resizeHandle.id = 'feedback-viewer-resize-handle';
+        resizeHandle.id = 'checkra-feedback-viewer-resize-handle';
         resizeHandle.addEventListener('mousedown', this.handleResizeStart);
         viewer.appendChild(resizeHandle);
 
@@ -340,18 +340,18 @@ export class FeedbackViewerDOM {
         const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
         responseContent.style.display = 'block';
-        responseContent.innerHTML = `<div class="streamed-content">${html}</div>`;
+        responseContent.innerHTML = `<div class="checkra-streamed-content">${html}</div>`;
 
-        const preElements = responseContent.querySelectorAll('.streamed-content pre');
+        const preElements = responseContent.querySelectorAll('.checkra-streamed-content pre');
 
         preElements.forEach(pre => {
-            if (pre.querySelector('.code-copy-btn')) {
+            if (pre.querySelector('.checkra-code-copy-btn')) {
                 return;
             }
             (pre as HTMLElement).style.position = 'relative';
 
             const copyButton = document.createElement('button');
-            copyButton.className = 'code-copy-btn';
+            copyButton.className = 'checkra-code-copy-btn';
             copyButton.innerHTML = `
                 <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                 <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -482,7 +482,7 @@ export class FeedbackViewerDOM {
 
         console.log('[FeedbackViewerDOM] Creating new fix wrapper.');
         this.injectedFixWrapper = document.createElement('div');
-        this.injectedFixWrapper.className = 'feedback-injected-fix';
+        this.injectedFixWrapper.className = 'checkra-feedback-injected-fix';
         this.injectedFixWrapper.style.position = 'relative'; // Positioned relative to offset parent
         this.injectedFixWrapper.style.boxSizing = 'border-box';
         this.injectedFixWrapper.style.zIndex = '1000'; // Below viewer/modal but above most content
@@ -508,14 +508,14 @@ export class FeedbackViewerDOM {
 
         // Create Close Button
         this.fixCloseButton = document.createElement('button');
-        this.fixCloseButton.className = 'feedback-fix-close-btn';
+        this.fixCloseButton.className = 'checkra-feedback-fix-close-btn';
         this.fixCloseButton.innerHTML = '&times;';
         this.fixCloseButton.title = 'Discard Fix';
         this.injectedFixWrapper.appendChild(this.fixCloseButton);
 
         // Create Copy Button
         this.fixCopyButton = document.createElement('button');
-        this.fixCopyButton.className = 'feedback-fix-copy-btn';
+        this.fixCopyButton.className = 'checkra-feedback-fix-copy-btn';
         this.fixCopyButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
         this.fixCopyButton.title = 'Copy Screenshot';
         this.injectedFixWrapper.appendChild(this.fixCopyButton);

@@ -96,35 +96,6 @@
     }
   </script>
 
-  <style>
-    /* Define the glow animation */
-    @keyframes radiateGlow {
-      0% {
-        /* Start with a larger, slightly blurred blue glow */
-        box-shadow: 0 0 4px 2px rgba(59, 130, 246, 0.5), 0 0 8px 3px rgba(37, 99, 235, 0.4);
-      }
-
-      50% {
-        /* Pulse to a brighter, larger blue glow */
-        box-shadow: 0 0 10px 4px rgba(59, 130, 246, 0.8), 0 0 18px 6px rgba(37, 99, 235, 0.6);
-      }
-
-      100% {
-        /* Return to the larger, slightly blurred blue glow */
-        box-shadow: 0 0 4px 2px rgba(59, 130, 246, 0.5), 0 0 8px 3px rgba(37, 99, 235, 0.4);
-      }
-    }
-
-    /* Apply the animation to the floating menu container */
-    #floating-menu-container {
-      /* Ensure the shadow isn't clipped if the container itself has overflow hidden */
-      overflow: visible !important;
-      /* Apply the animation */
-      animation: radiateGlow 2.5s infinite ease-in-out;
-      /* Make sure it stays above other elements */
-      z-index: 1000 !important;
-    }
-  </style>
 </head>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-258DRQTY3V"></script>
@@ -490,8 +461,8 @@ const checkra = initCheckra({
   </script>
 
   <!-- Prompt for the Checkra button -->
-  <div id="checkra-prompt" style="position: fixed; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 8px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none;">
-    Try Checkra 👇
+  <div id="checkra-prompt" style="position: fixed; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none;">
+    👇&nbsp;&nbsp;Try Checkra
   </div>
   <script>
       const promptElement = document.getElementById('checkra-prompt');
@@ -507,8 +478,7 @@ const checkra = initCheckra({
           if (mutation.type === 'childList') {
             for (const node of mutation.addedNodes) {
               // Check if the added node *is* #feedback-viewer or *contains* it
-              if (node.nodeType === 1 && (node.id === 'feedback-viewer' || node.querySelector('#feedback-viewer'))) {
-                console.log('#feedback-viewer detected in DOM, removing prompt.');
+              if (node.nodeType === 1 && (node.id === 'checkra-feedback-viewer' || node.querySelector('#checkra-feedback-viewer'))) {
                 if (promptElement) {
                   promptElement.remove(); // Remove the prompt
                 }

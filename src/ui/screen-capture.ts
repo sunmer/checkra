@@ -19,9 +19,19 @@ class ScreenCapture {
   private isCapturing: boolean = false;
   private overlay: HTMLDivElement | null = null;
   private currentHighlight: HTMLElement | null = null;
+  private originalPosition: string | null = null;
+  private originalZIndex: string | null = null;
 
   private cleanup(): void {
     console.log('[ScreenCapture] Cleaning up...');
+    if (this.currentHighlight) {
+        console.log(`[ScreenCapture Cleanup] Attempting to remove highlight styles from element:`, this.currentHighlight.id || this.currentHighlight.tagName);
+        if (this.currentHighlight.id === 'checkra-floating-menu-container') {
+             console.warn('[ScreenCapture Cleanup] !!! Removing highlight from floating menu container !!!');
+        }
+    } else {
+        console.log('[ScreenCapture Cleanup] No element was highlighted, nothing to remove styles from.');
+    }
     document.body.classList.remove('capturing-mode');
 
     // Remove event listeners
@@ -54,26 +64,72 @@ class ScreenCapture {
   }
 
   private highlightElement(element: HTMLElement | null): void {
-    // Remove previous highlight first
+    // --- Remove previous highlight ---
     if (this.currentHighlight) {
-      this.currentHighlight.style.removeProperty('outline');
-      this.currentHighlight.style.removeProperty('position');
-      this.currentHighlight.style.removeProperty('z-index');
-      this.currentHighlight = null; // Clear the reference
-    }
+      const targetElement = this.currentHighlight; // Capture ref for logging
+      const targetId = targetElement.id || targetElement.tagName;
+      console.log(`[ScreenCapture Highlight] Attempting to restore original styles for previous element: ${targetId}`);
+      if (targetId === 'checkra-floating-menu-container') {
+          console.warn('[ScreenCapture Highlight] !!! Restoring original styles for floating menu container !!!');
+      }
 
-    // If the new element is null, just return (overlay check removed as it's not added)
+      targetElement.style.removeProperty('outline');
+
+      // --- Restore Position ---
+      const positionToRestore = this.originalPosition; // Capture value for logging
+      console.log(`[ScreenCapture Highlight] Previous element (${targetId}) had stored originalPosition: "${positionToRestore}"`);
+      if (positionToRestore !== null) {
+        console.log(`[ScreenCapture Highlight] --> Setting ${targetId}.style.position = "${positionToRestore}"`);
+        targetElement.style.position = positionToRestore;
+      } else {
+        console.log(`[ScreenCapture Highlight] --> Removing inline position from ${targetId}`);
+        targetElement.style.removeProperty('position');
+      }
+
+      // --- Restore Z-Index ---
+      const zIndexToRestore = this.originalZIndex; // Capture value for logging
+      console.log(`[ScreenCapture Highlight] Previous element (${targetId}) had stored originalZIndex: "${zIndexToRestore}"`);
+      if (zIndexToRestore !== null) {
+        console.log(`[ScreenCapture Highlight] --> Setting ${targetId}.style.zIndex = "${zIndexToRestore}"`);
+        targetElement.style.zIndex = zIndexToRestore;
+      } else {
+        console.log(`[ScreenCapture Highlight] --> Removing inline z-index from ${targetId}`);
+        targetElement.style.removeProperty('z-index');
+      }
+
+      // --- Reset ---
+      this.currentHighlight = null;
+      this.originalPosition = null;
+      this.originalZIndex = null;
+      console.log(`[ScreenCapture Highlight] Finished restoring for ${targetId}.`);
+    }
+    // --- End remove previous highlight ---
+
+    // If the new element is null, just return
     if (!element) {
+      console.log('[ScreenCapture Highlight] Called with null element (end of highlight/cleanup).');
       return;
     }
 
-    // Set the current element as the highlighted one
+    // --- Apply new highlight ---
     this.currentHighlight = element;
+    const currentId = this.currentHighlight.id || this.currentHighlight.tagName;
+    console.log(`[ScreenCapture Highlight] Highlighting new element: ${currentId}`);
+     if (currentId === 'checkra-floating-menu-container') {
+         console.warn('[ScreenCapture Highlight] !!! Highlighting floating menu container !!!');
+     }
 
-    // Apply highlighting styles - bring element above other page elements
+    // --- Store original styles BEFORE applying highlight ---
+    this.originalPosition = element.style.position || null;
+    this.originalZIndex = element.style.zIndex || null;
+    console.log(`[ScreenCapture Highlight] Stored original styles for ${currentId} - Position: "${this.originalPosition}", Z-Index: "${this.originalZIndex}"`);
+
+    // --- Apply highlighting styles ---
     element.style.outline = '2px solid #0095ff';
-    element.style.position = 'relative'; // Needed for z-index to work reliably
-    element.style.zIndex = '101'; // High z-index to appear above most elements
+    element.style.position = 'relative';
+    element.style.zIndex = '101';
+    console.log(`[ScreenCapture Highlight] Applied highlight styles to ${currentId}`);
+    // --- End apply new highlight ---
   }
 
   /**
@@ -166,7 +222,7 @@ class ScreenCapture {
       // Define the click listener function
       this.clickListener = async (event: MouseEvent) => {
         const target = event.target as HTMLElement;
-        const floatingMenu = document.getElementById('floating-menu-container');
+        const floatingMenu = document.getElementById('checkra-floating-menu-container');
 
         // Ignore clicks on the floating menu (overlay check removed)
         if (floatingMenu && floatingMenu.contains(target)) {
@@ -194,14 +250,46 @@ class ScreenCapture {
         }
         // --- End get background color ---
 
-        // --- Explicitly remove highlight styles BEFORE cleanup and outerHTML ---
+        // --- Explicitly restore styles BEFORE cleanup and outerHTML ---
         if (selectedElement) {
-            console.log('[ScreenCapture] Explicitly removing highlight styles before capture.');
+            const targetId = selectedElement.id || selectedElement.tagName;
+            console.log(`[ScreenCapture Click] Attempting to restore styles for clicked/highlighted element before cleanup: ${targetId}`);
+             if (targetId === 'checkra-floating-menu-container') {
+                 console.warn('[ScreenCapture Click] !!! Restoring styles for floating menu container in click listener !!!');
+             }
+
             selectedElement.style.removeProperty('outline');
-            selectedElement.style.removeProperty('position');
-            selectedElement.style.removeProperty('z-index');
+
+            // --- Restore Position ---
+            const positionToRestore = this.originalPosition;
+            console.log(`[ScreenCapture Click] Clicked element (${targetId}) had stored originalPosition: "${positionToRestore}"`);
+            if (positionToRestore !== null) {
+               console.log(`[ScreenCapture Click] --> Setting ${targetId}.style.position = "${positionToRestore}"`);
+               selectedElement.style.position = positionToRestore;
+            } else {
+               console.log(`[ScreenCapture Click] --> Removing inline position from ${targetId}`);
+               selectedElement.style.removeProperty('position');
+            }
+
+            // --- Restore Z-Index ---
+            const zIndexToRestore = this.originalZIndex;
+             console.log(`[ScreenCapture Click] Clicked element (${targetId}) had stored originalZIndex: "${zIndexToRestore}"`);
+            if (zIndexToRestore !== null) {
+               console.log(`[ScreenCapture Click] --> Setting ${targetId}.style.zIndex = "${zIndexToRestore}"`);
+               selectedElement.style.zIndex = zIndexToRestore;
+            } else {
+               console.log(`[ScreenCapture Click] --> Removing inline z-index from ${targetId}`);
+               selectedElement.style.removeProperty('z-index');
+            }
+
+            // --- Reset stored originals ---
+            this.originalPosition = null;
+            this.originalZIndex = null;
+            console.log(`[ScreenCapture Click] Finished restoring for ${targetId} in click listener.`);
+        } else {
+             console.log('[ScreenCapture Click] No element was highlighted when click occurred.');
         }
-        // --- End explicit removal ---
+        // --- End explicit restoration ---
 
         // Store callback before cleanup
         const callbackToExecute = this.captureCallback;
@@ -270,6 +358,10 @@ class ScreenCapture {
         } catch (callbackError) {
           console.error('[ScreenCapture] Error executing the capture callback:', callbackError);
         }
+
+        // Call cleanup AFTER restoring styles
+        console.log('[ScreenCapture Click] Proceeding to cleanup()...');
+        this.cleanup();
       };
 
       // Add the click listener with capture: true
@@ -314,7 +406,7 @@ class ScreenCapture {
 // Ensure this runs only once or check if style already exists
 if (!document.getElementById('screen-capture-styles')) {
   const style = document.createElement('style');
-  style.id = 'screen-capture-styles'; // Give it an ID to check for existence
+  style.id = 'checkra-screen-capture-styles'; // Give it an ID to check for existence
   style.textContent = `
     body.capturing-mode, body.capturing-mode * {
       cursor: crosshair !important;
