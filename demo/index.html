@@ -10,7 +10,7 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Checkra - PreProd Test</title>
+  <title>Checkra - Improve UX and conversions with instant AI feedback</title>
   <meta name="description" content="Improve UX and conversions with instant AI feedback">
 
   <meta property="og:type" content="website" />
@@ -147,7 +147,9 @@
     } else { // isProductionLike (or static hosting)
       // PRODUCTION-LIKE / STATIC: Fallback to loading from CDN (unpkg)
       console.log('[Checkra Loader] Production-like mode: Loading from CDN.');
-      const version = '1.0.5'; // Specify the version you want to load, maybe read from package.json?
+      // Use the version injected by Vite build
+      const version = import.meta.env.PACKAGE_VERSION || 'latest'; // Fallback to 'latest' if undefined
+      console.log(`[Checkra Loader] Using version: ${version}`);
       loadStyle(`https://unpkg.com/checkra@${version}/dist/style.css`);
       // *** CORRECTION HERE: Use the correct UMD filename from unpkg ***
       loadScript(`https://unpkg.com/checkra@${version}/dist/checkra.umd.cjs`)
@@ -314,7 +316,7 @@
                 <h3 class="mt-5 font-medium text-lg text-white">Improve UX & Conversion</h3>
                 <p class="mt-1 text-neutral-400">
                   Building alone is hard. Checkra's AI reveals blind spots such as unclear UI, missing instructions, or confusing
-                  features – without leaving your website. Don't let your side project fail because of simple oversights.
+                  features – without leaving your website. Don't let your side project fail because of simple oversights.
                 </p>
               </div>
             </div>

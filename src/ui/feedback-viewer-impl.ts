@@ -666,11 +666,13 @@ export class FeedbackViewerImpl {
 
       try {
         extractedHtml = this.postprocessHtmlFromAI(extractedHtml);
-              // Attempt to parse and re-serialize to ensure it's valid outerHTML
+              // Attempt to parse to ensure it's somewhat valid, BUT store the
+              // original post-processed string to avoid potential loss during re-serialization.
               const tempElement = this.createElementFromHTML(extractedHtml);
               if (tempElement) {
-                  this.fixedOuterHTMLForCurrentCycle = tempElement.outerHTML;
-                  console.log(`[FeedbackViewerLogic] Stored postprocessed fixed HTML for Fix ID: ${this.currentFixId}`);
+                  // STORE THE POST-PROCESSED STRING DIRECTLY
+                  this.fixedOuterHTMLForCurrentCycle = extractedHtml;
+                  console.log(`[FeedbackViewerLogic] Stored postprocessed fixed HTML (direct) for Fix ID: ${this.currentFixId}`);
         } else {
                    console.warn('[FeedbackViewerLogic] Failed to parse extracted HTML into a valid element. Fix may not be applicable.');
                    this.fixedOuterHTMLForCurrentCycle = null; // Ensure it's null if invalid

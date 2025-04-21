@@ -1,6 +1,13 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
+import fs from 'fs';
+import path from 'path';
+
+// Read package.json to get the version
+const packageJsonPath = resolve(__dirname, 'package.json');
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+const currentVersion = packageJson.version;
 
 export default defineConfig(({ command, mode }) => {
   // console.log(`Vite Config - Command: ${command}, Mode: ${mode}`); // Optional: for debugging
@@ -66,6 +73,10 @@ export default defineConfig(({ command, mode }) => {
           emptyOutDir: true, // Clean the demo-dist directory before building
           sourcemap: true, // Generate source maps for the demo build
           // No 'lib' configuration here - build as a standard app
+        },
+        // Define the package version as an environment variable
+        define: {
+          'import.meta.env.PACKAGE_VERSION': JSON.stringify(currentVersion)
         },
         // No dts plugin needed for demo build
         plugins: [],

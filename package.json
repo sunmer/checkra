@@ -25,7 +25,7 @@
     "dev": "vite dev demo",
     "build:lib": "vite build --mode production",
     "build:demo": "vite build --mode preprod demo",
-    "preview:demo": "vite preview --outDir demo-dist --open",
+    "preview:demo": "vite preview --mode preprod --open",
     "preprod": "npm run build:lib && npm run build:demo && npm run preview:demo",
     "publish-checkra": "npm run build:lib && npm version patch && npm publish",
     "build": "npm run build:lib",
