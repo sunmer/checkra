@@ -146,7 +146,7 @@ export class FeedbackViewerDOM {
         const promptTextarea = document.createElement('textarea');
         promptTextarea.id = 'checkra-prompt-textarea';
         promptTextarea.rows = 4;
-        promptTextarea.placeholder = 'e.g., "How can I improve the conversion of this page?"';
+        promptTextarea.placeholder = 'e.g., "How can I improve the UX or conversion of this section?"';
         textareaContainer.appendChild(promptTextarea);
 
         const submitButton = document.createElement('button');
