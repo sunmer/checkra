@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   <!-- Prompt for the Checkra button -->
   <div id="checkra-prompt" style="position: fixed; max-width: 250px; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; display: flex; align-items: flex-start;">
-    👇&nbsp;&nbsp;Click the button below and then select any part of the website
+    👇&nbsp;&nbsp;Click the button below, then select any part of the website
   </div>
 
   <script>
@@ -581,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
       const actionWord = isMobile ? 'Tap' : 'Click';
       const emojiSpan = '<span style="margin-right: 0.5em;">👇</span>';
-      const textSpan = `<span>${actionWord} the button below and then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
+      const textSpan = `<span>${actionWord} the button below, then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
 
       // Set the innerHTML
       promptElement.innerHTML = emojiSpan + textSpan;
