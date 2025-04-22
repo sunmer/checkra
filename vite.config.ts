@@ -34,7 +34,7 @@ export default defineConfig(({ command, mode }) => {
         // Building library from root
         build: {
           outDir: resolve(__dirname, 'dist'), // Output directory for library
-          cssCodeSplit: false, // Keep CSS in JS for easier consumption? Or set to true if preferred.
+          cssCodeSplit: true, // Keep CSS in JS for easier consumption? Or set to true if preferred.
           lib: {
             entry: resolve(__dirname, 'src/index.ts'), // Your library entry point
             name: 'checkra', // Global variable name for UMD build
