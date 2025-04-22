@@ -212,7 +212,9 @@ class ScreenCapture {
 
       // Set up mousemove handler to highlight elements under cursor
       this.mouseMoveListener = (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
+        // Use elementFromPoint for better accuracy in complex layouts
+        const elementAtPoint = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+        const target = elementAtPoint;
         if (target && target !== this.currentHighlight) {
           this.highlightElement(target);
         }
