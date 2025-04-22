@@ -73,6 +73,12 @@ export default defineConfig(({ command, mode }) => {
           emptyOutDir: true, // Clean the demo-dist directory before building
           sourcemap: true, // Generate source maps for the demo build
           // No 'lib' configuration here - build as a standard app
+          rollupOptions: {
+            input: {
+              main: resolve(__dirname, 'demo/index.html'),
+              privacy: resolve(__dirname, 'demo/privacy.html')
+            }
+          }
         },
         // Define the package version as an environment variable
         define: {

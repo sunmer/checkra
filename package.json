@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "vite dev demo",
     "build:lib": "vite build --mode production",
-    "build:demo": "npm run build:lib && vite build --mode preprod && cp dist/checkra.umd.cjs demo-dist/ && cp demo/privacy.html demo-dist/ && cp demo/style.css demo-dist/",
+    "build:demo": "npm run build:lib && vite build --mode preprod && cp dist/checkra.umd.cjs demo-dist/",
     "preview:demo": "vite preview --mode preprod --open",
     "preprod": "npm run build:lib && npm run build:demo && npm run preview:demo",
     "publish-checkra": "npm run build:lib && npm version patch && npm publish",
