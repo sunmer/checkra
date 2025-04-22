@@ -340,7 +340,7 @@ class ScreenCapture {
                 }
               }
             });
-            imageDataUrl = canvas.toDataURL('image/png');
+            imageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
             console.log('[ScreenCapture] html2canvas capture successful.');
           } catch (error) {
             console.error('[ScreenCapture] html2canvas capture failed:', error);
