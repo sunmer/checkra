@@ -564,29 +564,65 @@ document.addEventListener('DOMContentLoaded', () => {
   </script>
 
   <!-- Prompt for the Checkra button -->
-  <div id="checkra-prompt" style="position: fixed; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none;">
-    👇&nbsp;&nbsp;Try Checkra
+  <div id="checkra-prompt" style="position: fixed; max-width: 250px; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; display: flex; align-items: flex-start;">
+    👇&nbsp;&nbsp;Click the button below and then select any part of the website
   </div>
-  <script>
-      const promptElement = document.getElementById('checkra-prompt');
-      let observer = null;
 
-      const fadeInTimeout = setTimeout(() => {
-         if (promptElement) promptElement.style.opacity = '1';
+  <script>
+    // Combined script for dynamic text, fade-in, and removal when viewer appears
+    document.addEventListener('DOMContentLoaded', () => {
+      const promptElement = document.getElementById('checkra-prompt');
+      if (!promptElement) {
+        console.error('[Checkra Prompt] Could not find #checkra-prompt element.');
+        return;
+      }
+
+      // 1. Set dynamic text with spans for alignment
+      const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      const actionWord = isMobile ? 'Tap' : 'Click';
+      const emojiSpan = '<span style="margin-right: 0.5em;">👇</span>';
+      const textSpan = `<span>${actionWord} the button below and then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
+
+      // Set the innerHTML
+      promptElement.innerHTML = emojiSpan + textSpan;
+      console.log(`[Prompt Update] Set prompt text for ${isMobile ? 'mobile' : 'desktop'} with alignment spans.`);
+
+      // 2. Set up fade-in timeout
+      let fadeInTimeout = setTimeout(() => {
+         // Check element still exists (might have been removed by observer first)
+         const currentPrompt = document.getElementById('checkra-prompt');
+         if (currentPrompt) {
+             currentPrompt.style.opacity = '1';
+             console.log('[Checkra Prompt] Fading in.');
+         }
+         fadeInTimeout = null; // Clear timeout variable once done or cleared
       }, 1500);
 
-      // 2. Set up MutationObserver to watch for #feedback-viewer
+      // 3. Set up MutationObserver to remove prompt when viewer appears
+      let observer = null;
       const observerCallback = (mutationsList, obs) => {
+        // Check if prompt still exists before trying to remove
+        const currentPrompt = document.getElementById('checkra-prompt');
+        if (!currentPrompt) {
+            // Prompt already removed, disconnect observer if not already done
+            if (obs) obs.disconnect();
+            observer = null;
+            return;
+        }
+
         for (const mutation of mutationsList) {
           if (mutation.type === 'childList') {
             for (const node of mutation.addedNodes) {
               // Check if the added node *is* #feedback-viewer or *contains* it
               if (node.nodeType === 1 && (node.id === 'checkra-feedback-viewer' || node.querySelector('#checkra-feedback-viewer'))) {
-                if (promptElement) {
-                  promptElement.remove(); // Remove the prompt
+                console.log('[Checkra Prompt] Feedback viewer detected. Removing prompt and stopping observer.');
+                if (fadeInTimeout) {
+                    clearTimeout(fadeInTimeout); // Prevent fade-in if viewer appears first
+                    fadeInTimeout = null;
                 }
+                currentPrompt.remove(); // Remove the prompt element permanently
                 obs.disconnect(); // Stop observing once found
-                clearTimeout(fadeInTimeout); // Prevent fade-in if viewer appears first
+                observer = null;
                 return; // Exit after finding
               }
             }
@@ -598,14 +634,18 @@ document.addEventListener('DOMContentLoaded', () => {
       observer = new MutationObserver(observerCallback);
       observer.observe(document.body, { childList: true, subtree: true });
 
-      // Optional: Clean up observer if the prompt is removed some other way (e.g., page navigation)
-      // This is less critical here but good practice in complex scenarios
+      // Clean up observer and timeout on page unload
       window.addEventListener('unload', () => {
         if (observer) {
           observer.disconnect();
+          observer = null;
         }
-        clearTimeout(fadeInTimeout); // Prevent fade-in if clicked before it appears
+        if (fadeInTimeout) {
+            clearTimeout(fadeInTimeout);
+            fadeInTimeout = null;
+        }
       });
+    });
   </script>
 </body>
 
