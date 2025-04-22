@@ -874,7 +874,6 @@ export class FeedbackViewerImpl {
                 button.className = 'feedback-fix-toggle';
                 button.innerHTML = HIDE_FIX_SVG; // Icon to toggle TO original
                 button.title = 'Toggle Original Version';
-                button.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // Active color
                 break;
         }
         return button;

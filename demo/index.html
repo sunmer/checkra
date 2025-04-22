@@ -137,10 +137,10 @@
       // - 'npm run preview:demo' serves the 'demo-dist' directory.
       // - Therefore, from 'demo-dist/index.html', the path to the library build output
       //   in the 'dist' folder is indeed '../dist/'.
-      loadStyle('../dist/style.css'); // Assuming your build produces this CSS file
+      loadStyle('./style.css'); // Load from demo-dist root
 
       // *** CORRECTION HERE: Use the correct UMD filename from vite.config.ts ***
-      loadScript('../dist/checkra.umd.cjs')
+      loadScript('./checkra.umd.cjs') // Load from demo-dist root
         .then(initializeCheckra)
         .catch(err => console.error('[Checkra Loader] Failed to load preprod script:', err));
 
