@@ -9,13 +9,6 @@ const MIN_HEIGHT = 220;
 const MAX_WIDTH_VW = 80;
 // const MAX_HEIGHT_VH = 60; // << REMOVE or comment out (no longer used)
 
-// --- Helper to detect mobile/touch devices ---
-function isMobileDevice(): boolean {
-    // Check for touch events OR max-touch-points (more modern check)
-    // Consider also navigator.userAgentData.mobile for future proofing if needed
-    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-}
-
 export interface FeedbackViewerElements {
     viewer: HTMLDivElement;
     promptTextarea: HTMLTextAreaElement;
@@ -90,9 +83,7 @@ export class FeedbackViewerDOM {
 
         // --- BEGIN EDIT ---
         // Only attach drag listener on non-mobile devices
-        if (!isMobileDevice()) {
-            viewer.addEventListener('mousedown', this.handleDragStart);
-        }
+        viewer.addEventListener('mousedown', this.handleDragStart); // Attach drag listener unconditionally
         // --- END EDIT ---
 
         // --- Header ---
@@ -272,17 +263,8 @@ export class FeedbackViewerDOM {
 
         // --- BEGIN EDIT ---
         // Attempt to focus the textarea
-        if (isMobileDevice()) {
-            // On mobile, delay focus slightly as browsers might ignore immediate programmatic focus
-            setTimeout(() => {
-                if (this.elements) { // Check if elements still exist after delay
-                    this.elements.promptTextarea.focus();
-                }
-            }, 100); // 100ms delay, adjust if needed
-        } else {
-            // On desktop, focus immediately
-            promptTextarea.focus();
-        }
+        // Focus immediately on all devices
+        promptTextarea.focus();
         // --- END EDIT ---
     }
 
@@ -537,14 +519,6 @@ export class FeedbackViewerDOM {
 
     // --- Dragging Handlers ---
     private handleDragStart(e: MouseEvent): void {
-        // --- BEGIN EDIT ---
-        // Disable dragging entirely on mobile/touch devices
-        if (isMobileDevice()) {
-            return; // Exit early, allow default touch behavior (like focusing textarea)
-        }
-        // --- END EDIT ---
-
-        // --- Desktop-Only Drag Logic ---
         if (this.isResizing || !this.elements || (this.elements.resizeHandle && this.elements.resizeHandle.contains(e.target as Node))) return;
 
         // Check if the click target is within an interactive element that shouldn't start drag
@@ -578,10 +552,7 @@ export class FeedbackViewerDOM {
     }
 
     private handleDragMove(e: MouseEvent): void {
-        // --- BEGIN EDIT ---
-        // Also prevent move updates on mobile (safety check)
-        if (isMobileDevice() || !this.isDragging || !this.elements) return;
-        // --- END EDIT ---
+        if (!this.isDragging || !this.elements) return; // Keep original check
 
         const dx = e.clientX - this.dragStartX;
         const dy = e.clientY - this.dragStartY;
@@ -590,10 +561,7 @@ export class FeedbackViewerDOM {
     }
 
     private handleDragEnd(): void {
-        // --- BEGIN EDIT ---
-        // Also prevent end logic on mobile (safety check)
-        if (isMobileDevice() || !this.isDragging || !this.elements) return;
-        // --- END EDIT ---
+        if (!this.isDragging || !this.elements) return; // Keep original check
 
         this.isDragging = false;
         this.elements.viewer.classList.remove('dragging');
@@ -603,12 +571,6 @@ export class FeedbackViewerDOM {
 
     // --- Resizing Handlers ---
     private handleResizeStart(e: MouseEvent): void {
-        // --- Optional Edit: Consider disabling resizing on mobile too? ---
-        // if (isMobileDevice()) {
-        //     return;
-        // }
-        // --- End Optional Edit ---
-
         if (!this.elements) return;
         e.preventDefault();
         e.stopPropagation();
@@ -625,9 +587,6 @@ export class FeedbackViewerDOM {
     }
 
     private handleResizeMove(e: MouseEvent): void {
-        // --- Optional Edit: Consider disabling resizing on mobile too? ---
-        // if (isMobileDevice() || !this.isResizing || !this.elements) return;
-        // --- End Optional Edit ---
         if (!this.isResizing || !this.elements) return; // Keep original check
 
         const dx = e.clientX - this.resizeStartX;
@@ -646,9 +605,6 @@ export class FeedbackViewerDOM {
     }
 
     private handleResizeEnd(): void {
-        // --- Optional Edit: Consider disabling resizing on mobile too? ---
-        // if (isMobileDevice() || !this.isResizing || !this.elements) return;
-        // --- End Optional Edit ---
         if (!this.isResizing || !this.elements) return; // Keep original check
 
         this.isResizing = false;
