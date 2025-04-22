@@ -2,6 +2,54 @@ import Settings from '../settings';
 import { feedbackViewer } from '../ui/feedback-viewer';
 import { getEffectiveApiKey } from '../core/index'; // Import the getter
 
+interface PageMetadata {
+    title: string | null;
+    description: string | null;
+    ogTitle: string | null;
+    url: string;
+    language: string | null;
+    h1: string | null;
+    viewport: {
+        width: number;
+        height: number;
+    };
+}
+
+/**
+ * Gathers metadata from the current page.
+ */
+const getPageMetadata = (): PageMetadata => { // Use the new type
+    const metadata: Partial<PageMetadata> = {}; // Use Partial for initialization
+
+    // 1. Title
+    metadata.title = document.title || null;
+
+    // 2. Meta Description
+    const descriptionTag = document.querySelector('meta[name="description"]');
+    metadata.description = descriptionTag ? descriptionTag.getAttribute('content') : null;
+
+    // 3. OG Title
+    const ogTitleTag = document.querySelector('meta[property="og:title"]');
+    metadata.ogTitle = ogTitleTag ? ogTitleTag.getAttribute('content') : null;
+
+    // 4. Viewport Size
+    metadata.viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+    };
+
+    // --- Added Metadata ---
+    metadata.url = window.location.href;
+    metadata.language = document.documentElement.lang || null;
+    const h1Tag = document.querySelector('h1');
+    metadata.h1 = h1Tag ? h1Tag.textContent?.trim() || null : null;
+    // --- End Added Metadata ---
+
+
+    // Type assertion since we know all properties are set (or explicitly null)
+    return metadata as PageMetadata;
+};
+
 
 /**
  * Sends feedback (including optional screenshot, optional HTML, and optional prompt) to the backend.
@@ -12,10 +60,21 @@ export const fetchFeedback = async (
     selectedHtml: string | null
 ): Promise<void> => {
   try {
-    // Construct body conditionally based on available data
-    const requestBody: { image?: string | null; prompt: string; html?: string | null } = {
+    // Gather metadata
+    const metadata = getPageMetadata();
+
+    // --- Updated Type Definition ---
+    const requestBody: {
+        image?: string | null;
+        prompt: string;
+        html?: string | null;
+        metadata: PageMetadata; // Use the updated type
+    } = {
         prompt: promptText,
+        metadata: metadata, // Include gathered metadata
     };
+    // --- End Updated Type Definition ---
+
     if (imageDataUrl) {
         requestBody.image = imageDataUrl;
     }

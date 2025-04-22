@@ -29,9 +29,8 @@ export async function copyViewportToClipboard(): Promise<void> {
         await navigator.clipboard.write([
           new ClipboardItem({ 'image/png': blob })
         ]);
-        console.log('[ClipboardUtils] Viewport image copied to clipboard successfully.');
-        // Optional: Show a brief success message to the user
-        // showTemporaryMessage('Viewport copied!');
+        
+        alert(`Screenshot copied to clipboard`);
       } catch (err) {
         console.error('[ClipboardUtils] Failed to copy blob to clipboard:', err);
         alert(`Error copying to clipboard: ${err instanceof Error ? err.message : String(err)}`);
