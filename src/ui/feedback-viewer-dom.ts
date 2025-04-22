@@ -86,7 +86,14 @@ export class FeedbackViewerDOM {
         viewer.style.display = 'none'; // Initial state
 
         // Add listener regardless, handler will check device type
-        viewer.addEventListener('mousedown', this.handleDragStart);
+        // viewer.addEventListener('mousedown', this.handleDragStart);
+
+        // --- BEGIN EDIT ---
+        // Only attach drag listener on non-mobile devices
+        if (!isMobileDevice()) {
+            viewer.addEventListener('mousedown', this.handleDragStart);
+        }
+        // --- END EDIT ---
 
         // --- Header ---
         const responseHeader = document.createElement('div');
@@ -262,7 +269,21 @@ export class FeedbackViewerDOM {
         }
 
         viewer.style.display = 'flex';
-        promptTextarea.focus();
+
+        // --- BEGIN EDIT ---
+        // Attempt to focus the textarea
+        if (isMobileDevice()) {
+            // On mobile, delay focus slightly as browsers might ignore immediate programmatic focus
+            setTimeout(() => {
+                if (this.elements) { // Check if elements still exist after delay
+                    this.elements.promptTextarea.focus();
+                }
+            }, 100); // 100ms delay, adjust if needed
+        } else {
+            // On desktop, focus immediately
+            promptTextarea.focus();
+        }
+        // --- END EDIT ---
     }
 
     public hide(): void {

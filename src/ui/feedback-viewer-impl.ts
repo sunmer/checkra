@@ -43,10 +43,7 @@ export class FeedbackViewerImpl {
   private fixIdCounter: number = 0; // Counter for generating unique IDs
   private accumulatedResponseText: string = '';
   private isStreamStarted: boolean = false;
-  private originalElementDisplayStyle: string | null = null; // For restoring after fix preview
-  private isFixPermanentlyApplied: boolean = false; // Added: Tracks if the current fix is permanent
   private isPreviewActive: boolean = false; // Tracks if preview (direct replacement) is active
-  private hasPreviewBeenShown: boolean = false; // Tracks if preview has been shown
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
 
@@ -64,8 +61,6 @@ export class FeedbackViewerImpl {
 
   // --- Listeners ---
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
-  private fixWrapperCloseButtonListener: ((event: MouseEvent) => void) | null = null;
-  private fixWrapperCopyButtonListener: ((e: MouseEvent) => void) | null = null;
 
   constructor() {
     // Bind methods used as event handlers
@@ -170,7 +165,6 @@ export class FeedbackViewerImpl {
     this.accumulatedResponseText = '';
     this.isStreamStarted = false;
     this.isPreviewActive = false;
-    this.hasPreviewBeenShown = false;
     this.fixedOuterHTMLForCurrentCycle = null; // Reset fixed HTML for the new cycle
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
@@ -255,7 +249,6 @@ export class FeedbackViewerImpl {
 
     this.accumulatedResponseText = '';
     this.isStreamStarted = false;
-    this.hasPreviewBeenShown = false;
     this.fixedOuterHTMLForCurrentCycle = null;
     // Should we revert preview if an error occurs *after* preview started? Yes.
     this.revertPreviewIfNeeded(); // Add this helper call
@@ -279,7 +272,6 @@ export class FeedbackViewerImpl {
     this.accumulatedResponseText = '';
     this.isStreamStarted = false;
     this.isPreviewActive = false; // Ensure false
-    this.hasPreviewBeenShown = false;
     // --- EDIT: Clear preview tracking state ---
     this.previewInsertedNodes = [];
     this.previewInsertionParent = null;
@@ -402,7 +394,6 @@ export class FeedbackViewerImpl {
         this.domManager.updatePreviewApplyButtonContent('Apply Fix', CHECK_ICON_SVG);
         this.domElements.cancelButton.style.display = 'inline-flex';
         this.isPreviewActive = true;
-        this.hasPreviewBeenShown = true;
         console.log(`[FeedbackViewerLogic] Preview active for ${this.currentFixId}. Element replaced with fragment.`);
 
       } catch (error) {
