@@ -177,7 +177,8 @@ export class FeedbackViewerImpl {
     // Reset UI
     this.domManager.setPromptState(true, '');
     this.domManager.updateSubmitButtonState(true, 'Get Feedback');
-    this.domManager.clearResponseContent();
+    this.domManager.clearUserMessage();
+    this.domManager.clearAIResponseContent();
     this.domManager.showPromptInputArea(true);
     this.domManager.updateLoaderVisibility(false);
     this.domManager.updateActionButtonsVisibility(false); // Hide container initially
@@ -205,7 +206,6 @@ export class FeedbackViewerImpl {
     if (!this.domManager || !this.domElements) return;
 
     if (!this.isStreamStarted) {
-      this.domManager.clearResponseContent();
       this.isStreamStarted = true;
     }
 
@@ -281,6 +281,14 @@ export class FeedbackViewerImpl {
     console.log('[FeedbackViewerLogic] Viewer hidden and state reset.');
   }
 
+  /**
+   * Renders a prepended user message (e.g., warning, info) before the AI response.
+   */
+  public renderUserMessage(html: string): void {
+      if (!this.domManager) return;
+      console.log("[FeedbackViewerLogic] Rendering prepended user message.");
+      this.domManager.renderUserMessage(html);
+  }
 
   // --- Event Handlers ---
 
@@ -326,13 +334,15 @@ export class FeedbackViewerImpl {
     this.domManager.updateSubmitButtonState(false, 'Sending...');
     this.domManager.updateLoaderVisibility(true, 'Getting feedback...');
     this.domManager.updateActionButtonsVisibility(false); // Hide during request
-    this.domManager.clearResponseContent();
+    this.domManager.clearUserMessage();
+    this.domManager.clearAIResponseContent();
     this.domManager.showPromptInputArea(false, promptText);
 
     // --- Reset response/fix state for *this* request ---
     this.accumulatedResponseText = '';
     this.isStreamStarted = false;
     this.fixedOuterHTMLForCurrentCycle = null; // Clear any previously extracted fix
+    this.domManager.clearAIResponseContent();
     this.revertPreviewIfNeeded(); // Revert any lingering preview from a previous interaction
 
     // --- Call API ---
