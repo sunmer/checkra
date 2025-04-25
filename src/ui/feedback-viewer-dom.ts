@@ -346,7 +346,7 @@ export class FeedbackViewerDOM {
 
   public setResponseContent(html: string, scrollToBottom: boolean): void {
     if (!this.elements) return;
-    const { responseContent, contentWrapper, userMessageContainer } = this.elements;
+    const { responseContent, contentWrapper } = this.elements;
 
     const scrollThreshold = 10;
     const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;

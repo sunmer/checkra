@@ -8,10 +8,19 @@ Inspect any part of your website and get helpful recommendations, all previewed 
 - 💬 **Conversion tips**: Get conversion tips on any part of your website
 - ⚙️ **Simple Integration**: Add Checkra to your site with a single script tag or npm install.
 - 🎨 **Minimal UI**: Floating button and modal interface stay out of the way until needed.
-- 🤝 **Collaborative**: Share suggestions for changes with your team (coming soon)
-- 🔌 **API Control**: Programmatically trigger feedback, settings, or destroy the instance.
 
 ## Installation
+
+### Easy Installation Using a CDN
+
+Add the following lines inside the `<head>` section of your HTML file:
+
+```html
+<!-- Inside the <head> section -->
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
+<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
+
+```
 
 ### Using npm/yarn/pnpm
 
@@ -43,50 +52,6 @@ if (checkraInstance) {
     });
   }
 }
-```
-
-### Using CDN (UMD)
-
-Add the following lines inside the `<head>` section of your HTML file:
-
-```html
-<!-- Inside the <head> section -->
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
-<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
-<!-- Replace 'latest' with a specific version for production -->
-
-<script>
-  // Optional: Configure Checkra directly via window.CheckraOptions
-  // The library reads this *before* initializing if found.
-  window.CheckraOptions = {
-    isVisible: true // Default is true, set to false to initialize hidden
-    // Add other configuration options here if needed
-  };
-
-  // Initialize Checkra and get the API instance
-  // Checkra initializes automatically when the script loads.
-  // The 'Checkra' global variable holds the init function.
-  // Ensure the Checkra global and initCheckra function exist before calling
-  let checkraInstance = null;
-  if (window.Checkra && typeof window.Checkra.initCheckra === 'function') {
-      checkraInstance = window.Checkra.initCheckra(window.CheckraOptions);
-  } else {
-      console.error("Checkra global object or initCheckra function not found.");
-  }
-
-
-  // Example: Trigger feedback from a custom button
-  if (checkraInstance) {
-    const myButton = document.getElementById('trigger-checkra');
-    if (myButton) {
-        myButton.addEventListener('click', () => {
-            checkraInstance.showFeedback();
-        });
-    }
-  } else {
-    console.error("Failed to initialize Checkra or get instance.");
-  }
-</script>
 ```
 
 ## API
