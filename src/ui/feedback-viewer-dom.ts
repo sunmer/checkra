@@ -182,7 +182,6 @@ export class FeedbackViewerDOM {
     const responseContent = document.createElement('div');
     responseContent.id = 'checkra-feedback-response-content';
     responseContent.style.wordWrap = 'break-word';
-    responseContent.style.fontFamily = 'inherit';
     responseContent.style.fontSize = '14px';
     responseContent.style.display = 'none';
 
