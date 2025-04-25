@@ -377,8 +377,9 @@
             <div id="tabs-with-underline-2" class="css-tab-panel" role="tabpanel" aria-labelledby="tab-radio-2">
               <p class="">
                 1. Install the package using your preferred package manager.<br>
-                2. Import `initCheckra` and the CSS file in your project's entry point.<br>
-                3. Call `initCheckra()` when your application mounts or the DOM is ready.
+                2. Import `initCheckra` in your project's entry point.<br>
+                3. Include the CSS via a &lt;link&gt; tag in your HTML's &lt;head&gt; tag.<br>
+                4. Call `initCheckra()` when your application mounts or the DOM is ready.
               </p>
               <div class="code-block bg-gray-100 p-4 rounded overflow-x-auto mt-2">
                 <pre><code class="text-sm text-gray-800"># 1. Install
@@ -386,11 +387,13 @@ npm install checkra
 # or yarn add checkra
 # or pnpm add checkra
 
-# 2. Import in your main JS/TS file
-import { initCheckra } from 'checkra';
-import 'checkra/dist/style.css'; // Import the CSS
+# 2. Add CSS to HTML <head>
+&lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
 
-# 3. Initialize
+# 3. Import in your main JS/TS file
+import { initCheckra } from 'checkra';
+
+# 4. Initialize
 document.addEventListener('DOMContentLoaded', () => {
   const checkraInstance = initCheckra({
     isVisible: true // Default is true

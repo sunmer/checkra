@@ -33,6 +33,11 @@ yarn add checkra
 pnpm add checkra
 ```
 
+**Note:** When installing via a package manager, you still need to include the CSS separately. Add the following line to the `<head>` of your HTML:
+```html
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
+```
+
 **Basic Usage (ES Module):**
 
 ```javascript
