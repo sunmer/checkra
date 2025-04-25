@@ -75,9 +75,9 @@ export const fetchFeedback = async (
     };
     // --- End Updated Type Definition ---
 
-    if (imageDataUrl) {
+    /*if (imageDataUrl) { //Hasn't shown much improvement in responses yet, so we're disabling it for now.
       requestBody.image = imageDataUrl;
-    }
+    }*/
     if (selectedHtml) {
       requestBody.html = selectedHtml;
     }
