@@ -3,7 +3,7 @@ const SETTINGS_PROD = {
 };
 
 const SETTINGS_DEV = {
-  API_URL: "http://localhost:8080/api"
+  API_URL: "http://localhost:8080"
 };
 
 
