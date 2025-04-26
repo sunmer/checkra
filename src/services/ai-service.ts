@@ -55,7 +55,7 @@ const getPageMetadata = (): PageMetadata => { // Use the new type
  * Sends feedback (including optional screenshot, optional HTML, and optional prompt) to the backend.
  */
 export const fetchFeedback = async (
-  imageDataUrl: string | null,
+  _imageDataUrl: string | null,
   promptText: string,
   selectedHtml: string | null
 ): Promise<void> => {
@@ -63,21 +63,16 @@ export const fetchFeedback = async (
     // Gather metadata
     const metadata = getPageMetadata();
 
-    // --- Updated Type Definition ---
     const requestBody: {
       image?: string | null;
       prompt: string;
       html?: string | null;
-      metadata: PageMetadata; // Use the updated type
+      metadata: PageMetadata;
     } = {
       prompt: promptText,
-      metadata: metadata, // Include gathered metadata
+      metadata: metadata
     };
-    // --- End Updated Type Definition ---
 
-    /*if (imageDataUrl) { //Hasn't shown much improvement in responses yet, so we're disabling it for now.
-      requestBody.image = imageDataUrl;
-    }*/
     if (selectedHtml) {
       requestBody.html = selectedHtml;
     }
@@ -88,12 +83,9 @@ export const fetchFeedback = async (
     if (currentApiKey) {
       headers['Authorization'] = `Bearer ${currentApiKey}`;
     } else {
-      // This case should ideally not happen if initCheckra ran successfully,
-      // but log a warning just in case.
       console.warn('[Checkra Service] API key/anonymous ID not available for feedback request.');
     }
-    // --- End Add Authorization Header ---
-
+    
     const response = await fetch(`${Settings.API_URL}/checkraCompletions/suggest/feedback`, {
       method: 'POST',
       headers: headers, // Use the updated headers object
@@ -105,18 +97,16 @@ export const fetchFeedback = async (
       throw new Error(`Feedback request failed: ${response.status} ${response.statusText}`);
     }
 
-    // Stream the response
-    // Stream the response
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = ''; // Buffer to handle partial SSE messages
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       console.log(`[${new Date().toISOString()}] Received chunk:`, value);
       if (done) {
         console.log("Feedback stream complete");
-        // Process any remaining buffer content if necessary
+        
         if (buffer.trim()) {
           try {
             const lines = buffer.split('\n');

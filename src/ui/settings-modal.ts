@@ -90,7 +90,7 @@ class SettingsModal {
     this.modelSelect.style.backgroundColor = '#fff';
     this.modelSelect.style.color = '#333';
 
-    const options = ['Gemini 1.5 Pro', 'GPT-4o', 'Claude 3 Opus'];
+    const options = ['gpt-4o-mini'];
     options.forEach(optionText => {
       const option = document.createElement('option');
       option.value = optionText.toLowerCase().replace(/ /g, '-');
