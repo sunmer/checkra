@@ -1,6 +1,7 @@
 import Settings from '../settings';
 import { feedbackViewer } from '../ui/feedback-viewer';
 import { getEffectiveApiKey } from '../core/index'; // Import the getter
+import { settingsViewer, type AiSettings } from '../ui/settings-modal'; // Added settings import
 
 interface PageMetadata {
   title: string | null;
@@ -38,15 +39,11 @@ const getPageMetadata = (): PageMetadata => { // Use the new type
     height: window.innerHeight,
   };
 
-  // --- Added Metadata ---
   metadata.url = window.location.href;
   metadata.language = document.documentElement.lang || null;
   const h1Tag = document.querySelector('h1');
   metadata.h1 = h1Tag ? h1Tag.textContent?.trim() || null : null;
-  // --- End Added Metadata ---
 
-
-  // Type assertion since we know all properties are set (or explicitly null)
   return metadata as PageMetadata;
 };
 
@@ -62,15 +59,19 @@ export const fetchFeedback = async (
   try {
     // Gather metadata
     const metadata = getPageMetadata();
+    // Added: Gather AI Settings
+    const currentAiSettings = settingsViewer.getCurrentSettings();
 
     const requestBody: {
       image?: string | null;
       prompt: string;
       html?: string | null;
       metadata: PageMetadata;
+      aiSettings: AiSettings;
     } = {
       prompt: promptText,
-      metadata: metadata
+      metadata: metadata,
+      aiSettings: currentAiSettings
     };
 
     if (selectedHtml) {
@@ -88,7 +89,7 @@ export const fetchFeedback = async (
     
     const response = await fetch(`${Settings.API_URL}/checkraCompletions/suggest/feedback`, {
       method: 'POST',
-      headers: headers, // Use the updated headers object
+      headers: headers,
       body: JSON.stringify(requestBody),
     });
 

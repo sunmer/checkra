@@ -2,7 +2,7 @@ import { escapeHTML } from './utils';
 import { fetchFeedback } from '../services/ai-service';
 import { marked } from 'marked';
 import { copyViewportToClipboard } from '../utils/clipboard-utils';
-import type { FeedbackViewerElements } from './feedback-viewer-dom'; // Use type import
+import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 
 // Regex patterns for extracting HTML
@@ -276,9 +276,6 @@ export class FeedbackViewerImpl {
     this.previewInsertedNodes = [];
     this.previewInsertionParent = null;
     this.previewInsertionBeforeNode = null;
-    // --- END EDIT ---
-
-    console.log('[FeedbackViewerLogic] Viewer hidden and state reset.');
   }
 
   /**

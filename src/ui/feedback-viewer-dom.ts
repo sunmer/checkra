@@ -1,13 +1,11 @@
 import './feedback-viewer.css';
 import { escapeHTML } from './utils';
 
-// --- LocalStorage Keys & Defaults ---
 const DEFAULT_WIDTH = 450;
 const DEFAULT_HEIGHT = 220;
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 220;
 const MAX_WIDTH_VW = 80;
-// const MAX_HEIGHT_VH = 60; // << REMOVE or comment out (no longer used)
 
 export interface FeedbackViewerElements {
   viewer: HTMLDivElement;
