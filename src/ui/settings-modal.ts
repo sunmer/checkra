@@ -13,23 +13,53 @@ export class SettingsModal {
   private modalContainer: HTMLDivElement | null = null;
   private closeButton: HTMLButtonElement | null = null;
   private modelSelect: HTMLSelectElement | null = null;
-  private temperatureSelect: HTMLSelectElement | null = null;
+  private temperatureSlider: HTMLInputElement | null = null;
+  private temperatureDescriptionDisplay: HTMLParagraphElement | null = null;
 
   private currentSettings: AiSettings = {
     model: 'gpt-4o-mini',
     temperature: 0.7,
   };
 
+  // Map temperature values to descriptions - Updated for 0.0-1.2 range, step 0.2
+  private tempValueToDescription: { [key: number]: string } = {
+    0.0: "Deterministic",
+    0.2: "Focused",
+    0.4: "Creative",
+    0.6: "Imaginative",
+    0.8: "More Creative",
+    1.0: "Wild",
+    1.2: "Chaotic"
+  };
+
   // Store bound event handlers
   private boundHideModalHandler: (() => void) | null = null;
   private boundModelChangeHandler: ((event: Event) => void) | null = null;
-  private boundTempChangeHandler: ((event: Event) => void) | null = null;
+  private boundTempSliderHandler: ((event: Event) => void) | null = null;
 
   /**
    * Creates a new SettingsModal instance.
    */
-  constructor() {
-    // console.log('[SettingsModal] Constructed. DOM creation deferred until first showModal.');
+  constructor() {}
+
+  /**
+   * Removes the modal DOM elements and listeners, but preserves internal state.
+   */
+  private destroyDOM(): void {
+    this.removeListeners();
+
+    // Attempt to remove the element by ID for robustness
+    const modalElement = document.getElementById('checkra-settings-modal-container');
+    if (modalElement?.parentNode) {
+      modalElement.parentNode.removeChild(modalElement);
+    }
+
+    // Clear only DOM references, keep currentSettings
+    this.modalContainer = null;
+    this.closeButton = null;
+    this.modelSelect = null;
+    this.temperatureSlider = null;
+    this.temperatureDescriptionDisplay = null;
   }
 
   /**
@@ -114,26 +144,50 @@ export class SettingsModal {
     content.appendChild(modelLabel);
     content.appendChild(this.modelSelect);
 
-    // --- Temperature Select ---
+    // --- Temperature Slider --- // Modify this section
     const tempLabel = document.createElement('label');
-    tempLabel.textContent = 'Temperature:';
+    tempLabel.textContent = 'Creativity:'; // Updated label
     tempLabel.style.display = 'block';
     tempLabel.style.marginBottom = '5px';
     tempLabel.style.fontSize = '14px';
     tempLabel.style.marginTop = '15px';
-    tempLabel.htmlFor = 'checkra-ai-temperature-select';
+    tempLabel.htmlFor = 'checkra-ai-temperature-slider'; // Changed ID ref
 
-    this.temperatureSelect = document.createElement('select');
-    this.temperatureSelect.id = 'checkra-ai-temperature-select';
-    this.temperatureSelect.style.width = '100%';
-    this.temperatureSelect.style.padding = '8px';
-    this.temperatureSelect.style.borderRadius = '4px';
-    this.temperatureSelect.style.border = '1px solid #ccc';
-    this.temperatureSelect.style.backgroundColor = '#fff';
-    this.temperatureSelect.style.color = '#333';
+    this.temperatureSlider = document.createElement('input');
+    this.temperatureSlider.type = 'range';
+    this.temperatureSlider.id = 'checkra-ai-temperature-slider';
+    this.temperatureSlider.min = '0.0'; // Updated min
+    this.temperatureSlider.max = '1.2'; // Updated max
+    this.temperatureSlider.step = '0.2'; // Updated step
+    this.temperatureSlider.style.width = '100%';
+    this.temperatureSlider.style.cursor = 'pointer';
+
+    // Find the closest step to the current setting using updated range/step
+    const closestTempValue = this._findClosestStep(
+        this.currentSettings.temperature,
+        0.0,
+        1.2,
+        0.2
+    );
+    this.temperatureSlider.value = String(closestTempValue);
+    // Update the setting itself to the snapped value
+    this.currentSettings.temperature = closestTempValue;
+
+
+    this.temperatureDescriptionDisplay = document.createElement('p');
+    this.temperatureDescriptionDisplay.id = 'checkra-ai-temperature-description';
+    this.temperatureDescriptionDisplay.style.textAlign = 'center';
+    this.temperatureDescriptionDisplay.style.fontSize = '12px';
+    this.temperatureDescriptionDisplay.style.marginTop = '5px';
+    this.temperatureDescriptionDisplay.style.color = 'rgba(255, 255, 255, 0.8)';
+    // Initial description uses updated range/step via helper
+    this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(closestTempValue);
+
 
     content.appendChild(tempLabel);
-    content.appendChild(this.temperatureSelect);
+    content.appendChild(this.temperatureSlider); // Add slider
+    content.appendChild(this.temperatureDescriptionDisplay); // Add description display
+
 
     // --- Append major sections to modal container ---
     this.modalContainer.appendChild(header);
@@ -168,57 +222,41 @@ export class SettingsModal {
     } else {
        console.error('[SettingsModal] Cannot populate models: this.modelSelect is null.');
     }
-    
-    if (this.temperatureSelect) {
-      this.temperatureSelect.innerHTML = '';
+  }
 
-      const tempOptions = [
-        { value: 0.1, text: "0.1 - Highly Focused & Deterministic" },
-        { value: 0.35, text: "0.35 - Focused & Consistent" },
-        { value: 0.6, text: "0.6 - Balanced & Reliable" }, // Close to previous default 0.7
-        { value: 0.85, text: "0.85 - Creative & Flexible" },
-        { value: 1.1, text: "1.1 - More Creative & Diverse" },
-        { value: 1.35, text: "1.35 - Highly Creative & Exploratory" },
-        { value: 1.6, text: "1.6 - Very Experimental & Unpredictable" },
-        { value: 1.85, text: "1.85 - Maximal Randomness & Potentially Incoherent" },
-        { value: 2.0, text: "2.0 - Extremely Random & Abstract" },
-      ];
+  /**
+   * Helper to find the closest valid step for the slider.
+   */
+  private _findClosestStep(value: number, min: number, max: number, step: number): number {
+      if (value <= min) return min;
+      if (value >= max) return max;
+      // Calculate the nearest step index
+      const steps = Math.round((value - min) / step);
+      let closest = min + steps * step;
+      // Clamp to max/min just in case
+      closest = Math.min(max, Math.max(min, closest));
+      // Round to handle potential floating point inaccuracies with step
+      const precision = (step.toString().split('.')[1] || '').length;
+      return parseFloat(closest.toFixed(precision));
+  }
 
-      tempOptions.forEach(tempData => {
-        const option = document.createElement('option');
-        option.value = String(tempData.value);
-        option.textContent = tempData.text; // Use the combined text
-
-        if (Math.abs(tempData.value - this.currentSettings.temperature) < 0.01) {
-          option.selected = true;
-        }
-
-        this.temperatureSelect?.appendChild(option);
-      });
-
-       // Find the closest option value to the current setting and select it
-       let closestValue = tempOptions[0].value;
-       let minDiff = Math.abs(closestValue - this.currentSettings.temperature);
-
-       for (const tempData of tempOptions) {
-         const diff = Math.abs(tempData.value - this.currentSettings.temperature);
-         if (diff < minDiff) {
-           minDiff = diff;
-           closestValue = tempData.value;
-         }
-       }
-       this.temperatureSelect.value = String(closestValue);
-
-    } else {
-      console.error('[SettingsModal] Cannot populate temperature: this.temperatureSelect is null.');
-    }
+  /**
+   * Helper to get the description for a given temperature value.
+   * Reverted to original logic.
+   */
+  private _getTemperatureDescription(value: number): string {
+      // Use the closest step value to look up in the map, using updated range/step
+      const closestStep = this._findClosestStep(value, 0.0, 1.2, 0.2); // Updated args
+      const description = this.tempValueToDescription[closestStep] || "Unknown Setting"; // Use updated map
+      // Format the output string to include the value
+      return `${description} (${closestStep.toFixed(1)})`;
   }
 
   /**
    * Attaches event listeners to the DOM elements.
    */
   private attachListeners(): void {
-    if (!this.closeButton || !this.modelSelect || !this.temperatureSelect) {
+    if (!this.closeButton || !this.modelSelect || !this.temperatureSlider || !this.temperatureDescriptionDisplay) {
       console.error(`[SettingsModal] Cannot attach listeners: elements not found.`);
       return;
     }
@@ -230,19 +268,23 @@ export class SettingsModal {
       const selectedModel = (event.target as HTMLSelectElement).value;
       this.currentSettings.model = selectedModel;
     };
-    this.boundTempChangeHandler = (event: Event) => {
-      const selectedTemp = parseFloat((event.target as HTMLSelectElement).value);
+    this.boundTempSliderHandler = (event: Event) => {
+      const slider = event.target as HTMLInputElement;
+      const selectedTemp = parseFloat(slider.value);
       if (!isNaN(selectedTemp)) {
-        this.currentSettings.temperature = selectedTemp;
-        // console.log(`[Settings] Selected temperature: ${this.currentSettings.temperature}`);
+          this.currentSettings.temperature = selectedTemp;
+          if (this.temperatureDescriptionDisplay) {
+              this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(selectedTemp);
+          }
+          console.log(`[SettingsModal] Slider handler updated temperature to: ${this.currentSettings.temperature}`);
       } else {
-        console.warn(`[Settings] Invalid temperature value selected: ${(event.target as HTMLSelectElement).value}`);
+          console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
       }
     };
 
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
-    this.temperatureSelect.addEventListener('change', this.boundTempChangeHandler);
+    this.temperatureSlider.addEventListener('input', this.boundTempSliderHandler);
 
     // console.log(`[SettingsModal] Event listeners attached.`);
   }
@@ -259,9 +301,9 @@ export class SettingsModal {
       this.modelSelect.removeEventListener('change', this.boundModelChangeHandler);
       this.boundModelChangeHandler = null;
     }
-    if (this.temperatureSelect && this.boundTempChangeHandler) {
-      this.temperatureSelect.removeEventListener('change', this.boundTempChangeHandler);
-      this.boundTempChangeHandler = null;
+    if (this.temperatureSlider && this.boundTempSliderHandler) {
+        this.temperatureSlider.removeEventListener('input', this.boundTempSliderHandler);
+        this.boundTempSliderHandler = null;
     }
   }
 
@@ -272,25 +314,15 @@ export class SettingsModal {
     // console.log(`[SettingsModal] ENTERING showModal()`);
 
     // --- 1. Destroy any existing modal first --- //
-    // console.log(`[SettingsModal] BEFORE calling destroy() in showModal`);
-    this.destroy();
-    // console.log(`[SettingsModal] AFTER calling destroy() in showModal`);
+    this.destroyDOM();
 
     // --- 2. Create the new modal DOM --- //
-    // console.log(`[SettingsModal] BEFORE calling create() in showModal`);
     this.create();
-    // console.log(`[SettingsModal] AFTER calling create() in showModal`);
 
     // --- 3. Show the newly created modal (if creation succeeded) --- //
-    // console.log(`[SettingsModal] BEFORE showing modal (setting display)`);
     if (this.modalContainer) {
       this.modalContainer.style.display = 'block';
-      // console.log(`[SettingsModal] Fresh modal created and shown (display=block).`);
-    } else {
-      // Keep error check: Important if create() failed
-      console.error(`[SettingsModal] showModal() failed: modalContainer is null after create() call.`);
     }
-    // console.log(`[SettingsModal] EXITING showModal()`);
   }
 
   /**
@@ -299,7 +331,6 @@ export class SettingsModal {
   public hideModal(): void {
     if (this.modalContainer) {
       this.modalContainer.style.display = 'none';
-      // console.log(`[SettingsModal] Modal hidden.`);
     }
   }
 
@@ -311,37 +342,14 @@ export class SettingsModal {
     if (!this.currentSettings.model) {
       this.currentSettings.model = 'gpt-4o-mini';
     }
-    if (this.currentSettings.temperature === undefined || this.currentSettings.temperature === null || isNaN(this.currentSettings.temperature)) {
-      this.currentSettings.temperature = 0.7;
-    }
     return { ...this.currentSettings };
   }
 
   /**
-   * Destroys the settings modal, removing it from the DOM and cleaning up listeners.
+   * Destroys the settings modal completely, removing DOM, listeners, and nullifying internal state.
+   * Called by core cleanup.
    */
   public destroy(): void {
-    // console.log(`[SettingsModal] destroy() called.`);
-    this.removeListeners();
-
-    // Attempt to remove the element by ID for robustness
-    const modalElement = document.getElementById('checkra-settings-modal-container');
-    if (modalElement?.parentNode) {
-      // console.log(`[SettingsModal] Removing modal container from DOM.`);
-      modalElement.parentNode.removeChild(modalElement);
-    } else {
-      // This is expected if called before create or after a previous destroy
-      // console.log(`[SettingsModal] Modal container not found in DOM (already removed or never added).`);
-    }
-
-    // Clear references for *this* instance
-    this.modalContainer = null;
-    this.closeButton = null;
-    this.modelSelect = null;
-    this.temperatureSelect = null;
-    // Removed isCreated flag reset
-    // this.isCreated = false;
-
-    // console.log(`[SettingsModal] Instance state cleared.`); // Reduce verbosity
+    this.destroyDOM(); // First remove DOM and listeners
   }
 }

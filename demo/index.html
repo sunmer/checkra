@@ -121,6 +121,10 @@
 
     function initializeCheckra() {
       // Standard UMD initialization (for preprod/production-like)
+      if (window.CheckraInitialized) {
+        console.log('[Checkra Loader] Already initialized (UMD path), skipping.');
+        return;
+      }
       if (window.checkra && typeof window.checkra.initCheckra === 'function') {
         console.log('[Checkra Loader] Initializing Checkra (UMD)...');
         window.checkra.initCheckra({ isVisible: true });
@@ -584,16 +588,16 @@ document.addEventListener('DOMContentLoaded', () => {
   </footer>
 
   <script type="module">
+    // In DEV mode, we need to explicitly import the entry point
+    // for its auto-initialization logic to run.
     if (import.meta.env.DEV) {
       import('../src/index.ts')
-        .then(({ initCheckra }) => {
-          const checkraInstance = initCheckra({
-            isVisible: true
-          });
-        }).catch(err => {
-          console.error('[Checkra Loader] Failed to dynamically load dev module:', err);
+        .catch(err => {
+          // Add catch here in case the import itself fails
+          console.error('[Checkra Loader] Failed to dynamically load dev module entry point:', err);
         });
     }
+    // NOTE: No explicit initCheckra call here - the imported module handles it.
   </script>
 
   <!-- Prompt for the Checkra button -->

@@ -3,7 +3,7 @@ import { CheckraOptions } from './types';
 
 // Re-export core functions and types
 export { initCheckra } from './core/index';
-export type{ CheckraOptions } from './types';
+export type { CheckraOptions } from './types';
 
 // --- Auto-initialization logic ---
 
@@ -26,8 +26,8 @@ function getGlobalConfig(): CheckraOptions | undefined {
   if (typeof window !== 'undefined' && globalConfig) {
     // Merge global config with defaults, letting global config override
     return {
-        ...defaultAutoInitOptions,
-        ...globalConfig // Spread the global config object
+      ...defaultAutoInitOptions,
+      ...globalConfig // Spread the global config object
     };
   }
   // Return only defaults if no global config is found
@@ -37,27 +37,27 @@ function getGlobalConfig(): CheckraOptions | undefined {
 // Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const initialize = () => {
-      // Check if already initialized
-      if (!(window as any).CheckraInitialized) {
-          try {
-              const options = getGlobalConfig();
-              console.log('[Checkra] DOM ready, auto-initializing...');
-              initCheckra(options);
-              (window as any).CheckraInitialized = true;
-          } catch (e) {
-              console.error("[Checkra] Failed to auto-initialize:", e);
-          }
-      } else {
-          console.log("[Checkra] Already initialized, skipping auto-init.");
+    // Check if already initialized
+    if (!(window as any).CheckraInitialized) {
+      try {
+        const options = getGlobalConfig();
+        console.log('[Checkra] DOM ready, auto-initializing...');
+        initCheckra(options);
+        (window as any).CheckraInitialized = true;
+      } catch (e) {
+        console.error("[Checkra] Failed to auto-initialize:", e);
       }
+    } else {
+      console.log("[Checkra] Already initialized, skipping auto-init.");
+    }
   };
 
   // Check if DOM is already loaded (e.g., script loaded async defer or at end of body)
   if (document.readyState === 'loading') {
-      // Loading hasn't finished yet
-      document.addEventListener('DOMContentLoaded', initialize);
+    // Loading hasn't finished yet
+    document.addEventListener('DOMContentLoaded', initialize);
   } else {
-      // `DOMContentLoaded` has already fired
-      initialize();
+    // `DOMContentLoaded` has already fired
+    initialize();
   }
 }
