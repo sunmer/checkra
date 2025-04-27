@@ -14,7 +14,6 @@ export class SettingsModal {
   private closeButton: HTMLButtonElement | null = null;
   private modelSelect: HTMLSelectElement | null = null;
   private temperatureSelect: HTMLSelectElement | null = null;
-  private isCreated: boolean = false; // Reintroduce isCreated flag
 
   private currentSettings: AiSettings = {
     model: 'gpt-4o-mini',
@@ -30,25 +29,19 @@ export class SettingsModal {
    * Creates a new SettingsModal instance.
    */
   constructor() {
-    console.log('[SettingsModal] Constructed. DOM creation deferred until first showModal or create call.');
+    console.log('[SettingsModal] Constructed. DOM creation deferred until first showModal.');
   }
 
   /**
-   * Creates the settings modal DOM elements if they haven't been created yet,
-   * or attaches to existing DOM if found (singleton pattern).
+   * Creates the settings modal DOM elements.
+   * Assumes any previous modal has been destroyed.
    */
   private create(): void {
-    console.log(`[SettingsModal] create() called. isCreated: ${this.isCreated}`);
+    // Remove isCreated check
+    // console.log(`[SettingsModal] create() called. isCreated: ${this.isCreated}`);
+    // if (this.isCreated) { ... }
 
-    // --- Check if already created by this instance (Less likely needed after force remove, but keep for safety) ---
-    if (this.isCreated) {
-      // This case should ideally not happen if the removal above works.
-      console.warn('[SettingsModal] create() called but isCreated flag was true. Resetting and proceeding.');
-      this.isCreated = false; // Ensure creation proceeds
-      // DO NOT return here, let it create the new DOM.
-    }
-
-    // --- Check document.body readiness ---
+    // --- Check document.body readiness --- //
     if (!document.body) {
       console.error('[SettingsModal] Cannot create modal: document.body is not available yet.');
       return; // Exit if body not ready
@@ -68,7 +61,7 @@ export class SettingsModal {
     this.modalContainer.style.borderRadius = '8px';
     this.modalContainer.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.4)';
     this.modalContainer.style.zIndex = '1001';
-    this.modalContainer.style.display = 'none'; // Initially hidden
+    this.modalContainer.style.display = 'none'; // Keep initially hidden, showModal will change this
     this.modalContainer.style.minWidth = '300px';
     this.modalContainer.style.fontFamily = 'sans-serif';
 
@@ -157,7 +150,8 @@ export class SettingsModal {
     // --- Attach Listeners ---
     this.attachListeners();
 
-    this.isCreated = true;
+    // Removed isCreated flag setting
+    // this.isCreated = true;
     console.log('[SettingsModal] create() finished successfully.');
   }
 
@@ -301,59 +295,31 @@ export class SettingsModal {
   }
 
   /**
-   * Shows the settings modal. Creates the DOM via create() if it doesn't exist yet.
+   * Shows the settings modal. Always destroys previous and creates fresh.
    */
   public showModal(): void {
-    console.log(`[SettingsModal] showModal() called. isCreated: ${this.isCreated}`);
+    console.log(`[SettingsModal] showModal() called.`);
 
-    // --- Ensure DOM is created --- //
-    if (!this.isCreated) {
-      console.log(`[SettingsModal] Not created yet, calling create()...`);
-      this.create();
-      // If create() failed (e.g., body not ready), isCreated will still be false
-      if (!this.isCreated) {
-        console.error(`[SettingsModal] create() failed or did not complete. Cannot show modal.`);
-        return; // Abort showing if creation failed
-      }
-    }
+    // --- 1. Destroy any existing modal first --- //
+    this.destroy();
 
-    // --- Proceed only if DOM exists and instance is marked as created --- //
+    // --- 2. Create the new modal DOM --- //
+    this.create();
+
+    // --- 3. Show the newly created modal (if creation succeeded) --- //
     if (this.modalContainer) {
-      console.log(`[SettingsModal] Modal container exists, proceeding to show.`);
-      // Ensure latest settings are reflected in dropdowns when showing
-      if (this.modelSelect) this.modelSelect.value = this.currentSettings.model;
-      if (this.temperatureSelect) {
-        let bestMatch = '';
-        let minDiff = Infinity;
-        for (const option of Array.from(this.temperatureSelect.options)) {
-          const value = parseFloat(option.value);
-          if (!isNaN(value)) {
-            const diff = Math.abs(value - this.currentSettings.temperature);
-            if (diff < minDiff) {
-              minDiff = diff;
-              bestMatch = option.value;
-            }
-          }
-        }
-        this.temperatureSelect.value = bestMatch || String(this.currentSettings.temperature);
-      }
-
-
-      if (this.modalContainer) { // Re-check in case destroyed during delay
-        this.modalContainer.style.display = 'block';
-        console.log(`[SettingsModal] Modal shown successfully after delay.`);
-      } else {
-        console.warn(`[SettingsModal] Modal container became null during show delay. Aborting show.`);
-      }
-
+      this.modalContainer.style.display = 'block';
+      console.log(`[SettingsModal] Fresh modal created and shown.`);
     } else {
-      // Log error if container is still null after attempting build
-      console.error(`[SettingsModal] showModal() failed: isCreated is true, but modalContainer is null!`);
+      console.error(`[SettingsModal] showModal() failed: modalContainer is null after create() call.`);
     }
   }
 
   /**
    * Hides the settings modal.
+   * (Remains largely unchanged, but destroy is now preferred for closing)
+   * Consider if hideModal is still needed, or if users should just call destroy?
+   * For now, keep it as a simple hide.
    */
   public hideModal(): void {
     if (this.modalContainer) {
@@ -383,13 +349,14 @@ export class SettingsModal {
     console.log(`[SettingsModal] destroy() called.`);
     this.removeListeners();
 
-    // Attempt to remove the element by ID for robustness against multiple instances
+    // Attempt to remove the element by ID for robustness
     const modalElement = document.getElementById('checkra-settings-modal-container');
     if (modalElement?.parentNode) {
       console.log(`[SettingsModal] Removing modal container from DOM.`);
       modalElement.parentNode.removeChild(modalElement);
     } else {
-      console.log(`[SettingsModal] Modal container not found in DOM (already removed or never added).`);
+      // This is expected if called before create or after a previous destroy
+      // console.log(`[SettingsModal] Modal container not found in DOM (already removed or never added).`);
     }
 
     // Clear references for *this* instance
@@ -397,11 +364,9 @@ export class SettingsModal {
     this.closeButton = null;
     this.modelSelect = null;
     this.temperatureSelect = null;
-    this.isCreated = false; // Reset flag
+    // Removed isCreated flag reset
+    // this.isCreated = false;
 
-    console.log(`[SettingsModal] Instance state cleared.`);
+    // console.log(`[SettingsModal] Instance state cleared.`); // Reduce verbosity
   }
 }
-
-// INSTEAD, just ensure the class itself is exported (it already is implicitly by being top-level 'export class')
-// No explicit export needed here if the class declaration itself has 'export'
