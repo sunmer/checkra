@@ -40,20 +40,6 @@ export class SettingsModal {
   private create(): void {
     console.log(`[SettingsModal] create() called. isCreated: ${this.isCreated}`);
 
-    // --- Force remove any existing modal container first (for HMR) ---
-    const existingModal = document.getElementById('checkra-settings-modal-container');
-    if (existingModal?.parentNode) {
-      console.warn('[SettingsModal] Found existing modal container. Forcefully removing for HMR compatibility.');
-      existingModal.parentNode.removeChild(existingModal);
-      // Reset instance state tied to the old DOM
-      this.modalContainer = null;
-      this.closeButton = null;
-      this.modelSelect = null;
-      this.temperatureSelect = null;
-      this.isCreated = false; // Ensure creation proceeds below
-    }
-    // --- End Force Remove ---
-
     // --- Check if already created by this instance (Less likely needed after force remove, but keep for safety) ---
     if (this.isCreated) {
       // This case should ideally not happen if the removal above works.
@@ -134,21 +120,10 @@ export class SettingsModal {
     this.modelSelect.style.backgroundColor = '#fff';
     this.modelSelect.style.color = '#333';
 
-    console.log("SETTING AI MODELS")
-    const modelOptions = ['gpt-4o-mini'];
-    modelOptions.forEach(optionText => {
-      const option = document.createElement('option');
-      option.value = optionText.toLowerCase().replace(/ /g, '-');
-      option.textContent = optionText;
-      if (option.value === this.currentSettings.model) {
-        option.selected = true;
-      }
-      this.modelSelect?.appendChild(option);
-    });
-
     content.appendChild(modelLabel);
     content.appendChild(this.modelSelect);
 
+    // --- Temperature Select ---
     const tempLabel = document.createElement('label');
     tempLabel.textContent = 'Temperature:';
     tempLabel.style.display = 'block';
@@ -166,57 +141,10 @@ export class SettingsModal {
     this.temperatureSelect.style.backgroundColor = '#fff';
     this.temperatureSelect.style.color = '#333';
 
-    console.log("SETTING TEMPERATURE OPTIONS");
-
-    // Define temperature options with descriptions
-    const tempOptions = [
-      { value: 0.1, text: "0.1 - Highly Focused & Deterministic" },
-      { value: 0.35, text: "0.35 - Focused & Consistent" },
-      { value: 0.6, text: "0.6 - Balanced & Reliable" }, // Close to previous default 0.7
-      { value: 0.85, text: "0.85 - Creative & Flexible" },
-      { value: 1.1, text: "1.1 - More Creative & Diverse" },
-      { value: 1.35, text: "1.35 - Highly Creative & Exploratory" },
-      { value: 1.6, text: "1.6 - Very Experimental & Unpredictable" },
-      { value: 1.85, text: "1.85 - Maximal Randomness & Potentially Incoherent" },
-      { value: 2.0, text: "2.0 - Extremely Random & Abstract" },
-    ];
-
-    tempOptions.forEach(tempData => {
-      const option = document.createElement('option');
-      option.value = String(tempData.value);
-      option.textContent = tempData.text; // Use the combined text
-
-      // Set selected based on current settings AFTER creating the option
-      // Use a small tolerance for floating point comparison
-      if (Math.abs(tempData.value - this.currentSettings.temperature) < 0.01) {
-        option.selected = true;
-      }
-
-      // Check *again* right before appendChild, just to be super safe
-      if (this.temperatureSelect) {
-        this.temperatureSelect.appendChild(option);
-      } else {
-         // This log should ideally never appear now if the outer check passed
-         console.error('[SettingsModal] CRITICAL during temp population: this.temperatureSelect became null!');
-      }
-    });
-
-     // Find the closest option value to the current setting and select it
-     let closestValue = tempOptions[0].value;
-     let minDiff = Math.abs(closestValue - this.currentSettings.temperature);
-
-     for (const tempData of tempOptions) {
-       const diff = Math.abs(tempData.value - this.currentSettings.temperature);
-       if (diff < minDiff) {
-         minDiff = diff;
-         closestValue = tempData.value;
-       }
-     }
-     this.temperatureSelect.value = String(closestValue);
-
     content.appendChild(tempLabel);
     content.appendChild(this.temperatureSelect);
 
+    // --- Append major sections to modal container ---
     this.modalContainer.appendChild(header);
     this.modalContainer.appendChild(content);
 
@@ -250,11 +178,10 @@ export class SettingsModal {
         const option = document.createElement('option');
         option.value = optionText.toLowerCase().replace(/ /g, '-');
         option.textContent = optionText;
-        // Set selected based on current settings AFTER creating the option
         if (option.value === this.currentSettings.model) {
           option.selected = true;
         }
-        this.modelSelect?.appendChild(option); // Optional chaining just in case
+        this.modelSelect?.appendChild(option);
       });
     } else {
        console.error('[SettingsModal] Cannot populate models: this.modelSelect is null.');
@@ -476,5 +403,5 @@ export class SettingsModal {
   }
 }
 
-// Export instance - relies on module system for singleton behavior
-export const settingsViewer = new SettingsModal();
+// INSTEAD, just ensure the class itself is exported (it already is implicitly by being top-level 'export class')
+// No explicit export needed here if the class declaration itself has 'export'

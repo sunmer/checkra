@@ -1,7 +1,7 @@
 {
   "name": "checkra",
   "version": "1.0.12",
-  "description": "Checkra - Collaboratively improve any website with AI",
+  "description": "Checkra - Get instant UX & conversion feedback without leaving your website",
   "repository": {
     "type": "git",
     "url": "https://github.com/sunmer/checkra.git"
@@ -36,7 +36,6 @@
     "feedback",
     "ai",
     "website improvement",
-    "collaboration",
     "frontend",
     "developer-tools"
   ],

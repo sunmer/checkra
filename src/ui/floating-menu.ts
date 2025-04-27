@@ -1,7 +1,7 @@
 import { CheckraOptions } from '../types';
 import { screenCapture } from './screen-capture';
 import { feedbackViewer } from './feedback-viewer';
-import { settingsViewer } from './settings-modal';
+import { SettingsModal } from './settings-modal';
 
 /**
  * Class for managing the floating feedback button UI component.
@@ -11,13 +11,15 @@ export class FloatingMenu {
   private settingsButton: HTMLSpanElement | null = null;
   private bottomContainer: HTMLDivElement | null = null;
   private isCreated: boolean = false;
+  private settingsModalInstance: SettingsModal;
 
   /**
    * Creates a new FloatingMenu instance.
    * Does NOT create DOM elements immediately.
    */
-  constructor(config: CheckraOptions) {
+  constructor(config: CheckraOptions, settingsModal: SettingsModal) {
     console.log('[FloatingMenu] Constructed, DOM not created yet.');
+    this.settingsModalInstance = settingsModal;
   }
 
   /**
@@ -124,7 +126,7 @@ export class FloatingMenu {
     const settingsClickHandler = (e: MouseEvent) => {
         e.stopPropagation();
         console.log('[Settings] Button clicked, opening settings modal...');
-        settingsViewer.showModal();
+        this.settingsModalInstance.showModal();
     };
 
     this.feedbackButton.addEventListener('click', feedbackClickHandler);

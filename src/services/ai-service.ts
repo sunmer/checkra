@@ -1,7 +1,7 @@
 import Settings from '../settings';
 import { feedbackViewer } from '../ui/feedback-viewer';
-import { getEffectiveApiKey } from '../core/index'; // Import the getter
-import { settingsViewer, type AiSettings } from '../ui/settings-modal'; // Added settings import
+import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
+import { AiSettings } from '../ui/settings-modal';
 
 interface PageMetadata {
   title: string | null;
@@ -19,8 +19,8 @@ interface PageMetadata {
 /**
  * Gathers metadata from the current page.
  */
-const getPageMetadata = (): PageMetadata => { // Use the new type
-  const metadata: Partial<PageMetadata> = {}; // Use Partial for initialization
+const getPageMetadata = (): PageMetadata => {
+  const metadata: Partial<PageMetadata> = {};
 
   // 1. Title
   metadata.title = document.title || null;
@@ -39,6 +39,7 @@ const getPageMetadata = (): PageMetadata => { // Use the new type
     height: window.innerHeight,
   };
 
+  // --- Added Metadata ---
   metadata.url = window.location.href;
   metadata.language = document.documentElement.lang || null;
   const h1Tag = document.querySelector('h1');
@@ -59,8 +60,8 @@ export const fetchFeedback = async (
   try {
     // Gather metadata
     const metadata = getPageMetadata();
-    // Added: Gather AI Settings
-    const currentAiSettings = settingsViewer.getCurrentSettings();
+    // Get settings using the new function from core
+    const currentAiSettings = getCurrentAiSettings();
 
     const requestBody: {
       image?: string | null;

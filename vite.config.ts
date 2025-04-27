@@ -19,10 +19,19 @@ export default defineConfig(({ command, mode }) => {
       root: 'demo',
       base: './', // Ensure assets load correctly in dev
       server: {
-        open: true // Open browser automatically
+        open: true, // Open browser automatically
+        watch: {
+          ignored: ['!**/node_modules/**','!**/dist/**']
+        }
       },
       // No plugins needed specifically for dev serving in this case
       plugins: [],
+      fs: {
+        allow: [
+          resolve(__dirname, '..'),
+          resolve(__dirname, 'src')
+        ]
+      }
     };
   }
 
