@@ -29,7 +29,7 @@ export class SettingsModal {
    * Creates a new SettingsModal instance.
    */
   constructor() {
-    console.log('[SettingsModal] Constructed. DOM creation deferred until first showModal.');
+    // console.log('[SettingsModal] Constructed. DOM creation deferred until first showModal.');
   }
 
   /**
@@ -37,16 +37,14 @@ export class SettingsModal {
    * Assumes any previous modal has been destroyed.
    */
   private create(): void {
-    // Remove isCreated check
-    // console.log(`[SettingsModal] create() called. isCreated: ${this.isCreated}`);
-    // if (this.isCreated) { ... }
+    // console.log('[SettingsModal] ENTERING create()');
 
     // --- Check document.body readiness --- //
     if (!document.body) {
       console.error('[SettingsModal] Cannot create modal: document.body is not available yet.');
       return; // Exit if body not ready
     }
-    console.log('[SettingsModal] Document body ready, proceeding with DOM creation.');
+    // console.log('[SettingsModal] Document body ready, proceeding with DOM creation.');
 
     // --- Create Modal Container ---
     this.modalContainer = document.createElement('div');
@@ -141,32 +139,22 @@ export class SettingsModal {
     this.modalContainer.appendChild(header);
     this.modalContainer.appendChild(content);
 
-    // --- Populate select options AFTER they are part of the container ---
     this._populateSelectOptions();
-
-    // --- Append modal container to body ---
     document.body.appendChild(this.modalContainer);
-
-    // --- Attach Listeners ---
     this.attachListeners();
-
-    // Removed isCreated flag setting
-    // this.isCreated = true;
-    console.log('[SettingsModal] create() finished successfully.');
   }
 
   /**
    * Populates the model and temperature select dropdowns with options.
-   * Should be called after the select elements have been created and added to modalContainer.
    */
   private _populateSelectOptions(): void {
-    console.log('[SettingsModal] _populateSelectOptions() called.');
+    // console.log('[SettingsModal] ENTERING _populateSelectOptions()');
 
-    // --- Populate Model Select ---
+    // --- Populate Model Select --- //
+    // console.log('[SettingsModal] Populating models...');
     if (this.modelSelect) {
-      // Clear existing options first (important for HMR/re-creation)
       this.modelSelect.innerHTML = '';
-      console.log("SETTING AI MODELS")
+      // console.log("SETTING AI MODELS")
       const modelOptions = ['gpt-4o-mini']; // Hardcoded for now
       modelOptions.forEach(optionText => {
         const option = document.createElement('option');
@@ -180,14 +168,10 @@ export class SettingsModal {
     } else {
        console.error('[SettingsModal] Cannot populate models: this.modelSelect is null.');
     }
-
-    // --- Populate Temperature Select ---
+    
     if (this.temperatureSelect) {
-      // Clear existing options first
       this.temperatureSelect.innerHTML = '';
-      console.log("SETTING TEMPERATURE OPTIONS");
 
-      // Define temperature options with descriptions
       const tempOptions = [
         { value: 0.1, text: "0.1 - Highly Focused & Deterministic" },
         { value: 0.35, text: "0.35 - Focused & Consistent" },
@@ -205,19 +189,11 @@ export class SettingsModal {
         option.value = String(tempData.value);
         option.textContent = tempData.text; // Use the combined text
 
-        // Set selected based on current settings AFTER creating the option
-        // Use a small tolerance for floating point comparison
         if (Math.abs(tempData.value - this.currentSettings.temperature) < 0.01) {
           option.selected = true;
         }
 
-        // Check *again* right before appendChild, just to be super safe
-        if (this.temperatureSelect) {
-          this.temperatureSelect.appendChild(option);
-        } else {
-           // This log should ideally never appear now if the outer check passed
-           console.error('[SettingsModal] CRITICAL during temp population: this.temperatureSelect became null!');
-        }
+        this.temperatureSelect?.appendChild(option);
       });
 
        // Find the closest option value to the current setting and select it
@@ -236,7 +212,6 @@ export class SettingsModal {
     } else {
       console.error('[SettingsModal] Cannot populate temperature: this.temperatureSelect is null.');
     }
-     console.log('[SettingsModal] _populateSelectOptions() finished.');
   }
 
   /**
@@ -248,31 +223,28 @@ export class SettingsModal {
       return;
     }
 
-    this.removeListeners(); // Ensure no duplicates
+    this.removeListeners();
 
-    // Create and store bound handlers
     this.boundHideModalHandler = this.hideModal.bind(this);
     this.boundModelChangeHandler = (event: Event) => {
       const selectedModel = (event.target as HTMLSelectElement).value;
       this.currentSettings.model = selectedModel;
-      console.log(`[Settings] Selected model: ${this.currentSettings.model}`);
     };
     this.boundTempChangeHandler = (event: Event) => {
       const selectedTemp = parseFloat((event.target as HTMLSelectElement).value);
       if (!isNaN(selectedTemp)) {
         this.currentSettings.temperature = selectedTemp;
-        console.log(`[Settings] Selected temperature: ${this.currentSettings.temperature}`);
+        // console.log(`[Settings] Selected temperature: ${this.currentSettings.temperature}`);
       } else {
         console.warn(`[Settings] Invalid temperature value selected: ${(event.target as HTMLSelectElement).value}`);
       }
     };
 
-    // Add listeners using the stored handlers
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
     this.temperatureSelect.addEventListener('change', this.boundTempChangeHandler);
 
-    console.log(`[SettingsModal] Event listeners attached.`);
+    // console.log(`[SettingsModal] Event listeners attached.`);
   }
 
   /**
@@ -281,50 +253,53 @@ export class SettingsModal {
   private removeListeners(): void {
     if (this.closeButton && this.boundHideModalHandler) {
       this.closeButton.removeEventListener('click', this.boundHideModalHandler);
-      this.boundHideModalHandler = null; // Clean up handler ref
+      this.boundHideModalHandler = null;
     }
     if (this.modelSelect && this.boundModelChangeHandler) {
       this.modelSelect.removeEventListener('change', this.boundModelChangeHandler);
-      this.boundModelChangeHandler = null; // Clean up handler ref
+      this.boundModelChangeHandler = null;
     }
     if (this.temperatureSelect && this.boundTempChangeHandler) {
       this.temperatureSelect.removeEventListener('change', this.boundTempChangeHandler);
-      this.boundTempChangeHandler = null; // Clean up handler ref
+      this.boundTempChangeHandler = null;
     }
-    // console.log('[SettingsModal] Event listeners removed.');
   }
 
   /**
    * Shows the settings modal. Always destroys previous and creates fresh.
    */
   public showModal(): void {
-    console.log(`[SettingsModal] showModal() called.`);
+    // console.log(`[SettingsModal] ENTERING showModal()`);
 
     // --- 1. Destroy any existing modal first --- //
+    // console.log(`[SettingsModal] BEFORE calling destroy() in showModal`);
     this.destroy();
+    // console.log(`[SettingsModal] AFTER calling destroy() in showModal`);
 
     // --- 2. Create the new modal DOM --- //
+    // console.log(`[SettingsModal] BEFORE calling create() in showModal`);
     this.create();
+    // console.log(`[SettingsModal] AFTER calling create() in showModal`);
 
     // --- 3. Show the newly created modal (if creation succeeded) --- //
+    // console.log(`[SettingsModal] BEFORE showing modal (setting display)`);
     if (this.modalContainer) {
       this.modalContainer.style.display = 'block';
-      console.log(`[SettingsModal] Fresh modal created and shown.`);
+      // console.log(`[SettingsModal] Fresh modal created and shown (display=block).`);
     } else {
+      // Keep error check: Important if create() failed
       console.error(`[SettingsModal] showModal() failed: modalContainer is null after create() call.`);
     }
+    // console.log(`[SettingsModal] EXITING showModal()`);
   }
 
   /**
    * Hides the settings modal.
-   * (Remains largely unchanged, but destroy is now preferred for closing)
-   * Consider if hideModal is still needed, or if users should just call destroy?
-   * For now, keep it as a simple hide.
    */
   public hideModal(): void {
     if (this.modalContainer) {
       this.modalContainer.style.display = 'none';
-      console.log(`[SettingsModal] Modal hidden.`);
+      // console.log(`[SettingsModal] Modal hidden.`);
     }
   }
 
@@ -346,13 +321,13 @@ export class SettingsModal {
    * Destroys the settings modal, removing it from the DOM and cleaning up listeners.
    */
   public destroy(): void {
-    console.log(`[SettingsModal] destroy() called.`);
+    // console.log(`[SettingsModal] destroy() called.`);
     this.removeListeners();
 
     // Attempt to remove the element by ID for robustness
     const modalElement = document.getElementById('checkra-settings-modal-container');
     if (modalElement?.parentNode) {
-      console.log(`[SettingsModal] Removing modal container from DOM.`);
+      // console.log(`[SettingsModal] Removing modal container from DOM.`);
       modalElement.parentNode.removeChild(modalElement);
     } else {
       // This is expected if called before create or after a previous destroy

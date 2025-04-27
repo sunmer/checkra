@@ -135,17 +135,16 @@
       // The <script type="module"> at the bottom handles this.
 
     } else if (isPreprod) {
-      // PREPROD MODE: Load built UMD files from ../dist relative to the *built* demo/index.html
-      console.log('[Checkra Loader] Preprod mode: Loading from local ../dist');
+      // PREPROD MODE: Load built UMD files from local build output
+      console.log('[Checkra Loader] Preprod mode: Loading from local build output');
 
       // Path Explanation:
       // - 'npm run build:demo' builds 'demo/index.html' into 'demo-dist/index.html'.
       // - 'npm run preview:demo' serves the 'demo-dist' directory.
       // - Therefore, from 'demo-dist/index.html', the path to the library build output
       //   in the 'dist' folder is indeed '../dist/'.
-      loadStyle('./style.css'); // Load from demo-dist root
 
-      // *** CORRECTION HERE: Use the correct UMD filename from vite.config.ts ***
+      // Load the locally built library JS
       loadScript('./checkra.umd.cjs') // Load from demo-dist root
         .then(initializeCheckra)
         .catch(err => console.error('[Checkra Loader] Failed to load preprod script:', err));
