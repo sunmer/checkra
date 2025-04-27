@@ -75,7 +75,7 @@ export class FeedbackViewerDOM {
     viewer.style.minHeight = `${MIN_HEIGHT}px`;
     viewer.style.maxWidth = `${MAX_WIDTH_VW}vw`;
     // viewer.style.maxHeight = `${MAX_HEIGHT_VH}vh`; // << REMOVE or comment out this line
-    viewer.style.display = 'none'; // Initial state
+    // viewer.style.display = 'none'; // Initial state - Handled by CSS
 
     // Add listener regardless, handler will check device type
     // viewer.addEventListener('mousedown', this.handleDragStart);
@@ -91,10 +91,11 @@ export class FeedbackViewerDOM {
 
     const responseTitle = document.createElement('h4');
     responseTitle.textContent = 'Feedback Response';
-    responseTitle.style.color = '#a0c8ff';
-    responseTitle.style.fontSize = '14px';
-    responseTitle.style.fontWeight = '600';
-    responseTitle.style.margin = '0';
+    // Style handled by CSS: #checkra-feedback-response-header h4
+    // responseTitle.style.color = '#a0c8ff';
+    // responseTitle.style.fontSize = '14px';
+    // responseTitle.style.fontWeight = '600';
+    // responseTitle.style.margin = '0';
     responseHeader.appendChild(responseTitle);
 
     const loadingIndicator = document.createElement('div');
@@ -124,7 +125,7 @@ export class FeedbackViewerDOM {
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2-icon lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
         `;
     cancelButton.classList.add('cancel-fix');
-    cancelButton.style.display = 'none';
+    // cancelButton.style.display = 'none'; // Initial state handled by CSS
     actionButtonsContainer.appendChild(cancelButton);
 
     responseHeader.appendChild(actionButtonsContainer);
@@ -136,13 +137,6 @@ export class FeedbackViewerDOM {
 
     const promptTitle = document.createElement('h4');
     promptTitle.textContent = '"' + this.originalPromptTitleText + '"';
-    promptTitle.style.color = '#a0c8ff';
-    promptTitle.style.marginBottom = '8px';
-    promptTitle.style.marginTop = '0';
-    promptTitle.style.fontSize = '14px';
-    promptTitle.style.fontWeight = '600';
-    promptTitle.style.whiteSpace = 'pre-wrap';
-    promptTitle.style.wordWrap = 'break-word';
     contentWrapper.appendChild(promptTitle);
 
     const textareaContainer = document.createElement('div');
@@ -171,17 +165,19 @@ export class FeedbackViewerDOM {
     // Create user message container *before* response content container
     const userMessageContainer = document.createElement('div');
     userMessageContainer.id = 'checkra-user-message-container';
-    userMessageContainer.style.marginBottom = '10px';
-    userMessageContainer.style.display = 'none'; // Initially hidden
+    // Style handled by CSS: #checkra-user-message-container
+    // userMessageContainer.style.marginBottom = '10px';
+    // userMessageContainer.style.display = 'none'; // Initially hidden
     contentWrapper.appendChild(userMessageContainer); // Append to contentWrapper
     // --- END EDIT ---
 
     // --- Response Area (Now only for AI content) ---
     const responseContent = document.createElement('div');
     responseContent.id = 'checkra-feedback-response-content';
-    responseContent.style.wordWrap = 'break-word';
-    responseContent.style.fontSize = '14px';
-    responseContent.style.display = 'none';
+    // Style handled by CSS: #checkra-feedback-response-content
+    // responseContent.style.wordWrap = 'break-word';
+    // responseContent.style.fontSize = '14px';
+    // responseContent.style.display = 'none';
 
     contentWrapper.appendChild(responseContent); // Append responseContent to contentWrapper
 
@@ -242,18 +238,19 @@ export class FeedbackViewerDOM {
     viewer.style.width = `${DEFAULT_WIDTH}px`;
     viewer.style.height = `${DEFAULT_HEIGHT}px`;
 
-    // Reset visibility states
+    // Reset visibility states using classes
     this.showPromptInputArea(true);
     this.updateLoaderVisibility(false);
     this.updateActionButtonsVisibility(false);
-    this.elements.responseHeader.style.display = 'none';
+    this.elements.responseHeader.classList.add('hidden');
+    this.elements.responseHeader.classList.remove('visible-flex');
     this.elements.contentWrapper.style.paddingTop = '15px'; // Reset padding
 
     if (position) {
       viewer.style.position = position.mode;
       viewer.style.top = `${position.top}px`;
       viewer.style.left = `${position.left}px`;
-      viewer.style.transform = 'none'; // Ensure no transform interferes
+      viewer.style.transform = 'none';
       viewer.style.marginTop = '';
       viewer.style.marginLeft = '';
     } else {
@@ -267,7 +264,9 @@ export class FeedbackViewerDOM {
       viewer.style.transform = 'none';
     }
 
-    viewer.style.display = 'flex';
+    // viewer.style.display = 'flex'; // Replaced by class manipulation
+    viewer.classList.remove('hidden');
+    viewer.classList.add('visible-flex');
 
     // --- BEGIN EDIT ---
     // Attempt to focus the textarea
@@ -278,7 +277,9 @@ export class FeedbackViewerDOM {
 
   public hide(): void {
     if (!this.elements) return;
-    this.elements.viewer.style.display = 'none';
+    // this.elements.viewer.style.display = 'none'; // Replaced by class manipulation
+    this.elements.viewer.classList.add('hidden');
+    this.elements.viewer.classList.remove('visible-flex');
     console.log('[FeedbackViewerDOM] Viewer hidden.');
   }
 
@@ -287,20 +288,25 @@ export class FeedbackViewerDOM {
     const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper, actionButtonsContainer } = this.elements;
     if (visible) {
       loadingIndicatorText.textContent = text || 'Processing...';
-      loadingIndicator.style.display = 'flex';
-      responseHeader.style.display = 'flex'; // Show header when loader is visible
+      // loadingIndicator.style.display = 'flex'; // Use class
+      loadingIndicator.classList.remove('hidden');
+      loadingIndicator.classList.add('visible-flex');
+      responseHeader.classList.remove('hidden');
+      responseHeader.classList.add('visible-flex');
       requestAnimationFrame(() => {
         const headerHeight = responseHeader.offsetHeight;
         contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
       });
     } else {
-      loadingIndicator.style.display = 'none';
-      // Keep header visible if action buttons are shown, otherwise hide
-      if (actionButtonsContainer.style.display === 'none') {
-        responseHeader.style.display = 'none';
-        contentWrapper.style.paddingTop = '15px'; // Reset padding
+      loadingIndicator.classList.add('hidden');
+      loadingIndicator.classList.remove('visible-flex');
+      if (actionButtonsContainer.classList.contains('hidden')) {
+        responseHeader.classList.add('hidden');
+        responseHeader.classList.remove('visible-flex');
+        contentWrapper.style.paddingTop = '15px';
       } else {
-        responseHeader.style.display = 'flex'; // Keep header visible
+        responseHeader.classList.remove('hidden');
+        responseHeader.classList.add('visible-flex');
         requestAnimationFrame(() => {
           const headerHeight = responseHeader.offsetHeight;
           contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
@@ -312,21 +318,24 @@ export class FeedbackViewerDOM {
   public updateActionButtonsVisibility(visible: boolean): void {
     if (!this.elements) return;
     const { actionButtonsContainer, responseHeader, contentWrapper, loadingIndicator } = this.elements;
-    actionButtonsContainer.style.display = visible ? 'flex' : 'none';
+    actionButtonsContainer.classList.toggle('hidden', !visible);
+    actionButtonsContainer.classList.toggle('visible-flex', visible);
 
     if (visible) {
-      responseHeader.style.display = 'flex'; // Show header if buttons are shown
+      responseHeader.classList.remove('hidden');
+      responseHeader.classList.add('visible-flex');
       requestAnimationFrame(() => {
         const headerHeight = responseHeader.offsetHeight;
         contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
       });
     } else {
-      // Hide header only if loader is also hidden
-      if (loadingIndicator.style.display === 'none') {
-        responseHeader.style.display = 'none';
-        contentWrapper.style.paddingTop = '15px'; // Reset padding
+      if (loadingIndicator.classList.contains('hidden')) {
+        responseHeader.classList.add('hidden');
+        responseHeader.classList.remove('visible-flex');
+        contentWrapper.style.paddingTop = '15px';
       } else {
-        responseHeader.style.display = 'flex'; // Keep header visible if loader is active
+        responseHeader.classList.remove('hidden');
+        responseHeader.classList.add('visible-flex');
         requestAnimationFrame(() => {
           const headerHeight = responseHeader.offsetHeight;
           contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
@@ -348,7 +357,9 @@ export class FeedbackViewerDOM {
     const scrollThreshold = 10;
     const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
 
-    responseContent.style.display = 'block';
+    // responseContent.style.display = 'block'; // Use class
+    responseContent.classList.remove('hidden');
+    responseContent.classList.add('visible');
     responseContent.innerHTML = `<div class="checkra-streamed-content">${html}</div>`;
 
     const preElements = responseContent.querySelectorAll('.checkra-streamed-content pre');
@@ -422,14 +433,18 @@ export class FeedbackViewerDOM {
     if (!this.elements) return;
     console.log('[DOM.clearAIResponseContent] Clearing AI messages.');
     this.elements.responseContent.innerHTML = '';
-    this.elements.responseContent.style.display = 'none';
+    // this.elements.responseContent.style.display = 'none'; // Use class
+    this.elements.responseContent.classList.add('hidden');
+    this.elements.responseContent.classList.remove('visible');
   }
 
   public clearUserMessage(): void {
     if (!this.elements) return;
     console.log('[DOM.clearUserMessage] Clearing user message.');
     this.elements.userMessageContainer.innerHTML = '';
-    this.elements.userMessageContainer.style.display = 'none';
+    // this.elements.userMessageContainer.style.display = 'none'; // Use class
+    this.elements.userMessageContainer.classList.add('hidden');
+    this.elements.userMessageContainer.classList.remove('visible');
   }
 
   public setPromptState(enabled: boolean, value?: string): void {
@@ -448,21 +463,27 @@ export class FeedbackViewerDOM {
    */
   public showPromptInputArea(show: boolean, submittedPromptText?: string): void {
     if (!this.elements) return;
-    // Toggle textarea container visibility
-    this.elements.textareaContainer.style.display = show ? 'block' : 'none';
+    // Toggle textarea container visibility using class
+    // this.elements.textareaContainer.style.display = show ? 'block' : 'none';
+    this.elements.textareaContainer.classList.toggle('hidden', !show);
+    this.elements.textareaContainer.classList.toggle('visible', show);
 
-    // Update the title text
+    // Update the title text and visibility using class
     if (show) {
       // Restore original title
       this.elements.promptTitle.textContent = this.originalPromptTitleText;
-      this.elements.promptTitle.style.display = 'block'; // Ensure title is visible
+      // this.elements.promptTitle.style.display = 'block'; // Ensure title is visible - Use class
+      this.elements.promptTitle.classList.remove('hidden');
+      this.elements.promptTitle.classList.add('visible');
     } else if (submittedPromptText) {
       // Show submitted prompt in the title element
       this.elements.promptTitle.textContent = submittedPromptText;
-      this.elements.promptTitle.style.display = 'block'; // Ensure title is visible
+      // this.elements.promptTitle.style.display = 'block'; // Ensure title is visible - Use class
+      this.elements.promptTitle.classList.remove('hidden');
+      this.elements.promptTitle.classList.add('visible');
     } else {
-      // Hiding without submitted text (e.g., on error before submit), just hide textarea
-      this.elements.promptTitle.style.display = 'none'; // Hide the title too if no text to show
+      this.elements.promptTitle.classList.add('hidden');
+      this.elements.promptTitle.classList.remove('visible');
     }
   }
 
@@ -547,11 +568,11 @@ export class FeedbackViewerDOM {
       'pre',
       'code',
       'a',
-      'input', // Add other potential interactive elements if needed
+      'input',
       'select'
     ];
     if (target.closest(nonDraggableSelectors.join(','))) {
-      return; // Don't start drag if clicking inside these elements
+      return;
     }
 
     // If the click is not on an explicitly non-draggable element, start the drag
@@ -652,11 +673,7 @@ export class FeedbackViewerDOM {
     const { userMessageContainer } = this.elements;
 
     userMessageContainer.innerHTML = html;
-    userMessageContainer.style.display = html ? 'block' : 'none';
-
-    // --- BEGIN LOGGING ---
-    console.log('[DOM.renderUserMessage] Set userMessageContainer.innerHTML:', userMessageContainer.innerHTML);
-    console.log('[DOM.renderUserMessage] Set userMessageContainer.style.display:', userMessageContainer.style.display);
-    // --- END LOGGING ---
+    userMessageContainer.classList.toggle('hidden', !html);
+    userMessageContainer.classList.toggle('visible', !!html);
   }
 }

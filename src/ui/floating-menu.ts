@@ -1,4 +1,3 @@
-import { CheckraOptions } from '../types';
 import { screenCapture } from './screen-capture';
 import { feedbackViewer } from './feedback-viewer';
 import { SettingsModal } from './settings-modal';
@@ -17,8 +16,7 @@ export class FloatingMenu {
    * Creates a new FloatingMenu instance.
    * Does NOT create DOM elements immediately.
    */
-  constructor(config: CheckraOptions, settingsModal: SettingsModal) {
-    console.log('[FloatingMenu] Constructed, DOM not created yet.');
+  constructor(settingsModal: SettingsModal) {
     this.settingsModalInstance = settingsModal;
   }
 

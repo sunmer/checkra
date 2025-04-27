@@ -75,7 +75,6 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
   const config = {
     apiKey: options?.apiKey ?? undefined, // Keep undefined if not provided
     isVisible: options?.isVisible ?? true, // Default for isVisible
-    style: options?.style ?? {}           // Default for style
   };
 
   // --- Determine Effective API Key ---
@@ -101,15 +100,11 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
 
   try {
     if (config.isVisible) {
-      // Log before assignment, checking the flag
-      console.log(`[Checkra Core] Entering initCheckra instance creation block. Is window.CheckraInitialized already true? ->`, !!(window as any).CheckraInitialized);
-
       // Assign to module-level variable
       settingsModalInstance = new SettingsModal();
-      console.log(`[Checkra Core] NEW SettingsModal instance created and assigned to shared variable.`, settingsModalInstance);
 
       // Pass the instance to FloatingMenu
-      feedbackMenuInstance = new FloatingMenu(config, settingsModalInstance);
+      feedbackMenuInstance = new FloatingMenu(settingsModalInstance);
 
       const created = feedbackMenuInstance.create();
       if (!created) {

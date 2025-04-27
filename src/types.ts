@@ -17,10 +17,4 @@ export interface CheckraOptions {
    * @default true
    */
   isVisible?: boolean;
-
-  /**
-   * Custom CSS styles for UI elements (if needed in the future).
-   * Currently unused by the simplified feedback module.
-   */
-  style?: Partial<CSSStyleDeclaration>;
 }

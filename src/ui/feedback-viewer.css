@@ -144,7 +144,7 @@
   cursor: grab;
   position: fixed;
   overflow: hidden;
-  display: flex;
+  display: none; /* Default state */
   flex-direction: column;
   background-color: rgba(35, 45, 75, 0.95);
   color: white;
@@ -178,7 +178,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   z-index: 5;
   box-sizing: border-box;
-  display: none; /* Initially hidden - controlled by JS */
+  display: none; /* Replaced by visibility class */
 }
 
 #checkra-feedback-content-wrapper {
@@ -255,6 +255,7 @@
 #checkra-feedback-viewer #checkra-textarea-container {
     position: relative; /* For submit button positioning */
     margin-bottom: 15px; /* Space below textarea */
+    display: block; /* Default state */
 }
 
 /* --- Loading Indicator --- */
@@ -276,7 +277,7 @@
   gap: 8px;
   color: #a0c8ff;
   font-size: 0.9em;
-  display: none; /* Managed by JS */
+  display: none; /* Replaced by visibility class */
 }
 
 /* --- Resize Handle --- */
@@ -300,7 +301,6 @@
 
 /* --- Action Buttons (in Header) --- */
 #checkra-feedback-action-buttons {
-  display: none; /* Initially hidden */
   display: flex;
   gap: 8px;
   align-items: center;
@@ -342,6 +342,7 @@
    background-color: transparent;
    border: 1px solid #777; /* Grey border */
    color: #ccc;
+   display: none; /* Initially hidden */
 }
 #checkra-feedback-action-buttons button.cancel-fix:hover:not(:disabled) { /* Added :not(:disabled) */
    background-color: rgba(150, 150, 150, 0.2);
@@ -432,4 +433,56 @@
   display: inline-block; /* Show check icon when copied */
   width: 14px;
   height: 14px;
+}
+
+/* --- Visibility Helpers --- */
+.hidden {
+  display: none !important;
+}
+.visible {
+  display: block !important;
+}
+.visible-flex {
+  display: flex !important;
+}
+.visible-inline-flex {
+    display: inline-flex !important;
+}
+
+/* ADDED: Base style for response content area */
+#checkra-feedback-response-content {
+  word-wrap: break-word;
+  font-size: 14px;
+  display: none; /* Initially hidden */
+}
+
+/* ADDED: Base style for user message container */
+#checkra-user-message-container {
+    margin-bottom: 10px;
+    display: none; /* Initially hidden */
+    /* Add other styles if needed, e.g., padding, background */
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ADDED: Style for response title */
+#checkra-feedback-response-header h4 {
+    color: #a0c8ff;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* ADDED: Style for main prompt title */
+#checkra-feedback-content-wrapper h4 { /* Assuming this is the prompt title */
+    color: #a0c8ff;
+    margin-bottom: 8px;
+    margin-top: 0;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    display: block; /* Default state */
 }

@@ -1,3 +1,5 @@
+import './settings-modal.css';
+
 /**
  * Interface for AI model settings.
  */
@@ -79,43 +81,15 @@ export class SettingsModal {
     // --- Create Modal Container ---
     this.modalContainer = document.createElement('div');
     this.modalContainer.id = 'checkra-settings-modal-container';
-    this.modalContainer.style.position = 'fixed';
-    this.modalContainer.style.top = '50%';
-    this.modalContainer.style.left = '50%';
-    this.modalContainer.style.transform = 'translate(-50%, -50%)';
-    this.modalContainer.style.backgroundColor = 'rgba(35, 45, 75, 0.95)';
-    this.modalContainer.style.color = 'white';
-    this.modalContainer.style.padding = '20px';
-    this.modalContainer.style.borderRadius = '8px';
-    this.modalContainer.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.4)';
-    this.modalContainer.style.zIndex = '1001';
-    this.modalContainer.style.display = 'none'; // Keep initially hidden, showModal will change this
-    this.modalContainer.style.minWidth = '300px';
-    this.modalContainer.style.fontFamily = 'sans-serif';
 
-    // --- Create Header ---
     const header = document.createElement('div');
-    header.style.display = 'flex';
-    header.style.justifyContent = 'space-between';
-    header.style.alignItems = 'center';
-    header.style.marginBottom = '15px';
-    header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.2)';
-    header.style.paddingBottom = '10px';
 
     const title = document.createElement('h2');
     title.textContent = 'AI Settings';
-    title.style.margin = '0';
-    title.style.fontSize = '16px';
 
     this.closeButton = document.createElement('button');
+    this.closeButton.id = 'checkra-settings-modal-close'; // ADD ID for CSS targeting
     this.closeButton.innerHTML = '&times;';
-    this.closeButton.style.background = 'none';
-    this.closeButton.style.border = 'none';
-    this.closeButton.style.color = 'white';
-    this.closeButton.style.fontSize = '1.8em';
-    this.closeButton.style.lineHeight = '1';
-    this.closeButton.style.cursor = 'pointer';
-    this.closeButton.style.padding = '0 5px';
     this.closeButton.title = 'Close Settings';
 
     header.appendChild(title);
@@ -127,19 +101,10 @@ export class SettingsModal {
     // --- Model Select ---
     const modelLabel = document.createElement('label');
     modelLabel.textContent = 'AI model:';
-    modelLabel.style.display = 'block';
-    modelLabel.style.fontSize = '14px';
-    modelLabel.style.marginBottom = '5px';
     modelLabel.htmlFor = 'checkra-ai-model-select';
 
     this.modelSelect = document.createElement('select');
     this.modelSelect.id = 'checkra-ai-model-select';
-    this.modelSelect.style.width = '100%';
-    this.modelSelect.style.padding = '8px';
-    this.modelSelect.style.borderRadius = '4px';
-    this.modelSelect.style.border = '1px solid #ccc';
-    this.modelSelect.style.backgroundColor = '#fff';
-    this.modelSelect.style.color = '#333';
 
     content.appendChild(modelLabel);
     content.appendChild(this.modelSelect);
@@ -147,10 +112,6 @@ export class SettingsModal {
     // --- Temperature Slider --- // Modify this section
     const tempLabel = document.createElement('label');
     tempLabel.textContent = 'Creativity:'; // Updated label
-    tempLabel.style.display = 'block';
-    tempLabel.style.marginBottom = '5px';
-    tempLabel.style.fontSize = '14px';
-    tempLabel.style.marginTop = '15px';
     tempLabel.htmlFor = 'checkra-ai-temperature-slider'; // Changed ID ref
 
     this.temperatureSlider = document.createElement('input');
@@ -159,8 +120,6 @@ export class SettingsModal {
     this.temperatureSlider.min = '0.0'; // Updated min
     this.temperatureSlider.max = '1.2'; // Updated max
     this.temperatureSlider.step = '0.2'; // Updated step
-    this.temperatureSlider.style.width = '100%';
-    this.temperatureSlider.style.cursor = 'pointer';
 
     // Find the closest step to the current setting using updated range/step
     const closestTempValue = this._findClosestStep(
@@ -173,13 +132,9 @@ export class SettingsModal {
     // Update the setting itself to the snapped value
     this.currentSettings.temperature = closestTempValue;
 
-
     this.temperatureDescriptionDisplay = document.createElement('p');
     this.temperatureDescriptionDisplay.id = 'checkra-ai-temperature-description';
-    this.temperatureDescriptionDisplay.style.textAlign = 'center';
-    this.temperatureDescriptionDisplay.style.fontSize = '12px';
-    this.temperatureDescriptionDisplay.style.marginTop = '5px';
-    this.temperatureDescriptionDisplay.style.color = 'rgba(255, 255, 255, 0.8)';
+
     // Initial description uses updated range/step via helper
     this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(closestTempValue);
 
@@ -202,14 +157,10 @@ export class SettingsModal {
    * Populates the model and temperature select dropdowns with options.
    */
   private _populateSelectOptions(): void {
-    // console.log('[SettingsModal] ENTERING _populateSelectOptions()');
 
-    // --- Populate Model Select --- //
-    // console.log('[SettingsModal] Populating models...');
     if (this.modelSelect) {
       this.modelSelect.innerHTML = '';
-      // console.log("SETTING AI MODELS")
-      const modelOptions = ['gpt-4o-mini']; // Hardcoded for now
+      const modelOptions = ['gpt-4o-mini']; 
       modelOptions.forEach(optionText => {
         const option = document.createElement('option');
         option.value = optionText.toLowerCase().replace(/ /g, '-');
@@ -285,8 +236,6 @@ export class SettingsModal {
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
     this.temperatureSlider.addEventListener('input', this.boundTempSliderHandler);
-
-    // console.log(`[SettingsModal] Event listeners attached.`);
   }
 
   /**
@@ -311,17 +260,11 @@ export class SettingsModal {
    * Shows the settings modal. Always destroys previous and creates fresh.
    */
   public showModal(): void {
-    // console.log(`[SettingsModal] ENTERING showModal()`);
-
-    // --- 1. Destroy any existing modal first --- //
     this.destroyDOM();
-
-    // --- 2. Create the new modal DOM --- //
     this.create();
-
-    // --- 3. Show the newly created modal (if creation succeeded) --- //
     if (this.modalContainer) {
-      this.modalContainer.style.display = 'block';
+      this.modalContainer.classList.remove('hidden');
+      this.modalContainer.classList.add('visible-block');
     }
   }
 
@@ -330,7 +273,9 @@ export class SettingsModal {
    */
   public hideModal(): void {
     if (this.modalContainer) {
-      this.modalContainer.style.display = 'none';
+      // this.modalContainer.style.display = 'none';
+      this.modalContainer.classList.add('hidden');
+      this.modalContainer.classList.remove('visible-block');
     }
   }
 

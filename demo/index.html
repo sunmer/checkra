@@ -99,7 +99,6 @@
     // Assume anything else is production (e.g., deployed demo) or needs CDN
     const isProductionLike = !isDev && !isPreprod;
 
-    console.log(`[Checkra Loader] Mode: ${import.meta.env.MODE}, Dev: ${isDev}, Preprod: ${isPreprod}, Prod-Like: ${isProductionLike}`);
 
     function loadScript(src, type) {
       return new Promise((resolve, reject) => {
@@ -122,11 +121,9 @@
     function initializeCheckra() {
       // Standard UMD initialization (for preprod/production-like)
       if (window.CheckraInitialized) {
-        console.log('[Checkra Loader] Already initialized (UMD path), skipping.');
         return;
       }
       if (window.checkra && typeof window.checkra.initCheckra === 'function') {
-        console.log('[Checkra Loader] Initializing Checkra (UMD)...');
         window.checkra.initCheckra({ isVisible: true });
       } else {
         console.error('[Checkra Loader] Checkra UMD global not found for initialization.');
@@ -135,12 +132,10 @@
 
     if (isDev) {
       // DEV MODE: Load directly from source using module script below.
-      console.log('[Checkra Loader] Dev mode: Loading from source via module script.');
       // The <script type="module"> at the bottom handles this.
 
     } else if (isPreprod) {
       // PREPROD MODE: Load built UMD files from local build output
-      console.log('[Checkra Loader] Preprod mode: Loading from local build output');
 
       // Path Explanation:
       // - 'npm run build:demo' builds 'demo/index.html' into 'demo-dist/index.html'.
@@ -155,10 +150,8 @@
 
     } else { // isProductionLike (or static hosting)
       // PRODUCTION-LIKE / STATIC: Fallback to loading from CDN (unpkg)
-      console.log('[Checkra Loader] Production-like mode: Loading from CDN.');
       // Use the version injected by Vite build
       const version = import.meta.env.PACKAGE_VERSION || 'latest'; // Fallback to 'latest' if undefined
-      console.log(`[Checkra Loader] Using version: ${version}`);
       loadStyle(`https://unpkg.com/checkra@${version}/dist/style.css`);
       // *** CORRECTION HERE: Use the correct UMD filename from unpkg ***
       loadScript(`https://unpkg.com/checkra@${version}/dist/checkra.umd.cjs`)
@@ -222,9 +215,8 @@
         </div>
         <div class="mt-5 max-w-3xl">
           <p class="text-lg text-gray-600 mb-4">
-            Checkra helps solo developers and startups improve UX and conversion with instant AI suggestions, previewed
-            live on your site.
-            <br />Try it live, click the bottom left button
+            Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed
+            live on your site. Setup takes &lt;30 seconds & no account is required.
           </p>
           
           <div class="sm:flex auto-cols-max items-center gap-3 md:gap-6 mt-8">
@@ -312,7 +304,7 @@
       <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10 mt-24">
         <div class="mx-auto max-w-2xl mb-8 lg:mb-14 text-center">
           <h2 class="text-3xl lg:text-4xl text-gray-800 font-bold text-black">
-            Use Cases
+            Audiences
           </h2>
         </div>
 
@@ -623,7 +615,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Set the innerHTML
       promptElement.innerHTML = emojiSpan + textSpan;
-      console.log(`[Prompt Update] Set prompt text for ${isMobile ? 'mobile' : 'desktop'} with alignment spans.`);
 
       // 2. Set up fade-in timeout
       let fadeInTimeout = setTimeout(() => {
@@ -631,7 +622,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentPrompt = document.getElementById('checkra-prompt');
         if (currentPrompt) {
           currentPrompt.style.opacity = '1';
-          console.log('[Checkra Prompt] Fading in.');
         }
         fadeInTimeout = null; // Clear timeout variable once done or cleared
       }, 1500);
@@ -653,7 +643,6 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const node of mutation.addedNodes) {
               // Check if the added node *is* #feedback-viewer or *contains* it
               if (node.nodeType === 1 && (node.id === 'checkra-feedback-viewer' || node.querySelector('#checkra-feedback-viewer'))) {
-                console.log('[Checkra Prompt] Feedback viewer detected. Removing prompt and stopping observer.');
                 if (fadeInTimeout) {
                   clearTimeout(fadeInTimeout); // Prevent fade-in if viewer appears first
                   fadeInTimeout = null;
@@ -684,6 +673,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+
+    // Find the element
+    const feedbackButton = document.getElementById('checkra-show-feedback-viewer');
+
+    if (feedbackButton) {
+      feedbackButton.addEventListener('click', () => {
+        if (typeof gtag === 'function') {
+          gtag('event', 'feedback_viewer_opened', {
+            'event_category': 'engagement',
+            'event_label': 'Feedback Viewer Opened'
+          });
+        } else {
+          console.warn('gtag function not found. GA event not sent.');
+        }
+      });
+    } else {
+      console.warn('Element #checkra-show-feedback-viewer not found for GA tracking.');
+    }
   </script>
 </body>
 

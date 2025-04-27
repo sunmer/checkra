@@ -105,10 +105,7 @@ export const fetchFeedback = async (
 
     while (true) {
       const { done, value } = await reader.read();
-      console.log(`[${new Date().toISOString()}] Received chunk:`, value);
       if (done) {
-        console.log("Feedback stream complete");
-        
         if (buffer.trim()) {
           try {
             const lines = buffer.split('\n');
