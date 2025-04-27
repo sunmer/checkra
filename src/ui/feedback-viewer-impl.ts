@@ -87,14 +87,10 @@ export class FeedbackViewerImpl {
     // Outside click handler
     this.outsideClickHandler = (e: MouseEvent) => {
       if (this.domElements && this.domManager &&
-        this.domElements.viewer.style.display !== 'none' &&
+        !this.domElements.viewer.classList.contains('hidden') &&
         e.target instanceof Node &&
         !this.domElements.viewer.contains(e.target)) {
-        // UPDATED: Check if the click target is part of an applied fix wrapper
-        const appliedWrapper = (e.target as Element).closest('.checkra-feedback-applied-fix');
-        if (!appliedWrapper) { // Only hide if the click is outside the viewer AND outside any applied fix
-          this.hide();
-        }
+        this.hide();
       }
     };
     document.addEventListener('mousedown', this.outsideClickHandler);
@@ -272,7 +268,7 @@ export class FeedbackViewerImpl {
     this.accumulatedResponseText = '';
     this.isStreamStarted = false;
     this.isPreviewActive = false; // Ensure false
-    // --- EDIT: Clear preview tracking state ---
+
     this.previewInsertedNodes = [];
     this.previewInsertionParent = null;
     this.previewInsertionBeforeNode = null;
