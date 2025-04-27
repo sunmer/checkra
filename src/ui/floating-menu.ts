@@ -164,7 +164,7 @@ export class FloatingMenu {
       targetElement,
       clickX,
       clickY,
-      effectiveBackgroundColor
+      _effectiveBackgroundColor
     ) => {
       console.log('[Feedback] Screen capture callback executed.');
       if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml || targetElement) {
