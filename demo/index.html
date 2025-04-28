@@ -19,7 +19,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:title" content="checkra.io" />
   <meta property="og:description" content="Improve UX and conversions with instant AI feedback" />
-  <meta property="og:image" content="/og-image.jpg" />
+  <meta property="og:image" content="/og-image.png" />
   <meta property="og:url" content="https://checkra.io/" />
   <meta property="og:site_name" content="Checkra" />
 
@@ -204,7 +204,7 @@
     </header>
     <main id="content" role="main" class="relative z-10 flex-grow">
 
-      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-10">
+      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 my-24">
         <span
           class="inline-flex items-center gap-x-1.5 py-1.5 px-3 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Free
           & no account needed</span>
@@ -303,9 +303,8 @@
         </div>
       </div>
 
-
-      <!-- How it works -->
-      <div class="max-w-[85rem] px-4 py-10 sm:px-6 lg:px-8 lg:py-14 mt-12">
+      <!-- How it works Section -->
+      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 my-24">
         <div class="mx-auto max-w-2xl mb-8 lg:mb-14 text-center">
           <h2 class="text-3xl lg:text-4xl text-gray-800 font-bold text-black">
             How It Works
@@ -381,8 +380,8 @@
       </div>
       <!-- End How it works -->
 
-      <!-- Demo Section Outer Container for Alignment -->
-      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 mt-24">
+      <!-- Demo Section -->
+      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 my-24">
         <!-- Demo Section Inner Container for Styling -->
         <div class="mx-auto max-w-2xl mb-8 lg:mb-14 text-center">
           <h2 class="text-3xl lg:text-4xl text-gray-800 font-bold text-black">
@@ -490,9 +489,8 @@
       </div>
       <!-- End Demo Section Containers -->
 
-
       <!-- Audiences Section -->
-      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10 mt-12">
+      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div class="mx-auto max-w-2xl mb-8 lg:mb-14 text-center">
           <h2 class="text-3xl lg:text-4xl text-gray-800 font-bold text-black">
             Audiences
@@ -553,202 +551,148 @@
           </div>
           <!-- End Card -->
         </div>
-        <!-- End Card Grid -->
-        <div class="section bg-white p-6 rounded-lg shadow">
-          <h2 class="text-xl font-semibold text-gray-800 mb-4">Get started - no sign-up needed</h2>
 
-          <input type="radio" name="css-tabs" id="tab-radio-1" class="css-tab-radio" checked>
-          <input type="radio" name="css-tabs" id="tab-radio-2" class="css-tab-radio">
-
-          <div class="border-b border-gray-200 dark:border-neutral-700">
-            <nav class="-mb-0.5 flex space-x-6" aria-label="Tabs" role="tablist">
-
-              <label for="tab-radio-1" class="css-tab-label" role="tab" aria-selected="true"
-                aria-controls="tabs-with-underline-1" tabindex="0">
-                Easy install
-              </label>
-
-              <label for="tab-radio-2" class="css-tab-label" role="tab" aria-selected="false"
-                aria-controls="tabs-with-underline-2" tabindex="0">
-                NPM install
-              </label>
-            </nav>
-          </div>
-
-          <!-- Tab Panels Container (Now a direct sibling of the radio inputs) -->
-          <div class="mt-3 css-tab-panels">
-            <!-- Panel 1 -->
-            <div id="tabs-with-underline-1" class="css-tab-panel" role="tabpanel" aria-labelledby="tab-radio-1">
-              <p class="">
-                Copy these two lines and paste them inside the &lt;head&gt; section of your HTML file. Checkra will
-                appear automatically!
-              </p>
-              <pre><code class="text-sm text-gray-800 bg-gray-100 p-2 rounded block overflow-x-auto mt-2">&lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
-&lt;script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer&gt;&lt;/script&gt;
-</code></pre>
-            </div>
-            <!-- Panel 2 -->
-            <div id="tabs-with-underline-2" class="css-tab-panel" role="tabpanel" aria-labelledby="tab-radio-2">
-              <p class="">
-                1. Install the package using your preferred package manager.<br>
-                2. Import `initCheckra` in your project's entry point.<br>
-                3. Include the CSS via a &lt;link&gt; tag in your HTML's &lt;head&gt; tag.<br>
-                4. Call `initCheckra()` when your application mounts or the DOM is ready.
-              </p>
-              <div class="code-block bg-gray-100 p-4 rounded overflow-x-auto mt-2">
-                <pre><code class="text-sm text-gray-800"># 1. Install
-npm install checkra
-# or yarn add checkra
-# or pnpm add checkra
-
-# 2. Add CSS to HTML <head>
-&lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
-
-# 3. Import in your main JS/TS file
-import { initCheckra } from 'checkra';
-
-# 4. Initialize
-document.addEventListener('DOMContentLoaded', () => {
-  const checkraInstance = initCheckra({
-    isVisible: true // Default is true
-  });
-});</code></pre>
-              </div>
-            </div>
-          </div>
-          <!-- CSS-Only Tabs End -->
-
-        </div>
-
-        <!-- Pricing -->
-        <div class="mt-24">
-          <!-- Title -->
-          <div class="max-w-2xl mx-auto text-center mb-10 lg:mb-14">
-            <h2 class="text-2xl font-bold md:text-4xl md:leading-tight">Pricing</h2>
-          </div>
-          <!-- End Title -->
-
-          <!-- Grid -->
-          <div class="mt-12 grid sm:grid-cols-2 lg:grid-cols-2 gap-6 px-0 lg:px-24 lg:items-center">
-
-            <!-- Card -->
-            <div class="flex bg-white flex-col border border-gray-200 text-center rounded-xl p-8">
-              <h4 class="font-medium text-lg text-gray-800">Free</h4>
-              <span class="mt-7 font-bold text-5xl text-gray-800">Free</span>
-              <p class="mt-2 text-sm text-gray-500">Cover the basics</p>
-
-              <ul class="mt-7 space-y-2.5 text-sm">
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    1 user
-                  </span>
-                </li>
-
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    25 daily GPT-4 completions
-                  </span>
-                </li>
-
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    Sharing of suggestions
-                  </span>
-                </li>
-              </ul>
-
-              <a class="mt-5 py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-800 shadow-2xs hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none focus:outline-hidden focus:bg-gray-50"
-                href="#">
-                No sign-up needed, include the Checkra script and get started
-              </a>
-            </div>
-            <!-- End Card -->
-
-            <!-- Card -->
-            <div class="flex bg-white flex-col border border-gray-200 text-center rounded-xl p-8">
-              <p class="mb-3"><span
-                  class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs uppercase font-semibold bg-blue-100 text-blue-800 dark:bg-blue-600 dark:text-white">Coming
-                  soon</span></p>
-              <h4 class="font-medium text-lg text-gray-800">Solo</h4>
-              <span class="mt-5 font-bold text-5xl text-gray-800">
-                <span class="font-bold text-2xl -me-2">$</span>
-                9<p class="mt-2 text-sm text-gray-500">/month</p>
-              </span>
-              <p class="mt-2 text-sm text-gray-500">Smarter feedback & improvements</p>
-
-              <ul class="mt-7 space-y-2.5 text-sm">
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    1 user
-                  </span>
-                </li>
-
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    50 daily GPT, Gemini or Claude completions
-                  </span>
-                </li>
-
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    Faster completions
-                  </span>
-                </li>
-
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-800">
-                    Github and Jira integrations for sharing suggestions + change notes
-                  </span>
-                </li>
-              </ul>
-
-              <a class="mt-5 py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-hidden focus:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
-                href="#">
-                Coming Soon
-              </a>
-            </div>
-            <!-- End Card -->
-          </div>
-          <!-- End Grid -->
-
-        </div>
-        <!-- End Pricing -->
       </div>
+
+      <!-- Pricing -->
+      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <!-- Title -->
+        <div class="max-w-2xl mx-auto text-center mb-10 lg:mb-14">
+          <h2 class="text-2xl font-bold md:text-4xl md:leading-tight">Pricing</h2>
+        </div>
+        <!-- End Title -->
+
+        <!-- Grid -->
+        <div class="grid sm:grid-cols-2 lg:grid-cols-2 gap-6 px-0 lg:px-24 lg:items-center">
+
+          <!-- Card -->
+          <div class="flex bg-white flex-col border border-gray-200 text-center rounded-xl p-8">
+            <h4 class="font-medium text-lg text-gray-800">Anonymous Package</h4>
+            <span class="mt-7 font-bold text-5xl text-gray-800">Free</span>
+            <p class="mt-2 text-sm text-gray-500">Cover the basics</p>
+
+            <ul class="mt-7 space-y-2.5 text-sm">
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  1 user
+                </span>
+              </li>
+
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  25 daily GPT-4 or GPT-4-mini completions
+                </span>
+              </li>
+
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  5 monthly A/B tests (coming soon)
+                </span>
+              </li>
+            </ul>
+
+            <a class="mt-5 py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-800 shadow-2xs hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none focus:outline-hidden focus:bg-gray-50"
+              href="#">
+              No sign-up needed, include the Checkra script and get started
+            </a>
+          </div>
+          <!-- End Card -->
+
+          <!-- Card -->
+          <div class="flex bg-white flex-col border border-gray-200 text-center rounded-xl p-8">
+            <p class="mb-3"><span
+                class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs uppercase font-semibold bg-blue-100 text-blue-800 dark:bg-blue-600 dark:text-white">Coming
+                soon</span></p>
+            <h4 class="font-medium text-lg text-gray-800">Startup Package</h4>
+            <span class="mt-5 font-bold text-5xl text-gray-800">
+              <span class="font-bold text-2xl -me-2">$</span>
+              9<p class="mt-2 text-sm text-gray-500">/month</p>
+            </span>
+            <p class="mt-2 text-sm text-gray-500">Better feedback & more A/B tests</p>
+
+            <ul class="mt-7 space-y-2.5 text-sm">
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  1 user
+                </span>
+              </li>
+
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  50 daily GPT-4, Gemini or Claude completions
+                </span>
+              </li>
+
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  Faster completions
+                </span>
+              </li>
+
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  20 monthly A/B tests (coming soon)
+                </span>
+              </li>
+
+              <li class="flex gap-x-2">
+                <svg class="shrink-0 mt-0.5 size-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24"
+                  height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span class="text-gray-800">
+                  Github and Jira integrations for sharing suggestions + change notes
+                </span>
+              </li>
+            </ul>
+
+            <a class="mt-5 py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-hidden focus:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
+              href="#">
+              Coming Soon
+            </a>
+          </div>
+          <!-- End Card -->
+        </div>
+        <!-- End Grid -->
+
+      </div>
+      <!-- End Pricing -->
 
     </main>
   </div>
