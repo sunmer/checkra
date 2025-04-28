@@ -94,9 +94,30 @@ export const fetchFeedback = async (
       body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok || !response.body) {
-      // Throw error to be caught below
-      throw new Error(`Feedback request failed: ${response.status} ${response.statusText}`);
+    // --- Modified Error Handling for !response.ok ---
+    if (!response.ok) {
+      let specificErrorMessage = `Feedback request failed: ${response.status} ${response.statusText}`;
+      try {
+        const errorBodyText = await response.text(); // Read body once
+        if (errorBodyText) {
+            const errorJson = JSON.parse(errorBodyText);
+            if (errorJson && errorJson.error) {
+                // Use the specific error from JSON payload
+                specificErrorMessage = errorJson.error;
+            }
+        }
+      } catch (parseError) {
+        // Ignore parsing error, stick with the original HTTP status error
+        console.warn("[Checkra Service] Failed to parse error response body:", parseError);
+      }
+      // Throw the determined error message to be caught by the outer catch block
+      throw new Error(specificErrorMessage);
+    }
+    // --- End Modified Error Handling ---
+
+    // Proceed with stream processing only if response.ok is true
+    if (!response.body) {
+        throw new Error("Response body is null, cannot process stream.");
     }
 
     const reader = response.body.getReader();
