@@ -19,7 +19,7 @@ export class SettingsModal {
   private temperatureDescriptionDisplay: HTMLParagraphElement | null = null;
 
   private currentSettings: AiSettings = {
-    model: 'gpt-4o-mini',
+    model: 'gpt-4o',
     temperature: 0.7,
   };
 
@@ -160,7 +160,7 @@ export class SettingsModal {
 
     if (this.modelSelect) {
       this.modelSelect.innerHTML = '';
-      const modelOptions = ['gpt-4o-mini']; 
+      const modelOptions = ['gpt-4o', 'gpt-4o-mini'];
       modelOptions.forEach(optionText => {
         const option = document.createElement('option');
         option.value = optionText.toLowerCase().replace(/ /g, '-');
@@ -285,7 +285,7 @@ export class SettingsModal {
    */
   public getCurrentSettings(): AiSettings {
     if (!this.currentSettings.model) {
-      this.currentSettings.model = 'gpt-4o-mini';
+      this.currentSettings.model = 'gpt-4o';
     }
     return { ...this.currentSettings };
   }
