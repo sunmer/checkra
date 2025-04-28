@@ -176,7 +176,7 @@
     style="background-image: radial-gradient(at 30% 30%, rgb(163, 230, 177) 0%, transparent 40%), radial-gradient(at 70% 20%, rgb(247, 241, 220) 0%, transparent 50%), radial-gradient(at 50% 50%, rgb(207, 207, 232) 0%, transparent 60%), radial-gradient(at 20% 80%, rgb(43, 194, 155) 0%, transparent 50%), radial-gradient(at 80% 80%, rgb(62, 215, 194) 0%, transparent 50%);">
   </div>
   <div
-    class="relative flex-grow flex flex-col before:absolute before:top-0 before:left-1/2 before:bg-[url('/polygon-bg-element.svg')] before:bg-no-repeat before:bg-top before:bg-cover before:w-full before:h-full before:-z-[1] before:transform before:-translate-x-1/2">
+    class="relative flex-grow flex flex-col before:absolute before:top-0 before:left-1/2 before:bg-[url('/polygon-bg-element.svg')] before:bg-no-repeat before:bg-top before:bg-cover before:w-full before:h-1/2 before:-z-[1] before:transform before:-translate-x-1/2">
     <header class="relative z-10 flex flex-wrap sm:justify-start sm:flex-nowrap w-full bg-transparent text-sm py-4">
       <nav class="max-w-[85rem] w-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between"
         aria-label="Global">
@@ -205,6 +205,8 @@
     <main id="content" role="main" class="relative z-10 flex-grow">
 
       <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-10">
+        <span
+          class="inline-flex items-center gap-x-1.5 py-1.5 px-3 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Free & no account needed</span>
         <div class="mt-5 max-w-2xl">
           <h1 class="block font-bold text-gray-800 text-4xl md:text-5xl lg:text-6xl">
             Get instant UX and conversion tips<br />
@@ -216,9 +218,9 @@
         <div class="mt-5 max-w-3xl">
           <p class="text-lg text-gray-600 mb-4">
             Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed
-            live on your site. Setup takes &lt;30 seconds & no account is required.
+            live on your site.
           </p>
-          
+
           <div class="sm:flex auto-cols-max items-center gap-3 md:gap-6 mt-8">
             <span class="block text-xs text-gray-600 font-semibold uppercase mb-3 sm:mb-0">
               Compatible with:
@@ -301,6 +303,82 @@
       </div>
 
 
+      <!-- Icon Blocks -->
+      <div class="max-w-[85rem] px-4 py-10 sm:px-6 lg:px-8 lg:py-14 mt-24">
+        <div class="mx-auto max-w-2xl mb-8 lg:mb-14 text-center">
+          <h2 class="text-3xl lg:text-4xl text-gray-800 font-bold text-black">
+            How It Works
+          </h2>
+        </div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 items-start gap-12">
+          <!-- Icon Block -->
+          <div class="flex flex-col bg-white border border-gray-200 shadow-2xs rounded-xl p-4">
+            <div class="flex justify-between items-center mb-4">
+              <span class="text-gray-800 text-sm text-xl font-semibold">1.</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 size-8 text-gray-300" width="24" height="24"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" class="lucide lucide-code-xml-icon lucide-code-xml">
+                <path d="m18 16 4-4-4-4" />
+                <path d="m6 8-4 4 4 4" />
+                <path d="m14.5 4-5 16" />
+              </svg>
+            </div>
+            <div class="mt-5">
+              <h3 class="text-lg font-semibold text-gray-800">Copy the script tag</h3>
+              <p class="mt-1 text-gray-600">No registration or account is needed and can be used on any website</p>
+              <button type="button" id="copy-script-button"
+                class="mt-2 py-2 px-3 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-hidden focus:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none">
+                Copy the tag
+              </button>
+            </div>
+          </div>
+          <!-- End Icon Block -->
+
+          <!-- Icon Block -->
+          <div class="flex flex-col bg-white border border-gray-200 shadow-2xs rounded-xl p-4">
+            <div class="flex justify-between items-center mb-4">
+              <span class="text-gray-800 text-sm text-xl font-semibold">2.</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 size-8 text-gray-300" width="24" height="24"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" class="lucide lucide-clipboard-check-icon lucide-clipboard-check">
+                <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <path d="m9 14 2 2 4-4" />
+              </svg>
+            </div>
+            <div class="mt-5">
+              <h3 class="text-lg font-semibold text-gray-800">Paste it to your website</h3>
+              <p class="mt-1 text-gray-600">Paste the tag into the &lt;head&gt; element of your website</p>
+            </div>
+          </div>
+          <!-- End Icon Block -->
+
+          <!-- Icon Block -->
+          <div class="flex flex-col bg-white border border-gray-200 shadow-2xs rounded-xl p-4">
+            <div class="flex justify-between items-center mb-4">
+              <span class="text-gray-800 text-sm text-xl font-semibold">3.</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 size-8 text-gray-300" width="24" height="24"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" class="lucide lucide-sparkles-icon lucide-sparkles">
+                <path
+                  d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+                <path d="M20 3v4" />
+                <path d="M22 5h-4" />
+                <path d="M4 17v2" />
+                <path d="M5 18H3" />
+              </svg>
+            </div>
+            <div class="mt-5">
+              <h3 class="text-lg font-semibold text-gray-800">Checkra appears</h3>
+              <p class="mt-1 text-gray-600">You can now ask Checkra for UX & conversion feedback right on your website
+              </p>
+            </div>
+          </div>
+          <!-- End Icon Block -->
+        </div>
+      </div>
+      <!-- End Icon Blocks -->
+
       <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10 mt-24">
         <div class="mx-auto max-w-2xl mb-8 lg:mb-14 text-center">
           <h2 class="text-3xl lg:text-4xl text-gray-800 font-bold text-black">
@@ -309,7 +387,7 @@
         </div>
 
         <div
-          class="mb-24 grid grid-cols-1 lg:grid-cols-2 items-center border border-neutral-700 divide-y lg:divide-y-0 lg:divide-x divide-neutral-700 rounded-xl">
+          class="mb-24 grid grid-cols-1 lg:grid-cols-2 items-center divide-y lg:divide-y-0 lg:divide-x divide-neutral-700 rounded-xl">
 
           <!-- Card -->
           <div
@@ -568,9 +646,10 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 
     <div class="mt-3">
-      <p class="text-gray-500">© Checkra. 2024. All rights reserved. 
-        | <a class="text-blue-600" href="privacy.html">Privacy Policy</a> 
-        | <a class="text-blue-600" href="javascript:void(0);" onclick="window.location.href='mailto:' + 'contact' + '@' + 'checkra.io'">Contact</a>
+      <p class="text-gray-500">© Checkra. 2024. All rights reserved.
+        | <a class="text-blue-600" href="privacy.html">Privacy Policy</a>
+        | <a class="text-blue-600" href="javascript:void(0);"
+          onclick="window.location.href='mailto:' + 'contact' + '@' + 'checkra.io'">Contact</a>
       </p>
     </div>
 
@@ -595,7 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <!-- Prompt for the Checkra button -->
   <div id="checkra-prompt"
     style="position: fixed; max-width: 310px; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; display: flex; align-items: center;">
-    👇&nbsp;&nbsp;Test Checkra live, click the button below, then select any part of the website
+    👇&nbsp;&nbsp;Start demo, click the button below, then select any part of the website
   </div>
 
   <script>
@@ -611,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
       const actionWord = isMobile ? 'tap' : 'click';
       const emojiSpan = '<span style="margin-right: 0.5em;">👇</span>';
-      const textSpan = `<span>Test Checkra live, ${actionWord} the button below, then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
+      const textSpan = `<span>Start demo, ${actionWord} the button below, then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
 
       // Set the innerHTML
       promptElement.innerHTML = emojiSpan + textSpan;
@@ -691,6 +770,34 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       console.warn('Element #checkra-show-feedback-viewer not found for GA tracking.');
     }
+  </script>
+
+  <!-- Script for Copy Button -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const copyButton = document.getElementById('copy-script-button');
+      const textToCopy = `<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">\n<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer><\/script>`;
+
+      if (copyButton) {
+        copyButton.addEventListener('click', () => {
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            // Success: Change button text temporarily
+            const originalText = copyButton.textContent;
+            copyButton.textContent = 'Copied!';
+            copyButton.disabled = true; // Optionally disable button briefly
+            setTimeout(() => {
+              copyButton.textContent = originalText;
+              copyButton.disabled = false; // Re-enable button
+            }, 2000); // Revert after 2 seconds
+          }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            alert('Failed to copy script tag. Please copy it manually.'); // Provide feedback about the failure
+          });
+        });
+      } else {
+        console.warn('Copy button (#copy-script-button) not found.');
+      }
+    });
   </script>
 </body>
 
