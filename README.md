@@ -59,6 +59,29 @@ if (checkraInstance) {
 }
 ```
 
+### Configuration Before Script Load (CDN/Script Tag Users)
+
+If you are using the simple CDN script tag installation but need to configure Checkra *before* it initializes (e.g., to disable the UI conditionally), you can define a global `CheckraConfig` object in a `<script>` tag placed *before* the main Checkra script:
+
+```html
+<!-- Place this *before* the checkra.umd.cjs script -->
+<script>
+  // Example: Disable Checkra UI based on some condition
+  if (window.location.hostname !== 'dev.mysite.com') {
+    window.CheckraConfig = { isVisible: false };
+  }
+  // If CheckraConfig is not set, default options will be used (isVisible: true)
+</script>
+
+<!-- Standard Checkra Scripts -->
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
+<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
+```
+
+### Loading Checkra Only in Development/Preview (for Platforms)
+
+A common requirement when using platforms like Shopify, Squarespace, or Webflow is to load Checkra only during development or preview sessions, not on the live site. Instead of using `window.CheckraConfig`, it's generally better to conditionally include the Checkra `<link>` and `<script>` tags using your platform's specific templating or logic. Refer to the [Setup Guide](demo/setup.html) for platform-specific examples.
+
 ## API
 
 The `initCheckra(options)` function returns an API object (or `null` on failure) with the following methods:
