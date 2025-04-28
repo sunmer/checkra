@@ -172,6 +172,13 @@
 </script>
 
 <body class="relative flex flex-col min-h-screen bg-gray-50">
+  <div class="py-2 flex flex-wrap justify-between items-center gap-1.5 bg-blue-500">
+    <div class="max-w-[85rem] w-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      <p class="me-2 inline-block text-xs sm:text-sm text-white">
+        New version (1.0.14) - all free accounts get upgraded to GPT4o for feedback. No upgrade is needed, rolls out for everyone automatically.
+      </p>
+    </div>
+  </div>
   <div class="absolute inset-0 z-[-1] opacity-30"
     style="background-image: radial-gradient(at 30% 30%, rgb(163, 230, 177) 0%, transparent 40%), radial-gradient(at 70% 20%, rgb(247, 241, 220) 0%, transparent 50%), radial-gradient(at 50% 50%, rgb(207, 207, 232) 0%, transparent 60%), radial-gradient(at 20% 80%, rgb(43, 194, 155) 0%, transparent 50%), radial-gradient(at 80% 80%, rgb(62, 215, 194) 0%, transparent 50%);">
   </div>
@@ -390,7 +397,7 @@
             Demo / Live Playground ⚡️
           </h2>
           <p class="mt-4 md:text-lg text-gray-600 dark:text-neutral-400">
-            Experiment on our dummy landing section. Click the floating button 
+            Experiment on our dummy landing section. Click the floating button
             <span id="trigger-checkra-show-feedback-viewer" title="Open Checkra"
               style="width: 1.2em; height: 1.2em; border-radius: 50%; color: white; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; background-color: rgba(20, 120, 255, 0.85); user-select: none; vertical-align: middle; margin-left: 0.15em; margin-right: 0.15em;">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -424,7 +431,8 @@
                     PlantPal – monthly indoor plants, delivered
                   </h3>
                   <p class="text-gray-500">
-                    We are the #1 solution for monthly plant deliveries that makes rooms amazing and also good for wellbeing, productivity and lots of other stuff
+                    We are the #1 solution for monthly plant deliveries that makes rooms amazing and also good for
+                    wellbeing, productivity and lots of other stuff
                   </p>
                 </div>
                 <!-- End Title -->
@@ -476,7 +484,8 @@
                     </div>
                   </li>
                 </ul>
-                <button type="button" class="py-3 px-4 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-red-400 text-white hover:bg-red-500 focus:outline-hidden focus:bg-red-200 disabled:opacity-50 disabled:pointer-events-none">
+                <button type="button"
+                  class="py-3 px-4 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-red-400 text-white hover:bg-red-500 focus:outline-hidden focus:bg-red-200 disabled:opacity-50 disabled:pointer-events-none">
                   Sign up for PlantPal
                 </button>
                 <!-- End List -->
@@ -920,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (triggerButton) {
         triggerButton.addEventListener('click', (event) => {
           // Prevent default if it's somehow an anchor or similar
-          event.preventDefault(); 
+          event.preventDefault();
 
           // Find the target button *inside* the event handler
           // as it might be added dynamically after DOMContentLoaded.
