@@ -7,6 +7,7 @@ const DEFAULT_HEIGHT = 220;
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 220;
 const MAX_WIDTH_VW = 80;
+const LOCALSTORAGE_PANEL_WIDTH_KEY = 'checkra_panel_width';
 
 // Define the settings SVG icon as a constant
 const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -85,8 +86,26 @@ export class FeedbackViewerDOM {
     viewer.addEventListener('mousedown', this.handleResizeStart);
 
     // Remove width/height setting since it's handled by CSS
-    viewer.style.width = '450px';
-    viewer.style.height = '100vh';
+    // viewer.style.width = '450px'; // Default handled by CSS now
+    // viewer.style.height = '100vh'; // Default handled by CSS
+
+    // ADDED: Restore width from localStorage
+    try {
+      const storedWidth = localStorage.getItem(LOCALSTORAGE_PANEL_WIDTH_KEY);
+      if (storedWidth) {
+        const width = parseInt(storedWidth, 10);
+        if (width >= MIN_WIDTH && width <= (window.innerWidth * MAX_WIDTH_VW / 100)) {
+          viewer.style.width = `${width}px`;
+        } else {
+          viewer.style.width = `${DEFAULT_WIDTH}px`; // Fallback to default if stored is invalid
+        }
+      } else {
+        viewer.style.width = `${DEFAULT_WIDTH}px`; // Default if not stored
+      }
+    } catch (e) {
+      console.warn('[FeedbackViewerDOM] Error reading panel width from localStorage:', e);
+      viewer.style.width = `${DEFAULT_WIDTH}px`; // Fallback on error
+    }
 
     // --- Header ---
     const responseHeader = document.createElement('div');
@@ -169,12 +188,21 @@ export class FeedbackViewerDOM {
     const miniSelectButton = document.createElement('button');
     miniSelectButton.id = 'checkra-mini-select-btn';
     miniSelectButton.title = 'Select element on page';
-    miniSelectButton.innerHTML = CROSSHAIR_SVG;
+    miniSelectButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+        <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+        <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="m16 16-1.5-1.5"></path>
+      </svg>
+    `;
     buttonRow.appendChild(miniSelectButton);
     const submitButton = document.createElement('button');
     submitButton.id = 'checkra-feedback-submit-button';
     const submitButtonTextSpan = document.createElement('span');
-    submitButtonTextSpan.textContent = 'Get Feedback';
+    submitButtonTextSpan.textContent = 'Ask a question';
     submitButton.appendChild(submitButtonTextSpan);
     const shortcutHint = document.createElement('span');
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -298,6 +326,14 @@ export class FeedbackViewerDOM {
     document.removeEventListener('mouseup', this.handleResizeEnd);
     this.elements.contentWrapper.style.pointerEvents = '';
     this.elements.viewer.classList.remove('resizing');
+
+    // ADDED: Save new width to localStorage
+    try {
+      const currentWidth = this.elements.viewer.offsetWidth;
+      localStorage.setItem(LOCALSTORAGE_PANEL_WIDTH_KEY, String(currentWidth));
+    } catch (e) {
+      console.warn('[FeedbackViewerDOM] Error saving panel width to localStorage:', e);
+    }
   }
 
   // --- Visibility and Content ---

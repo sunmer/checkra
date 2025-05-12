@@ -73,6 +73,7 @@ export class FeedbackViewerImpl {
   private isVisible: boolean = false;
   private currentImageDataUrl: string | null = null;
   private initialSelectedElement: Element | null = null; // The element *initially* selected by the user for the cycle
+  private currentlyHighlightedElement: Element | null = null; // << ADDED: Track element with outline
   private originalOuterHTMLForCurrentCycle: string | null = null; // Store the initial HTML of the selected element
   private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
   private currentFixId: string | null = null; // Unique ID for the element being worked on
@@ -232,6 +233,9 @@ export class FeedbackViewerImpl {
     // Optional: Clear history state if needed on full cleanup?
     // this.conversationHistory = []; 
 
+    // ADDED: Remove highlight on cleanup
+    this.removeSelectionHighlight();
+
     console.log('[FeedbackViewerLogic] Cleaned up listeners and unsubscribed from AI events.');
   }
 
@@ -250,7 +254,7 @@ export class FeedbackViewerImpl {
     targetRect: DOMRect | null,
     targetElement: Element | null
   ): void {
-    this.isScreenCapturing = false; // << RESET FLAG HERE
+    this.isScreenCapturing = false; 
     console.log(`[Impl.prepareForInput] Received selectedHtml length: ${selectedHtml?.length ?? 'null'}, targetElement: ${targetElement?.tagName}`);
 
     if (!this.domManager || !this.domElements) {
@@ -258,13 +262,10 @@ export class FeedbackViewerImpl {
       return;
     }
 
-    // Store data
+    // Store data for the NEW selection context
     this.currentImageDataUrl = imageDataUrl;
-    this.initialSelectedElement = targetElement || document.body; // Fallback to body if no target
+    this.initialSelectedElement = targetElement || document.body; // Fallback to body
     
-    // CRITICAL: Ensure we are using the passed selectedHtml from screenCapture
-    // If it's a specific selection, selectedHtml should be populated.
-    // If it's a general opening (e.g. toggle, quick audit init), selectedHtml might be null.
     if (selectedHtml && targetElement) { 
         this.originalOuterHTMLForCurrentCycle = selectedHtml;
         console.log(`[Impl.prepareForInput] USING specific selectedHtml for ${targetElement.tagName}, length: ${selectedHtml.length}`);
@@ -273,53 +274,47 @@ export class FeedbackViewerImpl {
         console.log(`[Impl.prepareForInput] FALLBACK to document.body.outerHTML, length: ${this.originalOuterHTMLForCurrentCycle.length}`);
     }
 
+    // Generate a NEW fixId for this NEW interaction cycle
     this.currentFixId = `checkra-fix-${this.fixIdCounter++}`;
-    // Only set attribute if it's not the body, or for a specific reason
-    if (this.initialSelectedElement !== document.body) {
-        this.initialSelectedElement?.setAttribute('data-checkra-fix-id', this.currentFixId);
-    }
-    console.log(`[FeedbackViewerLogic] Preparing for input. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement.tagName}`);
 
-    // Reset state
+    // --- ADDED: Manage Highlight --- 
+    this.removeSelectionHighlight(); // Remove from previous element
+    if (this.initialSelectedElement && this.initialSelectedElement !== document.body) {
+        this.initialSelectedElement.classList.add('checkra-selected-element-outline');
+        this.currentlyHighlightedElement = this.initialSelectedElement;
+        // Add data-checkra-fix-id *after* potentially removing highlight from the previous element
+        this.initialSelectedElement?.setAttribute('data-checkra-fix-id', this.currentFixId);
+    } else {
+        this.currentlyHighlightedElement = null; // No highlight on body
+    }
+    // --- END ADDED --- 
+
+    console.log(`[FeedbackViewerLogic] Preparing for new input cycle. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement?.tagName ?? 'null'}`); // Handle null element
+
+    // Reset fix-specific state for this NEW cycle, but keep conversation history
+    this.isPreviewActive = false;
+    this.fixedOuterHTMLForCurrentCycle = null; // Clear any fix from a *previous* interaction cycle
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
     this.previewInsertedNodes = [];
     this.previewInsertionParent = null;
     this.previewInsertionBeforeNode = null;
 
-    const wasVisible = this.isVisible; // Check internal state *before* resetting UI
-
-    // Reset UI
-    this.domManager.setPromptState(true, '');
-    this.domManager.updateSubmitButtonState(true, 'Get Feedback');
-    this.domManager.clearUserMessage();
-    this.domManager.clearAIResponseContent();
-    this.domManager.showPromptInputArea(true); // This ensures textarea container is ready
+    // --- Update UI elements (assuming panel is already visible) ---
+    const currentPromptText = this.domElements.promptTextarea.value;
+    this.domManager.setPromptState(true, currentPromptText); // Re-enable, preserve text
+    this.domManager.updateSubmitButtonState(true, 'Ask a question');
     this.domManager.updateLoaderVisibility(false);
-    this.domManager.updateActionButtonsVisibility(false); // Hide action buttons
-    this.domManager.showFooterCTA(false); // Ensure footer CTA is hidden
+    this.domManager.updateActionButtonsVisibility(false); 
+    this.domManager.showFooterCTA(false); 
 
-    if (this.domElements) { // Check if domElements is not null
+    if (this.domElements) { 
         this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
         this.domElements.cancelButton.style.display = 'none';
     }
     
-    // Show viewer panel IF IT WASN'T ALREADY VISIBLE or if it needs re-showing after selection
-    // When selecting with mini-select, the panel is already visible. 
-    // Calling domManager.show() again might be redundant or cause flicker if it re-does setup.
-    // However, domManager.show() also handles focusing and ensures class states, so it's safer to call.
-    // The flicker might be due to class re-application triggering transitions.
-    // For now, let's ensure it is called, and if flicker persists, we can make domManager.show() more idempotent.
-    if (!wasVisible) {
-        console.log('[Impl.prepareForInput] Panel was hidden, calling domManager.show()');
-        this.domManager.show(); 
-        this.isVisible = true; // << SET isVisible to true
-        this.onToggleCallback(true); // Notify coordinator/external
-    } else {
-        console.log('[Impl.prepareForInput] Panel was already visible. UI reset, not re-showing explicitly.');
-        // Ensure focus if it was already visible but textarea might have lost it
-        this.domElements?.promptTextarea.focus();
-    }
+    this.domElements?.promptTextarea.focus();
+    console.log('[Impl.prepareForInput] UI reset for new input context.');
   }
 
   public updateResponse(chunk: string): void {
@@ -363,7 +358,7 @@ export class FeedbackViewerImpl {
 
     this.domManager.updateLoaderVisibility(false);
     this.domManager.setPromptState(true);
-    this.domManager.updateSubmitButtonState(true, 'Get Feedback');
+    this.domManager.updateSubmitButtonState(true, 'Ask a question');
     this.updateActionButtonsVisibility(); // Update header buttons based on the latest fix (if any)
 
     if (this.isQuickAuditRun) {
@@ -396,7 +391,7 @@ export class FeedbackViewerImpl {
     this.domManager.updateActionButtonsVisibility(false);
     this.domManager.setResponseContent(`<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`, false);
     this.domManager.setPromptState(true);
-    this.domManager.updateSubmitButtonState(true, 'Get Feedback');
+    this.domManager.updateSubmitButtonState(true, 'Ask a question');
     this.domManager.showPromptInputArea(true);
 
     this.saveHistory({ type: 'error', content: errorMessage }); // ADDED: Save error to history
@@ -432,6 +427,9 @@ export class FeedbackViewerImpl {
 
     this.domManager?.showFooterCTA(false); // Add this line
     this.isQuickAuditRun = false; // Reset flag on hide
+
+    // ADDED: Remove highlight when hiding
+    this.removeSelectionHighlight();
 
     if (initiatedByUser && fromCloseButton) {
       console.log('[FeedbackViewerImpl] Panel hidden by user close button action. Setting flag.');
@@ -677,7 +675,7 @@ export class FeedbackViewerImpl {
            // Panel should remain open after applying the fix.
            // Consider resetting the prompt or showing a success message here.
            this.domManager?.setPromptState(true, ''); // Re-enable prompt
-           this.domManager?.updateSubmitButtonState(true, 'Get Feedback');
+           this.domManager?.updateSubmitButtonState(true, 'Ask a question');
            this.domManager?.updateActionButtonsVisibility(false); // Hide preview/apply buttons
            this.domManager?.showPromptInputArea(true); // Show prompt area
 
@@ -999,6 +997,23 @@ export class FeedbackViewerImpl {
 
             // Insert the original fragment back at the stored position
             this.previewInsertionParent.insertBefore(originalFragment, this.previewInsertionBeforeNode);
+
+            // ADDED: Re-apply highlight to the reverted element
+            let elementToHighlight: Element | null = null;
+            if (firstOriginalElement) {
+                elementToHighlight = firstOriginalElement;
+            } else if (this.previewInsertionParent instanceof Element) { // Check if parent is an Element
+                // Search within the parent only if it's an element
+                elementToHighlight = this.previewInsertionParent.querySelector(`[data-checkra-fix-id="${this.currentFixId}"]`);
+            }
+            
+            if (elementToHighlight && elementToHighlight !== document.body) {
+                 elementToHighlight.classList.add('checkra-selected-element-outline');
+                 this.currentlyHighlightedElement = elementToHighlight;
+            } else {
+                this.currentlyHighlightedElement = null;
+            }
+
             console.log(`[FeedbackViewerLogic] Preview reverted for ${this.currentFixId} by restoring original fragment.`);
             // --- END EDIT ---
 
@@ -1030,6 +1045,15 @@ export class FeedbackViewerImpl {
             return false;
         }
    }
+
+  // --- ADDED: Helper to remove highlight --- 
+  private removeSelectionHighlight(): void {
+      if (this.currentlyHighlightedElement) {
+          this.currentlyHighlightedElement.classList.remove('checkra-selected-element-outline');
+          this.currentlyHighlightedElement = null;
+          console.log('[FeedbackViewerLogic] Removed selection highlight.');
+      }
+  }
 
   // --- Helpers ---
 
@@ -1269,7 +1293,7 @@ ${aboveFoldHtml}
         // Reset UI state on error
         if (this.domManager) {
             this.domManager.setPromptState(true);
-            this.domManager.updateSubmitButtonState(true, 'Get Feedback');
+            this.domManager.updateSubmitButtonState(true, 'Ask a question');
             this.domManager.updateLoaderVisibility(false);
         }
     }
@@ -1372,11 +1396,25 @@ ${aboveFoldHtml}
     } catch (e) {
       console.warn('[FeedbackViewerImpl] Failed to remove localStorage item:', e);
     }
+
+    // --- Show the panel FIRST ---
+    if (!this.domManager) {
+        console.error("[FeedbackViewerImpl] Cannot show panel: DOM Manager not initialized.");
+        return;
+    }
+    this.domManager.show(); // Make the panel visible via DOM Manager
+    this.isVisible = true;    // Update internal state
+    this.onToggleCallback(true); // Notify coordinator
+    console.log('[FeedbackViewerImpl] Panel shown via showFromApi.');
+    // --- End Show Panel ---
+
     const firstRun = !localStorage.getItem('checkra_onboarded');
     if (firstRun) {
-      this.showOnboarding();
+      this.showOnboarding(); // This might call domManager.show() again, should be okay
     } else {
-      this.prepareForInput(null, null, null, null);
+      // Panel is now visible, prepare the default input state (body)
+      console.log('[FeedbackViewerImpl] showFromApi preparing default input state (body).');
+      this.prepareForInput(null, null, null, document.body); // Pass body explicitly
     }
   }
 

@@ -85,7 +85,7 @@ export class SettingsModal {
     const header = document.createElement('div');
 
     const title = document.createElement('h2');
-    title.textContent = 'AI Settings';
+    title.textContent = 'Settings';
 
     this.closeButton = document.createElement('button');
     this.closeButton.id = 'checkra-settings-modal-close'; // ADD ID for CSS targeting

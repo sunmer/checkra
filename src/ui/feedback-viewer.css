@@ -53,9 +53,11 @@
 
 /* --- Fix Preview State --- */
 .checkra-fix-previewing {
-  outline: 2px dashed #196ee6; /* Add outline during preview */
+  outline: 2px dashed #196ee6;
+  /* Add outline during preview */
   outline-offset: 2px;
-  box-shadow: 0 0 10px rgba(25, 110, 230, 0.5); /* Optional glow */
+  box-shadow: 0 0 10px rgba(25, 110, 230, 0.5);
+  /* Optional glow */
 }
 
 /* --- Applied Fix Styles (New Wrapper) --- */
@@ -71,14 +73,25 @@
   height: 100%;
 }
 
+/* --- ADDED: Outline for actively selected element --- */
+.checkra-selected-element-outline {
+  outline: 2px solid #2563eb !important;
+  /* Use important to override potential conflicts */
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.5) !important;
+  /* Optional subtle glow */
+}
+
 /* --- Buttons on Applied Fix Wrapper --- */
 /* Position and style all buttons similarly */
 .checkra-feedback-applied-fix .feedback-fix-close-btn,
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
 .checkra-feedback-applied-fix .feedback-fix-toggle {
   position: absolute;
-  top: 3px; /* Adjust positioning */
-  width: 20px; /* Adjust size */
+  top: 3px;
+  /* Adjust positioning */
+  width: 20px;
+  /* Adjust size */
   height: 20px;
   background-color: rgba(50, 50, 50, 0.8);
   color: #eee;
@@ -87,31 +100,40 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px; /* For close button 'x' */
+  font-size: 12px;
+  /* For close button 'x' */
   font-weight: bold;
   line-height: 1;
-  z-index: 11; /* Ensure buttons are above content */
+  z-index: 11;
+  /* Ensure buttons are above content */
   pointer-events: auto;
   transition: background-color 0.2s, color 0.2s, transform 0.1s;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-  padding: 2px; /* Add padding for SVGs */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  padding: 2px;
+  /* Add padding for SVGs */
   box-sizing: border-box;
 }
+
 .checkra-feedback-applied-fix .feedback-fix-close-btn:hover,
 .checkra-feedback-applied-fix .feedback-fix-copy-btn:hover,
 .checkra-feedback-applied-fix .feedback-fix-toggle:hover {
-   transform: scale(1.1);
+  transform: scale(1.1);
 }
 
 /* Specific positioning */
 .checkra-feedback-applied-fix .feedback-fix-close-btn {
-  right: 3px; /* Furthest right */
+  right: 3px;
+  /* Furthest right */
 }
+
 .checkra-feedback-applied-fix .feedback-fix-copy-btn {
-  right: 28px; /* Next to close */
+  right: 28px;
+  /* Next to close */
 }
+
 .checkra-feedback-applied-fix .feedback-fix-toggle {
-  right: 53px; /* Next to copy */
+  right: 53px;
+  /* Next to copy */
 }
 
 /* Specific hover colors */
@@ -119,19 +141,23 @@
   background-color: rgba(220, 60, 60, 0.9);
   color: white;
 }
+
 .checkra-feedback-applied-fix .feedback-fix-copy-btn:hover {
   background-color: rgba(60, 110, 200, 0.9);
   color: white;
 }
+
 .checkra-feedback-applied-fix .feedback-fix-toggle:hover {
-  background-color: rgba(60, 180, 110, 0.9) !important; /* Use !important to override inline style */
+  background-color: rgba(60, 180, 110, 0.9) !important;
+  /* Use !important to override inline style */
   color: white;
 }
 
 /* Icon sizing within buttons */
 .checkra-feedback-applied-fix .feedback-fix-copy-btn svg,
 .checkra-feedback-applied-fix .feedback-fix-toggle svg {
-  width: 12px; /* Adjust SVG size */
+  width: 12px;
+  /* Adjust SVG size */
   height: 12px;
   stroke: currentColor;
 }
@@ -144,13 +170,16 @@
   width: 300px;
   min-width: 300px;
   max-width: 450px;
-  height: 100vh; /* Full viewport height */
+  height: 100vh;
+  /* Full viewport height */
   background-color: rgba(35, 45, 75, 0.95);
+  /* Primary panel background */
   color: white;
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
   z-index: 1002;
   display: flex;
-  flex-direction: column; /* Stack children vertically */
+  flex-direction: column;
+  /* Stack children vertically */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   line-height: 1.5;
   border-left: 1px solid rgba(255, 255, 255, 0.1);
@@ -169,6 +198,8 @@
   background-color: rgba(255, 255, 255, 0.1);
   cursor: ew-resize;
   transition: background-color 0.2s;
+  z-index: 100;
+  /* ADDED: Ensure it's above other panel content but below external modals */
 }
 
 #checkra-feedback-viewer::before:hover {
@@ -186,26 +217,32 @@
 #checkra-feedback-viewer textarea,
 #checkra-feedback-viewer button,
 #checkra-feedback-viewer #checkra-feedback-response-content {
-  cursor: auto; /* Keep default cursor for interactive elements */
+  cursor: auto;
+  /* Keep default cursor for interactive elements */
 }
 
 #checkra-feedback-response-header {
-  position: relative; /* Change from absolute to relative for flexbox flow */
+  position: relative;
+  /* Change from absolute to relative for flexbox flow */
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 15px 8px 15px;
-  background-color: rgba(40, 50, 80, 0.95);
+  /* background-color: rgba(40, 50, 80, 0.95); /* REMOVED - Use parent background */
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  /* Keep border for separation */
   z-index: 10;
   min-height: 40px;
   box-sizing: border-box;
-  flex-shrink: 0; /* Header should not shrink */
+  flex-shrink: 0;
+  /* Header should not shrink */
 }
 
 #checkra-feedback-content-wrapper {
-  flex-grow: 1; /* Content wrapper takes available vertical space */
-  overflow-y: auto; /* Content scrolls */
+  flex-grow: 1;
+  /* Content wrapper takes available vertical space */
+  overflow-y: auto;
+  /* Content scrolls */
   padding: 15px 20px 20px 20px;
   box-sizing: border-box;
   width: 100%;
@@ -219,86 +256,105 @@
   cursor: not-allowed;
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
-#checkra-feedback-viewer button:not(:disabled):hover {
-   background-color: rgba(255, 255, 255, 0.2);
-}
 
 #checkra-feedback-viewer #checkra-feedback-submit-button {
-  padding: 5px 8px; 
-  height: 32px; 
-  flex-shrink: 0; 
+  padding: 5px 8px;
+  height: 32px;
+  flex-shrink: 0;
   box-sizing: border-box;
   background: #2563eb;
   color: white;
   order: 1;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+}
+
+#checkra-feedback-viewer #checkra-feedback-submit-button {
+  cursor: pointer;
 }
 
 #checkra-feedback-viewer #checkra-prompt-textarea {
-    width: 100%;
-    flex-grow: 0;
-    order: 0;
-    padding: 10px;
-    background-color: #fff;
-    color: #333;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-    font-size: 14px;
-    resize: none;
-    box-sizing: border-box;
-    min-height: 40px;
-    margin-bottom: 8px;
+  width: 100%;
+  flex-grow: 0;
+  order: 0;
+  padding: 10px;
+  padding-bottom: 45px;
+  background-color: #fff;
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-size: 14px;
+  resize: none;
+  box-sizing: border-box;
+  min-height: 80px;
+  margin-bottom: 0;
 }
 
 #checkra-feedback-viewer #checkra-textarea-container {
-    background-color: rgba(35, 45, 75, 0.95);
-    padding: 10px 15px 10px 15px;
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
-    box-sizing: border-box;
-    width: 100%; /* Full width of the parent viewer */
-    flex-shrink: 0;     /* Prevent this container from shrinking */
-    /* Internal layout of textarea and button-row handled by their own styles */
+  /* background-color: rgba(35, 45, 75, 0.95); /* REMOVED - Use parent background */
+  padding: 10px 15px 10px 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  /* Keep border for separation */
+  box-sizing: border-box;
+  width: 100%;
+  flex-shrink: 0;
+  position: relative;
 }
 
-/* ADDED: New styles for the button row container */
 #checkra-button-row {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
 }
 
 #checkra-mini-select-btn {
-    background: #2563eb;
-    color: white;
-    font-size: 0.875rem; 
-    font-weight: 500;
-    border-radius: 0.375rem;
-    padding: 5px 8px; 
-    cursor: pointer; 
-    border: none;
-    height: 32px;
-    display: inline-flex; 
-    align-items: center;
-    justify-content: center;
-    box-sizing: border-box;
-    flex-shrink: 0;
-    order: 2;
-}
-
-#checkra-mini-select-btn:hover {
-    background-color: #1d4ed8;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: rgb(28 112 230);
+  user-select: none;
+  padding: 0;
+  box-sizing: border-box;
+  order: 2;
+  /* Keep order if it's still in button-row */
+  flex-shrink: 0;
+  /* Keep from shrinking */
 }
 
 #checkra-mini-select-btn svg {
-    width: 18px;
-    height: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+#checkra-mini-select-btn:hover {
+  cursor: pointer;
+  background-color: rgba(20, 100, 220, 0.95);
 }
 
 /* --- Loading Indicator --- */
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-spinner {
@@ -314,9 +370,11 @@
   gap: 8px;
   color: #a0c8ff;
   font-size: 0.9em;
-  display: none; /* Replaced by visibility class */
+  display: none;
+  /* Replaced by visibility class */
   order: 1;
-  margin-left: 5px; /* Add a little space from settings button */
+  margin-left: 5px;
+  /* Add a little space from settings button */
 }
 
 /* --- Resize Handle --- */
@@ -330,20 +388,22 @@
   gap: 8px;
   align-items: center;
   order: 2;
-  margin-left: 10px; /* Add space between loading/actions and settings/close */
+  margin-left: 10px;
+  /* Add space between loading/actions and settings/close */
 }
 
 #checkra-feedback-action-buttons button {
-   padding: 4px 10px;
-   font-size: 0.8rem;
-   border-radius: 0.3rem;
-   cursor: pointer;
-   color: white;
-   border: none;
-   transition: background-color 0.2s, opacity 0.2s; /* Added transition */
-   display: inline-flex;
-   align-items: center;
-   gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  color: white;
+  border: none;
+  transition: background-color 0.2s, opacity 0.2s;
+  /* Added transition */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 #checkra-feedback-action-buttons button svg {
@@ -365,30 +425,34 @@
 
 /* ADDED Cancel Button Style */
 #checkra-feedback-action-buttons button.cancel-fix {
-   background-color: transparent;
-   border: 1px solid #777;
-   color: #ccc;
-   display: none;
+  background-color: transparent;
+  border: 1px solid #777;
+  color: #ccc;
+  display: none;
 }
+
 #checkra-feedback-action-buttons button.cancel-fix:hover:not(:disabled) {
-   background-color: rgba(150, 150, 150, 0.2);
-   border-color: #999;
-   opacity: 1;
+  background-color: rgba(150, 150, 150, 0.2);
+  border-color: #999;
+  opacity: 1;
 }
 
 /* General hover - remove background color change to avoid conflict */
 #checkra-feedback-action-buttons button:hover:not(:disabled) {
-   opacity: 0.85;
+  opacity: 0.85;
 }
+
 #checkra-feedback-action-buttons button:disabled {
-   opacity: 0.5;
-   cursor: not-allowed;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
+
 /* Ensure disabled preview/apply keeps its blue but dimmed */
 #checkra-feedback-action-buttons button.preview-apply-fix:disabled {
   background-color: #2563eb !important;
   opacity: 0.5;
 }
+
 /* Ensure disabled cancel keeps its transparent style */
 #checkra-feedback-action-buttons button.cancel-fix:disabled {
   background-color: transparent !important;
@@ -449,9 +513,11 @@
 #checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn.copied svg.copy-icon {
   display: none;
 }
+
 #checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn svg.check-icon {
   display: none;
 }
+
 #checkra-feedback-response-content .checkra-streamed-content pre .checkra-code-copy-btn.copied svg.check-icon {
   display: inline-block;
   width: 14px;
@@ -462,51 +528,56 @@
 .hidden {
   display: none !important;
 }
+
 .visible {
   display: block !important;
 }
+
 .visible-flex {
   display: flex !important;
 }
+
 .visible-inline-flex {
-    display: inline-flex !important;
+  display: inline-flex !important;
 }
 
 /* ADDED: Base style for response content area */
 #checkra-feedback-response-content {
   word-wrap: break-word;
   font-size: 14px;
-  display: none; /* Initially hidden */
+  display: none;
+  /* Initially hidden */
 }
 
 /* ADDED: Base style for user message container */
 #checkra-user-message-container {
-    margin-bottom: 10px;
-    display: none; /* Initially hidden */
-    padding: 10px;
-    background-color: rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 10px;
+  display: none;
+  /* Initially hidden */
+  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* ADDED: Style for response title */
 #checkra-feedback-response-header h4 {
-    color: #a0c8ff;
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0;
+  color: #a0c8ff;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
 }
 
 /* ADDED: Style for main prompt title */
 #checkra-feedback-content-wrapper h4 {
-    color: #a0c8ff;
-    margin-bottom: 8px;
-    margin-top: 0;
-    font-size: 14px;
-    font-weight: 600;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    display: block;
+  color: #a0c8ff;
+  margin-bottom: 8px;
+  margin-top: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  display: block;
 }
 
 /* Style for the new settings button */
@@ -556,7 +627,7 @@
 
 /* ADDED: Make sure it's visible by default if not hidden */
 #checkra-feedback-viewer:not(.hidden) {
-    display: flex;
+  display: flex;
 }
 
 /* --- ADDED: Conversation History Bubble Styles --- */
@@ -584,8 +655,7 @@
   border-bottom-left-radius: 2px;
 }
 
-.message-ai.streaming {
-}
+.message-ai.streaming {}
 
 .message-error {
   background-color: #4d1b1b;
@@ -596,16 +666,16 @@
 }
 
 .message-usermessage {
-    background-color: rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    color: #ccc;
-    font-style: italic;
-    font-size: 0.9em;
-    text-align: center;
-    margin-left: auto;
-    margin-right: auto;
-    max-width: 100%;
+  background-color: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #ccc;
+  font-style: italic;
+  font-size: 0.9em;
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
 }
 
 /* Ensure content within bubbles respects formatting */
@@ -724,11 +794,20 @@
 .checkra-message-bubble.message-ai pre .checkra-code-copy-btn.copied svg.copy-icon {
   display: none;
 }
+
 .checkra-message-bubble.message-ai pre .checkra-code-copy-btn svg.check-icon {
   display: none;
 }
+
 .checkra-message-bubble.message-ai pre .checkra-code-copy-btn.copied svg.check-icon {
   display: inline-block;
   width: 14px;
   height: 14px;
+}
+
+/* Ensure shortcut hint style is maintained */
+#checkra-feedback-viewer #checkra-feedback-submit-button span:last-child {
+  margin-left: 0;
+  color: #e5e7eb;
+  font-size: 10px;
 }
