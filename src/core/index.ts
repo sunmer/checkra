@@ -116,9 +116,8 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
 
     const api: CheckraAPI = {
       showFeedback: () => {
-        // TODO: Replace with feedbackViewer.toggle() or similar based on new shortcut logic
-        console.log('[Checkra API] showFeedback called - behavior TBD');
-        feedbackViewerInstance.toggle(); // Use the obtained instance
+        console.log('[Checkra API] showFeedback called - emitting event.');
+        eventEmitter.emit('showViewerApi'); // Use event emitter
       },
       showSettings: () => {
         // Use the module-level instance

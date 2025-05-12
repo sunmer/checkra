@@ -10,6 +10,7 @@ class FeedbackViewer {
   private logicManager: FeedbackViewerImpl;
   private isInitialized: boolean = false;
   private static instance: FeedbackViewer | null = null;
+  private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed';
 
   private constructor(
     settingsModal: SettingsModal
@@ -20,6 +21,25 @@ class FeedbackViewer {
     // Pass domManager and settingsModal to initialize
     // Impl.initialize will call domManager.create() internally
     this.logicManager.initialize(this.domManager, settingsModal);
+    
+    // ADDED: Check if panel should be shown initially
+    const panelClosedByUser = localStorage.getItem(this.PANEL_CLOSED_BY_USER_KEY);
+    if (!panelClosedByUser) {
+        console.log('[Coordinator] Panel not explicitly closed, showing initial state.');
+        // Logic to show initial state (e.g., onboarding)
+        const firstRun = !localStorage.getItem('checkra_onboarded');
+        if (firstRun) {
+          this.logicManager.showOnboarding(); 
+        } else {
+          // Optionally show the panel in a default state (e.g., ready for input) 
+          // if it wasn't closed, even if not first run.
+          // For now, let's assume it only auto-shows for onboarding.
+          // If we want it to always show unless explicitly closed:
+          // this.logicManager.prepareForInput(null, null, null, null); 
+        }
+    } else {
+        console.log('[Coordinator] Panel was explicitly closed by user, not showing initially.');
+    }
     
     this.isInitialized = true;
     console.log('[FeedbackViewerCoordinator] Initialized.');

@@ -1,5 +1,6 @@
 import './feedback-viewer.css';
 import { escapeHTML } from './utils';
+import { marked } from 'marked';
 
 const DEFAULT_WIDTH = 450;
 const DEFAULT_HEIGHT = 220;
@@ -12,6 +13,15 @@ const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height=
 
 // Define the CROSSHAIR_SVG constant
 const CROSSHAIR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>`;
+
+// ADDED: ConversationItem interface (should match the one in -impl.ts)
+// This is duplicative; ideally, it would be in a shared types file.
+interface ConversationItem {
+  type: 'user' | 'ai' | 'usermessage' | 'error';
+  content: string;
+  isStreaming?: boolean;
+  fix?: any; // Simplified for DOM, Impl has the detailed structure
+}
 
 export interface FeedbackViewerElements {
   viewer: HTMLDivElement;
@@ -44,6 +54,7 @@ export interface FeedbackViewerElements {
 export class FeedbackViewerDOM {
   private elements: FeedbackViewerElements | null = null;
   private readonly originalPromptTitleText = '';
+  private closeButtonCallback: (() => void) | null = null;
 
   // --- Resizing State ---
   private isResizing: boolean = false;
@@ -60,11 +71,12 @@ export class FeedbackViewerDOM {
 
   // Define the handler method
   private handleCloseClick(): void {
-    this.hide();
+    this.closeButtonCallback?.();
   }
 
-  public create(): FeedbackViewerElements {
+  public create(onCloseButtonClick: () => void): FeedbackViewerElements {
     if (this.elements) return this.elements;
+    this.closeButtonCallback = onCloseButtonClick;
 
     const viewer = document.createElement('div');
     viewer.id = 'checkra-feedback-viewer';
@@ -144,22 +156,21 @@ export class FeedbackViewerDOM {
     }
     contentWrapper.appendChild(promptTitle);
 
+    // --- Textarea Container - Created here, but appended to viewer LATER ---
     const textareaContainer = document.createElement('div');
     textareaContainer.id = 'checkra-textarea-container';
-
-    // Mini Select Button (Crosshair)
-    const miniSelectButton = document.createElement('button');
-    miniSelectButton.id = 'checkra-mini-select-btn';
-    miniSelectButton.title = 'Select element on page';
-    miniSelectButton.innerHTML = CROSSHAIR_SVG;
-    textareaContainer.appendChild(miniSelectButton);
-
     const promptTextarea = document.createElement('textarea');
     promptTextarea.id = 'checkra-prompt-textarea';
     promptTextarea.rows = 4;
     promptTextarea.placeholder = 'e.g., "How can I improve the UX or conversion of this section?"';
     textareaContainer.appendChild(promptTextarea);
-
+    const buttonRow = document.createElement('div');
+    buttonRow.id = 'checkra-button-row';
+    const miniSelectButton = document.createElement('button');
+    miniSelectButton.id = 'checkra-mini-select-btn';
+    miniSelectButton.title = 'Select element on page';
+    miniSelectButton.innerHTML = CROSSHAIR_SVG;
+    buttonRow.appendChild(miniSelectButton);
     const submitButton = document.createElement('button');
     submitButton.id = 'checkra-feedback-submit-button';
     const submitButtonTextSpan = document.createElement('span');
@@ -169,34 +180,23 @@ export class FeedbackViewerDOM {
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     shortcutHint.textContent = isMac ? '(Cmd + ⏎)' : '(Ctrl + ⏎)';
     submitButton.appendChild(shortcutHint);
-    textareaContainer.appendChild(submitButton);
+    buttonRow.appendChild(submitButton);
+    textareaContainer.appendChild(buttonRow);
+    // REMOVED: contentWrapper.appendChild(textareaContainer);
 
-    contentWrapper.appendChild(textareaContainer);
-
-    // --- BEGIN EDIT ---
-    // Create user message container *before* response content container
+    // --- User Message & Response Area (Children of contentWrapper) ---
     const userMessageContainer = document.createElement('div');
     userMessageContainer.id = 'checkra-user-message-container';
-    // Style handled by CSS: #checkra-user-message-container
-    // userMessageContainer.style.marginBottom = '10px';
-    // userMessageContainer.style.display = 'none'; // Initially hidden
-    contentWrapper.appendChild(userMessageContainer); // Append to contentWrapper
-    // --- END EDIT ---
+    contentWrapper.appendChild(userMessageContainer);
 
-    // --- Response Area (Now only for AI content) ---
     const responseContent = document.createElement('div');
     responseContent.id = 'checkra-feedback-response-content';
-    // Style handled by CSS: #checkra-feedback-response-content
-    // responseContent.style.wordWrap = 'break-word';
-    // responseContent.style.fontSize = '14px';
-    // responseContent.style.display = 'none';
+    contentWrapper.appendChild(responseContent);
 
-    contentWrapper.appendChild(responseContent); // Append responseContent to contentWrapper
-
-    // Add Footer CTA Container (initially hidden)
+    // Add Footer CTA Container (initially hidden) to contentWrapper
     const footerCTAContainer = document.createElement('div');
     footerCTAContainer.id = 'checkra-footer-cta-container';
-    footerCTAContainer.classList.add('hidden'); // Start hidden
+    footerCTAContainer.classList.add('hidden');
     // Basic styling for stickiness
     footerCTAContainer.style.position = 'sticky';
     footerCTAContainer.style.bottom = '0';
@@ -205,7 +205,8 @@ export class FeedbackViewerDOM {
     footerCTAContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.1)';
     contentWrapper.appendChild(footerCTAContainer);
 
-    viewer.appendChild(contentWrapper);
+    viewer.appendChild(contentWrapper); // contentWrapper is now above textarea container
+    viewer.appendChild(textareaContainer); // Textarea container appended last to viewer
 
     document.body.appendChild(viewer);
 
@@ -253,6 +254,7 @@ export class FeedbackViewerDOM {
       this.elements.viewer.remove();
     }
     this.elements = null;
+    this.closeButtonCallback = null;
     console.log('[FeedbackViewerDOM] Instance destroyed.');
   }
 
@@ -302,22 +304,14 @@ export class FeedbackViewerDOM {
 
   public show(): void {
     if (!this.elements) return;
-    const { viewer, promptTextarea, responseHeader } = this.elements;
+    const { viewer, promptTextarea, responseHeader, contentWrapper } = this.elements;
 
-    // Reset visibility states using classes
     this.showPromptInputArea(true);
-    this.updateLoaderVisibility(false); // This will now ensure header is visible
-    this.updateActionButtonsVisibility(false); // This will now ensure header is visible
-    // REMOVED: Explicitly hiding/showing header here, handled by sub-functions now
-    // responseHeader.classList.add('hidden'); 
-    // responseHeader.classList.remove('visible-flex');
-    // this.elements.contentWrapper.style.paddingTop = '15px';
+    this.updateLoaderVisibility(false);
+    this.updateActionButtonsVisibility(false);
 
-    // Show the viewer with transform animation
     viewer.classList.remove('hidden');
     viewer.classList.add('visible-flex');
-
-    // Focus the textarea
     promptTextarea.focus();
   }
 
@@ -330,9 +324,8 @@ export class FeedbackViewerDOM {
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
     if (!this.elements) return;
-    const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper, actionButtonsContainer } = this.elements;
+    const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper } = this.elements;
 
-    // Always ensure header is visible
     responseHeader.classList.remove('hidden');
     responseHeader.classList.add('visible-flex');
 
@@ -344,31 +337,17 @@ export class FeedbackViewerDOM {
       loadingIndicator.classList.add('hidden');
       loadingIndicator.classList.remove('visible-flex');
     }
-
-    // Adjust content padding based on header height (only once or when visibility changes might affect height)
-    // This might need refinement if header height changes dynamically often.
-    requestAnimationFrame(() => {
-        const headerHeight = responseHeader.offsetHeight;
-        contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-    });
   }
 
   public updateActionButtonsVisibility(visible: boolean): void {
     if (!this.elements) return;
     const { actionButtonsContainer, responseHeader, contentWrapper } = this.elements;
 
-    // Always ensure header is visible
     responseHeader.classList.remove('hidden');
     responseHeader.classList.add('visible-flex');
 
     actionButtonsContainer.classList.toggle('hidden', !visible);
     actionButtonsContainer.classList.toggle('visible-flex', visible);
-
-    // Adjust content padding based on header height
-    requestAnimationFrame(() => {
-        const headerHeight = responseHeader.offsetHeight;
-        contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-    });
   }
 
   public updateSubmitButtonState(enabled: boolean, text: string): void {
@@ -381,13 +360,22 @@ export class FeedbackViewerDOM {
     if (!this.elements) return;
     const { responseContent, contentWrapper } = this.elements;
 
-    const scrollThreshold = 10;
-    const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
-
-    // responseContent.style.display = 'block'; // Use class
+    // For now, this will just update the content of the main response area.
+    // Later, this will target a specific AI message bubble.
     responseContent.classList.remove('hidden');
     responseContent.classList.add('visible');
-    responseContent.innerHTML = `<div class="checkra-streamed-content">${html}</div>`;
+    // To support history, we will change how this is populated.
+    // For a single message update (like current streaming), we'd find the last AI message element and update it.
+    // For now, let's assume this function receives the full HTML of the *current* AI response.
+    const lastMessageBubble = responseContent.querySelector('.message-ai:last-child');
+    if (lastMessageBubble) {
+        lastMessageBubble.innerHTML = `<div class="checkra-streamed-content">${html}</div>`;
+    } else {
+        // If no AI bubble, create one (e.g. first chunk of a new AI response)
+        const aiMessageItem: ConversationItem = { type: 'ai', content: html, isStreaming: true };
+        const messageEl = this.createMessageElement(aiMessageItem);
+        responseContent.appendChild(messageEl);
+    }
 
     const preElements = responseContent.querySelectorAll('.checkra-streamed-content pre');
 
@@ -410,7 +398,8 @@ export class FeedbackViewerDOM {
         e.stopPropagation();
         console.log('[Copy Code] Button clicked.');
 
-        const codeElement = preElement.querySelector('code.language-html');
+        // Query within the current preElement for the code
+        const codeElement = preElement.querySelector('code'); // More general code selection
 
         if (codeElement) {
           console.log('[Copy Code] Found code element:', codeElement);
@@ -440,36 +429,30 @@ export class FeedbackViewerDOM {
               alert(`Error copying code: ${err instanceof Error ? err.message : String(err)}`);
             }
           } else {
-            console.warn('[Copy Code] Code element (language-html) found, but its textContent is empty or null.');
-            alert('Cannot copy code: No text content found inside the HTML code block.');
+            console.warn('[Copy Code] Code element found, but its textContent is empty or null.');
+            alert('Cannot copy code: No text content found inside the code block.');
           }
         } else {
-          console.warn('[Copy Code] Could not find <code class="language-html"> element inside the <pre> block.');
+          console.warn('[Copy Code] Could not find <code> element inside the <pre> block.');
         }
       });
 
       preElement.appendChild(copyButton);
     });
-
-    if (scrollToBottom && isScrolledToBottom) {
-      contentWrapper.scrollTop = contentWrapper.scrollHeight;
-    }
   }
 
   public clearAIResponseContent(): void {
     if (!this.elements) return;
-    console.log('[DOM.clearAIResponseContent] Clearing AI messages.');
-    this.elements.responseContent.innerHTML = '';
-    // this.elements.responseContent.style.display = 'none'; // Use class
+    console.log('[DOM.clearAIResponseContent] Clearing all messages from AI response area.');
+    this.elements.responseContent.innerHTML = ''; // Clear all children
     this.elements.responseContent.classList.add('hidden');
     this.elements.responseContent.classList.remove('visible');
   }
 
   public clearUserMessage(): void {
     if (!this.elements) return;
-    console.log('[DOM.clearUserMessage] Clearing user message.');
+    console.log('[DOM.clearUserMessage] Clearing user message container.');
     this.elements.userMessageContainer.innerHTML = '';
-    // this.elements.userMessageContainer.style.display = 'none'; // Use class
     this.elements.userMessageContainer.classList.add('hidden');
     this.elements.userMessageContainer.classList.remove('visible');
   }
@@ -525,12 +508,13 @@ export class FeedbackViewerDOM {
 
   /**
    * Renders HTML content into the dedicated user message container.
-   * Ensures the response area is visible.
+   * This will be adapted for history: append a new usermessage bubble.
    */
   public renderUserMessage(html: string): void {
     if (!this.elements) return;
+    // For history, this will append a new message bubble
+    // For now, it still uses the dedicated userMessageContainer, which Impl saves to history
     const { userMessageContainer } = this.elements;
-
     userMessageContainer.innerHTML = html;
     userMessageContainer.classList.toggle('hidden', !html);
     userMessageContainer.classList.toggle('visible', !!html);
@@ -564,17 +548,10 @@ export class FeedbackViewerDOM {
       // Ensure header IS visible
       this.elements.responseHeader.classList.remove('hidden');
       this.elements.responseHeader.classList.add('visible-flex');
-      // Adjust padding dynamically
-      requestAnimationFrame(() => {
-        const headerHeight = this.elements!.responseHeader.offsetHeight;
-        this.elements!.contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-      });
 
       // Hide other elements EXCEPT header
       this.elements.promptTitle.classList.add('hidden');
       this.elements.textareaContainer.classList.add('hidden');
-      // REMOVED: Hiding response header during onboarding
-      // this.elements.responseHeader.classList.add('hidden');
       this.elements.responseContent.classList.add('hidden');
 
     } else {
@@ -585,7 +562,6 @@ export class FeedbackViewerDOM {
       // Show prompt elements (they might be hidden again later by logic)
       this.elements.promptTitle.classList.remove('hidden');
       this.elements.textareaContainer.classList.remove('hidden');
-      // Don't explicitly show header here, let updateLoader/ActionButtons handle it
     }
   }
 
@@ -607,5 +583,124 @@ export class FeedbackViewerDOM {
       this.elements.footerCTAContainer.classList.remove('visible');
       this.elements.footerCTAContainer.innerHTML = ''; // Clear content
     }
+  }
+
+  // --- ADDED: History Rendering Methods ---
+  private createMessageElement(item: ConversationItem): HTMLDivElement {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
+    
+    // Sanitize/parse content appropriately
+    // For AI, use marked. For others, escapeHTML or handle as plain text.
+    if (item.type === 'ai' || item.type === 'usermessage') { // User messages can also contain HTML
+        messageDiv.innerHTML = item.content; // Assuming marked.parse happens before calling this for AI
+    } else {
+        messageDiv.textContent = item.content;
+    }
+
+    if (item.type === 'ai' && item.isStreaming) {
+        messageDiv.classList.add('streaming');
+    }
+    // TODO: Add data-id for easier updates if needed
+    return messageDiv;
+  }
+
+  public renderFullHistory(history: ConversationItem[]): void {
+    if (!this.elements) return;
+    this.clearAIResponseContent(); // Clear existing before rendering full history
+    this.elements.responseContent.classList.remove('hidden');
+    this.elements.responseContent.classList.add('visible');
+
+    history.forEach(item => {
+      // For AI messages that are not streaming, parse them with marked.
+      // Streaming messages will be updated by updateLastAIMessage.
+      let displayItem = { ...item };
+      if (item.type === 'ai' && !item.isStreaming && item.content) {
+          displayItem.content = marked.parse(item.content) as string;
+      }
+      // User messages (type: 'usermessage') might already be HTML
+
+      const messageEl = this.createMessageElement(displayItem);
+      this.elements!.responseContent.appendChild(messageEl);
+    });
+    // Scroll to bottom
+    this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
+  }
+
+  public appendHistoryItem(item: ConversationItem): void {
+    if (!this.elements) return;
+    this.elements.responseContent.classList.remove('hidden');
+    this.elements.responseContent.classList.add('visible');
+
+    let displayItem = { ...item };
+    if (item.type === 'ai' && item.content && !item.isStreaming) { // Parse if not streaming
+        displayItem.content = marked.parse(item.content) as string;
+    } else if (item.type === 'ai' && item.isStreaming) {
+        // For streaming AI, content is initially empty or placeholder, updated by updateLastAIMessage
+        // If there's initial content (e.g. "AI is thinking..."), let it pass through createMessageElement
+    }
+    // User messages (type: 'usermessage') might already be HTML
+
+    const messageEl = this.createMessageElement(displayItem);
+    this.elements.responseContent.appendChild(messageEl);
+    this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
+  }
+
+  public updateLastAIMessage(newContent: string, isStreaming: boolean): void {
+    if (!this.elements) return;
+    const { responseContent, contentWrapper } = this.elements;
+    const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
+
+    if (lastAiMessageBubble) {
+        lastAiMessageBubble.innerHTML = marked.parse(newContent) as string;
+        lastAiMessageBubble.classList.toggle('streaming', isStreaming);
+        // Re-attach code copy buttons if necessary
+        this.attachCodeCopyButtonsTo(lastAiMessageBubble as HTMLElement);
+
+        contentWrapper.scrollTop = contentWrapper.scrollHeight; // Auto-scroll
+    } else {
+        console.warn('[DOM] updateLastAIMessage called but no last AI message bubble found.');
+        // Fallback: append as a new message if none exists (should ideally be handled by appendHistoryItem)
+        this.appendHistoryItem({ type: 'ai', content: newContent, isStreaming: isStreaming});
+    }
+  }
+  
+  // Helper to attach code copy buttons, to be called after innerHTML changes
+  private attachCodeCopyButtonsTo(parentElement: HTMLElement): void {
+      const preElements = parentElement.querySelectorAll('.checkra-streamed-content pre');
+      preElements.forEach(pre => {
+        // ... (copy button logic from setResponseContent, slightly refactored) ...
+        const preElement = pre as HTMLPreElement;
+        if (preElement.querySelector('.checkra-code-copy-btn')) {
+          return; // Already has one
+        }
+        (preElement as HTMLElement).style.position = 'relative';
+        const copyButton = document.createElement('button');
+        copyButton.className = 'checkra-code-copy-btn';
+        copyButton.innerHTML = `
+            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        `;
+        copyButton.title = 'Copy code';
+        copyButton.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const codeElement = preElement.querySelector('code');
+            if (codeElement && codeElement.textContent) {
+                try {
+                    await navigator.clipboard.writeText(codeElement.textContent);
+                    copyButton.classList.add('copied');
+                    copyButton.title = 'Copied!';
+                    setTimeout(() => {
+                        copyButton.classList.remove('copied');
+                        copyButton.title = 'Copy code';
+                    }, 1500);
+                } catch (err) {
+                    console.error('[Copy Code] Failed:', err);
+                    alert(`Error copying: ${err instanceof Error ? err.message : String(err)}`);
+                }
+            }
+        });
+        preElement.appendChild(copyButton);
+      });
   }
 }

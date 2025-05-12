@@ -8,6 +8,19 @@ import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
 
+// ADDED: Conversation History Types and Constants
+interface ConversationItem {
+  type: 'user' | 'ai' | 'usermessage' | 'error';
+  content: string;
+  isStreaming?: boolean; // Optional flag for AI messages
+  fix?: { // Optional fix data for AI messages
+    originalHtml: string;
+    fixedHtml: string;
+    fixId: string; 
+  };
+}
+const CONVERSATION_HISTORY_KEY = 'checkra_conversation_history';
+
 // Regex patterns for extracting HTML
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
 const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
@@ -64,8 +77,6 @@ export class FeedbackViewerImpl {
   private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
   private currentFixId: string | null = null; // Unique ID for the element being worked on
   private fixIdCounter: number = 0; // Counter for generating unique IDs
-  private accumulatedResponseText: string = '';
-  private isStreamStarted: boolean = false;
   private isPreviewActive: boolean = false; // Tracks if preview (direct replacement) is active
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
@@ -101,6 +112,11 @@ export class FeedbackViewerImpl {
   private boundShowError = this.showError.bind(this);
   private boundFinalizeResponse = this.finalizeResponse.bind(this);
   private boundToggle = this.toggle.bind(this); // ADDED: Bound toggle method
+  private boundShowFromApi = this.showFromApi.bind(this); // ADDED: Bound method for API show
+  private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
+
+  // ADDED: Conversation history state
+  private conversationHistory: ConversationItem[] = [];
 
   constructor(private onToggleCallback: (isVisible: boolean) => void) {
     console.log('[FeedbackViewerImpl] Constructor called.');
@@ -121,9 +137,16 @@ export class FeedbackViewerImpl {
     settingsModal: SettingsModal
   ): void {
     // Get elements from domManager inside initialize
-    this.domElements = domManager.create(); 
+    const handleClose = () => this.hide(true, true);
+    this.domElements = domManager.create(handleClose);
     this.domManager = domManager; // Store reference to DOM manager
     this.settingsModal = settingsModal;
+
+    // ADDED: Load conversation history
+    this.loadHistory();
+    if (this.domManager && this.conversationHistory.length > 0) {
+      this.domManager.renderFullHistory(this.conversationHistory);
+    }
 
     // --- Setup Listeners ---
     this.domElements.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
@@ -149,6 +172,7 @@ export class FeedbackViewerImpl {
     eventEmitter.on('aiError', this.boundShowError);
     eventEmitter.on('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
+    eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
 
     console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
@@ -198,11 +222,16 @@ export class FeedbackViewerImpl {
     eventEmitter.off('aiError', this.boundShowError);
     eventEmitter.off('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
+    eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
 
     this.domElements = null;
     this.domManager = null;
     // REMOVED: this.outsideClickHandler = null;
     this.removeGlobalListeners();
+
+    // Optional: Clear history state if needed on full cleanup?
+    // this.conversationHistory = []; 
+
     console.log('[FeedbackViewerLogic] Cleaned up listeners and unsubscribed from AI events.');
   }
 
@@ -252,10 +281,6 @@ export class FeedbackViewerImpl {
     console.log(`[FeedbackViewerLogic] Preparing for input. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement.tagName}`);
 
     // Reset state
-    this.accumulatedResponseText = '';
-    this.isStreamStarted = false;
-    this.isPreviewActive = false;
-    this.fixedOuterHTMLForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
     this.previewInsertedNodes = [];
@@ -300,33 +325,47 @@ export class FeedbackViewerImpl {
   public updateResponse(chunk: string): void {
     if (!this.domManager || !this.domElements) return;
 
-    if (!this.isStreamStarted) {
-      this.isStreamStarted = true;
+    const lastItem = this.conversationHistory[this.conversationHistory.length - 1];
+    if (lastItem && lastItem.type === 'ai' && lastItem.isStreaming) {
+      lastItem.content += chunk;
+      // Update DOM for the streaming content by calling the new DOM method
+      this.domManager.updateLastAIMessage(lastItem.content, true);
+
+      const hasHtmlCode = GENERIC_HTML_REGEX.test(lastItem.content);
+      this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Getting feedback...');
+      this.saveHistory(); 
+    } else {
+      console.warn('[FeedbackViewerImpl] updateResponse called but no AI message is streaming.');
     }
-
-    this.accumulatedResponseText += chunk;
-    const parsedHtml = marked.parse(this.accumulatedResponseText) as string;
-    this.domManager.setResponseContent(parsedHtml, true);
-
-    const hasHtmlCode = GENERIC_HTML_REGEX.test(this.accumulatedResponseText);
-    this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Getting feedback...');
-
-    // REMOVED: Don't try to extract HTML or show buttons mid-stream
-    // this.extractAndStoreFixHtml();
   }
 
   public finalizeResponse(): void {
     console.log("[FeedbackViewerLogic] Feedback stream finalized.");
     if (!this.domManager || !this.domElements) return;
 
-    this.domManager.updateLoaderVisibility(false); // Hide loader first
-    this.domManager.setPromptState(true); // Re-enable prompt area
+    const lastItem = this.conversationHistory[this.conversationHistory.length - 1];
+    if (lastItem && lastItem.type === 'ai' && lastItem.isStreaming) {
+      lastItem.isStreaming = false;
+      this.extractAndStoreFixHtml(); 
+      if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
+        lastItem.fix = {
+          originalHtml: this.originalOuterHTMLForCurrentCycle,
+          fixedHtml: this.fixedOuterHTMLForCurrentCycle,
+          fixId: this.currentFixId 
+        };
+      }
+      this.saveHistory(); 
+      // Update the DOM for the finalized message (no longer streaming)
+      this.domManager.updateLastAIMessage(lastItem.content, false);
+    } else {
+      console.warn('[FeedbackViewerImpl] finalizeResponse called but no AI message was streaming or found.');
+    }
+
+    this.domManager.updateLoaderVisibility(false);
+    this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true, 'Get Feedback');
+    this.updateActionButtonsVisibility(); // Update header buttons based on the latest fix (if any)
 
-    this.extractAndStoreFixHtml(); // Ensure final extraction
-    this.updateActionButtonsVisibility(); // Update header buttons based on extraction
-
-    // If this was a quick audit run, show the footer CTA
     if (this.isQuickAuditRun) {
         this.showFooterCTALogic();
         this.isQuickAuditRun = false; // Reset flag for next interaction
@@ -336,6 +375,16 @@ export class FeedbackViewerImpl {
     // Optional: You might only want to scroll if the footer was *just* added
     const contentWrapper = this.domElements.contentWrapper;
     contentWrapper.scrollTop = contentWrapper.scrollHeight;
+
+    // TODO: Trigger DOM update (full re-render or append/update last)
+    if(this.domManager) {
+       if (lastItem) {
+         this.domManager.appendHistoryItem(lastItem);
+       } else {
+         // If no new item, it means an existing item (last AI message) was updated (e.g., content stream, or finalized)
+         // The updateResponse and finalizeResponse should handle calling updateLastAIMessage directly.
+       }
+    }
   }
 
   public showError(error: Error | string): void {
@@ -350,14 +399,11 @@ export class FeedbackViewerImpl {
     this.domManager.updateSubmitButtonState(true, 'Get Feedback');
     this.domManager.showPromptInputArea(true);
 
-    this.accumulatedResponseText = '';
-    this.isStreamStarted = false;
-    this.fixedOuterHTMLForCurrentCycle = null;
-    // Should we revert preview if an error occurs *after* preview started? Yes.
+    this.saveHistory({ type: 'error', content: errorMessage }); // ADDED: Save error to history
     this.revertPreviewIfNeeded(); // Add this helper call
   }
 
-  public hide(initiatedByUser: boolean = true): void {
+  public hide(initiatedByUser: boolean = true, fromCloseButton: boolean = false): void {
     if (!this.isVisible && !initiatedByUser) return; // Don't hide if already hidden, unless user forces it (e.g. from toggle)
     if (!this.domManager || !this.domElements) {
       this.isVisible = false; // Ensure state is false even if DOM elements are missing
@@ -378,8 +424,6 @@ export class FeedbackViewerImpl {
     this.originalOuterHTMLForCurrentCycle = null;
     this.fixedOuterHTMLForCurrentCycle = null;
     this.currentFixId = null;
-    this.accumulatedResponseText = '';
-    this.isStreamStarted = false;
     this.isPreviewActive = false; // Ensure false
 
     this.previewInsertedNodes = [];
@@ -389,10 +433,15 @@ export class FeedbackViewerImpl {
     this.domManager?.showFooterCTA(false); // Add this line
     this.isQuickAuditRun = false; // Reset flag on hide
 
-    if (initiatedByUser) {
-      // Listeners are now global or managed by DOM state, so don't remove on every hide
-      console.log('[FeedbackViewerImpl] Panel hidden by user action.');
-      // localStorage logic for panelExplicitlyClosedByUser will go here (Phase 1, Item 2.b)
+    if (initiatedByUser && fromCloseButton) {
+      console.log('[FeedbackViewerImpl] Panel hidden by user close button action. Setting flag.');
+      try {
+        localStorage.setItem(this.PANEL_CLOSED_BY_USER_KEY, 'true');
+      } catch (e) {
+        console.warn('[FeedbackViewerImpl] Failed to set localStorage item:', e);
+      }
+    } else if (initiatedByUser) {
+      console.log('[FeedbackViewerImpl] Panel hidden by user action (not close button).');
     } else {
       console.log('[FeedbackViewerImpl] Panel hidden programmatically.');
     }
@@ -404,7 +453,7 @@ export class FeedbackViewerImpl {
   public renderUserMessage(html: string): void {
       if (!this.domManager) return;
       console.log("[FeedbackViewerLogic] Rendering prepended user message.");
-      this.domManager.renderUserMessage(html);
+      this.saveHistory({ type: 'usermessage', content: html }); // ADDED: Save user message to history
   }
 
   // --- Event Handlers ---
@@ -455,12 +504,11 @@ export class FeedbackViewerImpl {
     this.domManager.clearAIResponseContent();
     this.domManager.showPromptInputArea(false, promptText);
 
-    // --- Reset response/fix state for *this* request ---
-    this.accumulatedResponseText = '';
-    this.isStreamStarted = false;
-    this.fixedOuterHTMLForCurrentCycle = null; // Clear any previously extracted fix
-    this.domManager.clearAIResponseContent();
-    this.revertPreviewIfNeeded(); // Revert any lingering preview from a previous interaction
+    this.saveHistory({ type: 'user', content: promptText });
+    // ADDED: Immediately add a placeholder for AI response
+    this.saveHistory({ type: 'ai', content: '' }); 
+
+    this.revertPreviewIfNeeded();
 
     // --- Call API ---
     fetchFeedback(this.currentImageDataUrl, promptText, processedHtmlForAI);
@@ -627,13 +675,10 @@ export class FeedbackViewerImpl {
            this.previewInsertionBeforeNode = null;
            // --- END EDIT ---
            // Panel should remain open after applying the fix.
-           // The UI should be reset for the next interaction or to show a success message.
-           // For now, just ensure the panel stays open.
            // Consider resetting the prompt or showing a success message here.
            this.domManager?.setPromptState(true, ''); // Re-enable prompt
            this.domManager?.updateSubmitButtonState(true, 'Get Feedback');
            this.domManager?.updateActionButtonsVisibility(false); // Hide preview/apply buttons
-           this.domManager?.clearAIResponseContent(); // Clear old AI response
            this.domManager?.showPromptInputArea(true); // Show prompt area
 
       } catch (error) {
@@ -848,23 +893,35 @@ export class FeedbackViewerImpl {
    * and stores it in `fixedOuterHTMLForCurrentCycle`.
    */
   private extractAndStoreFixHtml(): void {
-      if (!this.accumulatedResponseText) return;
+      // Get the content from the latest AI message
+      const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
+      if (!lastAiItem || !lastAiItem.content) {
+          console.log('[FeedbackViewerLogic] extractAndStoreFixHtml: No AI message content found in history to extract from.');
+          this.fixedOuterHTMLForCurrentCycle = null; // Ensure reset if no content
+          // No need to call updateActionButtonsVisibility here, finalizeResponse will handle it
+          return;
+      }
+      const responseText = lastAiItem.content;
 
-    let match = this.accumulatedResponseText.match(SPECIFIC_HTML_REGEX);
+    let match = responseText.match(SPECIFIC_HTML_REGEX);
     if (!match) {
-      match = this.accumulatedResponseText.match(GENERIC_HTML_REGEX);
+      match = responseText.match(GENERIC_HTML_REGEX);
     }
 
     if (match && match[1]) {
       let extractedHtml = match[1].trim();
-      console.log('[FeedbackViewerLogic] Regex matched HTML from AI response.');
+      console.log('[FeedbackViewerLogic] Regex matched HTML from AI response history.');
 
       try {
         extractedHtml = this.postprocessHtmlFromAI(extractedHtml);
               const tempFragment = this.createFragmentFromHTML(extractedHtml);
               if (tempFragment && tempFragment.childNodes.length > 0) {
+                  // Store the latest fix details. These are used when clicking preview/apply.
                   this.fixedOuterHTMLForCurrentCycle = extractedHtml;
-                  console.log(`[FeedbackViewerLogic] Stored postprocessed fixed HTML (direct) for Fix ID: ${this.currentFixId}`);
+                  // We also need the original HTML and the ID that this fix corresponds to.
+                  // This should ideally be stored with the AI message itself if possible,
+                  // or we assume it relates to the last `prepareForInput` context.
+                  console.log(`[FeedbackViewerLogic] Stored latest fixed HTML proposal.`);
               } else {
                    console.warn('[FeedbackViewerLogic] Failed to parse extracted HTML into a valid, non-empty fragment. Fix may not be applicable.');
                    this.fixedOuterHTMLForCurrentCycle = null;
@@ -874,13 +931,14 @@ export class FeedbackViewerImpl {
               this.fixedOuterHTMLForCurrentCycle = null;
           }
       } else {
-         if (this.isStreamStarted && !GENERIC_HTML_REGEX.test(this.accumulatedResponseText)) {
-              console.log('[FeedbackViewerLogic] No HTML block found in the final AI response.');
+         // Check if the message stream has finished (isStreaming is false)
+         if (!lastAiItem.isStreaming && !GENERIC_HTML_REGEX.test(responseText)) {
+              console.log('[FeedbackViewerLogic] No HTML block found in the final AI response history item.');
          }
          // Ensure fixed HTML is null if no match
          this.fixedOuterHTMLForCurrentCycle = null;
       }
-      this.updateActionButtonsVisibility();
+      // REMOVED: this.updateActionButtonsVisibility(); // Let finalizeResponse handle this
   }
 
   /**
@@ -1035,14 +1093,9 @@ export class FeedbackViewerImpl {
    */
   public toggle(): void {
     if (this.isVisible) { // Use the private property
-      this.hide(true); // User initiated hide via toggle
+      this.hide(true, false); // User initiated hide via toggle (not from close button)
     } else {
-      const firstRun = !localStorage.getItem('checkra_onboarded');
-      if (firstRun) {
-        this.showOnboarding();
-      } else {
-        this.prepareForInput(null, null, null, null);
-      }
+      this.showFromApi(); // MODIFIED: Consolidate show logic
     }
   }
 
@@ -1287,7 +1340,7 @@ ${aboveFoldHtml}
   private handleEscapeKey(event: KeyboardEvent): void {
     if (event.key === 'Escape' && this.isVisible) { // Use the private property
       console.log('[FeedbackViewerImpl] Escape key pressed.');
-      this.hide(true); // User initiated hide via Escape
+      this.hide(true, false); // User initiated hide via Escape, not fromCloseButton
     }
   }
 
@@ -1307,5 +1360,74 @@ ${aboveFoldHtml}
     }
     // Remove outside click listener here
     // REMOVED: if (this.outsideClickHandler) { ... }
+  }
+
+  // ADDED: New method to handle showing the panel, clearing the flag
+  private showFromApi(): void {
+    if (this.isVisible) return; // Already visible
+
+    try {
+      localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
+      console.log('[FeedbackViewerImpl] Panel opening via API/toggle, removed explicit close flag.');
+    } catch (e) {
+      console.warn('[FeedbackViewerImpl] Failed to remove localStorage item:', e);
+    }
+    const firstRun = !localStorage.getItem('checkra_onboarded');
+    if (firstRun) {
+      this.showOnboarding();
+    } else {
+      this.prepareForInput(null, null, null, null);
+    }
+  }
+
+  // ADDED: Methods for loading and saving history
+  private loadHistory(): void {
+    try {
+      const storedHistory = localStorage.getItem(CONVERSATION_HISTORY_KEY);
+      if (storedHistory) {
+        const parsedHistory = JSON.parse(storedHistory) as ConversationItem[];
+        // Ensure loaded items have isStreaming set to false for past AI messages
+        this.conversationHistory = parsedHistory.map(item => {
+          if (item.type === 'ai') {
+            return { ...item, isStreaming: false };
+          }
+          return item;
+        });
+        console.log(`[FeedbackViewerImpl] Loaded ${this.conversationHistory.length} items from history.`);
+        // TODO: Add call to domManager to render this history
+      } else {
+        this.conversationHistory = [];
+      }
+    } catch (e) {
+      console.error('[FeedbackViewerImpl] Failed to load or parse conversation history:', e);
+      this.conversationHistory = []; // Start fresh on error
+      localStorage.removeItem(CONVERSATION_HISTORY_KEY); // Clear corrupted data
+    }
+  }
+
+  private saveHistory(newItem?: ConversationItem): void { // Made newItem optional
+    if (newItem) {
+      if (newItem.type === 'ai') {
+        newItem.isStreaming = true; // New AI messages start streaming
+        // newItem.content = ''; // Content will be provided or start empty
+      }
+      this.conversationHistory.push(newItem);
+    }
+    try {
+      // Always save the full history state when called
+      localStorage.setItem(CONVERSATION_HISTORY_KEY, JSON.stringify(this.conversationHistory));
+      console.log(`[FeedbackViewerImpl] Saved/Updated history. Total items: ${this.conversationHistory.length}`);
+    } catch (e) {
+      console.error('[FeedbackViewerImpl] Failed to save conversation history:', e);
+    }
+    
+    // Trigger DOM update ONLY if a NEW item was added
+    if(this.domManager && newItem) { 
+       this.domManager.appendHistoryItem(newItem);
+    } else if (this.domManager) {
+        // If newItem is null, it means an update happened in updateResponse/finalizeResponse.
+        // Those methods are now responsible for calling domManager.updateLastAIMessage directly.
+        // So, no DOM update needed here when newItem is null.
+    }
   }
 }
