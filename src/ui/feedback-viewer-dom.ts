@@ -43,7 +43,7 @@ export interface FeedbackViewerElements {
  */
 export class FeedbackViewerDOM {
   private elements: FeedbackViewerElements | null = null;
-  private readonly originalPromptTitleText = 'Describe what you need help with';
+  private readonly originalPromptTitleText = '';
 
   // --- Resizing State ---
   private isResizing: boolean = false;
@@ -138,7 +138,10 @@ export class FeedbackViewerDOM {
     contentWrapper.appendChild(onboardingContainer);
 
     const promptTitle = document.createElement('h4');
-    promptTitle.textContent = '"' + this.originalPromptTitleText + '"';
+    promptTitle.textContent = this.originalPromptTitleText;
+    if (!this.originalPromptTitleText) {
+        promptTitle.classList.add('hidden');
+    }
     contentWrapper.appendChild(promptTitle);
 
     const textareaContainer = document.createElement('div');
@@ -299,15 +302,16 @@ export class FeedbackViewerDOM {
 
   public show(): void {
     if (!this.elements) return;
-    const { viewer, promptTextarea } = this.elements;
+    const { viewer, promptTextarea, responseHeader } = this.elements;
 
     // Reset visibility states using classes
     this.showPromptInputArea(true);
-    this.updateLoaderVisibility(false);
-    this.updateActionButtonsVisibility(false);
-    this.elements.responseHeader.classList.add('hidden');
-    this.elements.responseHeader.classList.remove('visible-flex');
-    this.elements.contentWrapper.style.paddingTop = '15px';
+    this.updateLoaderVisibility(false); // This will now ensure header is visible
+    this.updateActionButtonsVisibility(false); // This will now ensure header is visible
+    // REMOVED: Explicitly hiding/showing header here, handled by sub-functions now
+    // responseHeader.classList.add('hidden'); 
+    // responseHeader.classList.remove('visible-flex');
+    // this.elements.contentWrapper.style.paddingTop = '15px';
 
     // Show the viewer with transform animation
     viewer.classList.remove('hidden');
@@ -327,62 +331,44 @@ export class FeedbackViewerDOM {
   public updateLoaderVisibility(visible: boolean, text?: string): void {
     if (!this.elements) return;
     const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper, actionButtonsContainer } = this.elements;
+
+    // Always ensure header is visible
+    responseHeader.classList.remove('hidden');
+    responseHeader.classList.add('visible-flex');
+
     if (visible) {
       loadingIndicatorText.textContent = text || 'Processing...';
-      // loadingIndicator.style.display = 'flex'; // Use class
       loadingIndicator.classList.remove('hidden');
       loadingIndicator.classList.add('visible-flex');
-      responseHeader.classList.remove('hidden');
-      responseHeader.classList.add('visible-flex');
-      requestAnimationFrame(() => {
-        const headerHeight = responseHeader.offsetHeight;
-        contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-      });
     } else {
       loadingIndicator.classList.add('hidden');
       loadingIndicator.classList.remove('visible-flex');
-      if (actionButtonsContainer.classList.contains('hidden')) {
-        responseHeader.classList.add('hidden');
-        responseHeader.classList.remove('visible-flex');
-        contentWrapper.style.paddingTop = '15px';
-      } else {
-        responseHeader.classList.remove('hidden');
-        responseHeader.classList.add('visible-flex');
-        requestAnimationFrame(() => {
-          const headerHeight = responseHeader.offsetHeight;
-          contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-        });
-      }
     }
+
+    // Adjust content padding based on header height (only once or when visibility changes might affect height)
+    // This might need refinement if header height changes dynamically often.
+    requestAnimationFrame(() => {
+        const headerHeight = responseHeader.offsetHeight;
+        contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
+    });
   }
 
   public updateActionButtonsVisibility(visible: boolean): void {
     if (!this.elements) return;
-    const { actionButtonsContainer, responseHeader, contentWrapper, loadingIndicator } = this.elements;
+    const { actionButtonsContainer, responseHeader, contentWrapper } = this.elements;
+
+    // Always ensure header is visible
+    responseHeader.classList.remove('hidden');
+    responseHeader.classList.add('visible-flex');
+
     actionButtonsContainer.classList.toggle('hidden', !visible);
     actionButtonsContainer.classList.toggle('visible-flex', visible);
 
-    if (visible) {
-      responseHeader.classList.remove('hidden');
-      responseHeader.classList.add('visible-flex');
-      requestAnimationFrame(() => {
+    // Adjust content padding based on header height
+    requestAnimationFrame(() => {
         const headerHeight = responseHeader.offsetHeight;
         contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-      });
-    } else {
-      if (loadingIndicator.classList.contains('hidden')) {
-        responseHeader.classList.add('hidden');
-        responseHeader.classList.remove('visible-flex');
-        contentWrapper.style.paddingTop = '15px';
-      } else {
-        responseHeader.classList.remove('hidden');
-        responseHeader.classList.add('visible-flex');
-        requestAnimationFrame(() => {
-          const headerHeight = responseHeader.offsetHeight;
-          contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-        });
-      }
-    }
+    });
   }
 
   public updateSubmitButtonState(enabled: boolean, text: string): void {
@@ -510,17 +496,17 @@ export class FeedbackViewerDOM {
 
     // Update the title text and visibility using class
     if (show) {
-      // Restore original title
+      // Restore original title (which is now empty)
       this.elements.promptTitle.textContent = this.originalPromptTitleText;
-      this.elements.promptTitle.classList.remove('hidden');
-      this.elements.promptTitle.classList.add('visible');
-    } else if (submittedPromptText) {
-      // Show submitted prompt in the title element
-      this.elements.promptTitle.textContent = submittedPromptText;
-      this.elements.promptTitle.classList.remove('hidden');
-      this.elements.promptTitle.classList.add('visible');
+      if (this.originalPromptTitleText) {
+        this.elements.promptTitle.classList.remove('hidden');
+        this.elements.promptTitle.classList.add('visible');
+      } else {
+        this.elements.promptTitle.classList.add('hidden');
+        this.elements.promptTitle.classList.remove('visible');
+      }
     } else {
-      // Hide the title if no text is provided (e.g., during initial loading)
+      // Hide the title if input is hidden (irrespective of submittedPromptText)
       this.elements.promptTitle.classList.add('hidden');
       this.elements.promptTitle.classList.remove('visible');
     }
@@ -575,10 +561,20 @@ export class FeedbackViewerDOM {
       this.elements.onboardingContainer.classList.remove('hidden');
       this.elements.onboardingContainer.classList.add('visible');
 
-      // Hide other elements
+      // Ensure header IS visible
+      this.elements.responseHeader.classList.remove('hidden');
+      this.elements.responseHeader.classList.add('visible-flex');
+      // Adjust padding dynamically
+      requestAnimationFrame(() => {
+        const headerHeight = this.elements!.responseHeader.offsetHeight;
+        this.elements!.contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
+      });
+
+      // Hide other elements EXCEPT header
       this.elements.promptTitle.classList.add('hidden');
       this.elements.textareaContainer.classList.add('hidden');
-      this.elements.responseHeader.classList.add('hidden'); // Hide header during onboarding
+      // REMOVED: Hiding response header during onboarding
+      // this.elements.responseHeader.classList.add('hidden');
       this.elements.responseContent.classList.add('hidden');
 
     } else {

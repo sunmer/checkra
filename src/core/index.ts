@@ -3,6 +3,7 @@ import { AiSettings as CoreAiSettings } from '../ui/settings-modal';
 import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
 import '../ui/shortcut-handler';
+import { EventEmitter } from './event-emitter';
 
 // --- Module-level instance variable ---
 let settingsModalInstance: SettingsModal | null = null;
@@ -10,6 +11,9 @@ let settingsModalInstance: SettingsModal | null = null;
 // --- Key Management ---
 let effectiveApiKey: string | null = null;
 const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
+
+// ADDED: Instantiate and export EventEmitter
+export const eventEmitter = new EventEmitter();
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {

@@ -1,6 +1,5 @@
 import Settings from '../settings';
-import FeedbackViewer from '../ui/feedback-viewer';
-import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
+import { getEffectiveApiKey, getCurrentAiSettings, eventEmitter } from '../core/index';
 import { AiSettings } from '../ui/settings-modal';
 
 interface PageMetadata {
@@ -114,7 +113,6 @@ const fetchFeedbackBase = async (
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let feedbackViewerInstance: FeedbackViewer | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -129,33 +127,22 @@ const fetchFeedbackBase = async (
                 if (jsonString) {
                   const data = JSON.parse(jsonString);
                   if (data.userMessage) {
-                    if (!feedbackViewerInstance) {
-                      feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
-                      if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
-                    }
-                    feedbackViewerInstance.renderUserMessage(data.userMessage);
+                    eventEmitter.emit('aiUserMessage', data.userMessage);
                   } else if (data.content) {
-                    if (!feedbackViewerInstance) {
-                      feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
-                      if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
-                    }
-                    feedbackViewerInstance.updateResponse(data.content);
+                    eventEmitter.emit('aiResponseChunk', data.content);
                   } else if (data.error) {
                     console.error("Received error via SSE:", data.error);
-                    if (!feedbackViewerInstance) {
-                      feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
-                      if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
-                    }
-                    feedbackViewerInstance.showError(`Stream Error: ${data.error}`);
+                    eventEmitter.emit('aiError', `Stream Error: ${data.error}`);
                   }
                 }
               }
             }
           } catch (e) {
             console.error("Error processing final buffer chunk:", e, buffer);
+            eventEmitter.emit('aiError', `Error processing final stream data: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
-        if (feedbackViewerInstance) feedbackViewerInstance.finalizeResponse();
+        eventEmitter.emit('aiFinalized');
         break;
       }
 
@@ -170,28 +157,17 @@ const fetchFeedbackBase = async (
             if (jsonString) {
               const data = JSON.parse(jsonString);
               if (data.userMessage) {
-                if (!feedbackViewerInstance) {
-                  feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
-                  if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
-                }
-                feedbackViewerInstance.renderUserMessage(data.userMessage);
+                eventEmitter.emit('aiUserMessage', data.userMessage);
               } else if (data.content) {
-                if (!feedbackViewerInstance) {
-                  feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
-                  if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
-                }
-                feedbackViewerInstance.updateResponse(data.content);
+                eventEmitter.emit('aiResponseChunk', data.content);
               } else if (data.error) {
                 console.error("Received error via SSE:", data.error);
-                if (!feedbackViewerInstance) {
-                  feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
-                  if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
-                }
-                feedbackViewerInstance.showError(`Stream Error: ${data.error}`);
+                eventEmitter.emit('aiError', `Stream Error: ${data.error}`);
               }
             }
           } catch (e) {
             console.error("Error parsing SSE data line:", e, line);
+            eventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
           }
         } else if (line.trim() === '' && buffer.startsWith('data:')) {
           // Handle potential empty line separator
@@ -201,16 +177,7 @@ const fetchFeedbackBase = async (
 
   } catch (error) {
     console.error("Error in fetchFeedbackBase:", error);
-    try {
-      const instance = FeedbackViewer.getInstance(null as any);
-      if (instance) {
-        instance.showError(error instanceof Error ? error.message : String(error));
-      } else {
-        console.error("Could not get FeedbackViewer instance to show fetch error.");
-      }
-    } catch (getInstanceError) {
-      console.error("Error getting FeedbackViewer instance during fetch error handling:", getInstanceError);
-    }
+    eventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
   }
 };
 
@@ -238,17 +205,9 @@ export const fetchAudit = async (
   const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/audit`;
   // Ensure HTML is provided for audit
   if (!html) {
+      const errorMsg = 'Cannot run audit: Missing required HTML content.';
       console.error('[fetchAudit] HTML content is required for audit requests.');
-      try {
-        const instance = FeedbackViewer.getInstance(null as any);
-        if (instance) {
-          instance.showError('Cannot run audit: Missing required HTML content.');
-        } else {
-          console.error("Could not get FeedbackViewer instance to show fetch error.");
-        }
-      } catch (e) {
-        console.error("Error getting FeedbackViewer instance during fetch error handling:", e);
-      }
+      eventEmitter.emit('aiError', errorMsg);
       return;
   }
   return fetchFeedbackBase(apiUrl, promptText, html);

@@ -6,6 +6,7 @@ import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
+import { eventEmitter } from '../core/index';
 
 // Regex patterns for extracting HTML
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
@@ -82,15 +83,24 @@ export class FeedbackViewerImpl {
   private appliedFixListeners: Map<string, { close: EventListener; copy: EventListener; toggle: EventListener }> = new Map();
 
   // --- Listeners ---
-  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  // REMOVED: private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
-  private isQuickAuditRun: boolean = false; // Track if current session started with quick audit
+  private isQuickAuditRun: boolean = false;
   private footerSelectListener: (() => void) | null = null; // Listener for footer button
 
   private miniSelectListener: (() => void) | null = null; // Add listener reference
 
   private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
   private boundHandlePanelClick: ((event: MouseEvent) => void) | null = null;
+
+  private isScreenCapturing: boolean = false; // << ADD THIS STATE
+
+  // --- Helpers for binding methods for event listeners ---
+  private boundUpdateResponse = this.updateResponse.bind(this);
+  private boundRenderUserMessage = this.renderUserMessage.bind(this);
+  private boundShowError = this.showError.bind(this);
+  private boundFinalizeResponse = this.finalizeResponse.bind(this);
+  private boundToggle = this.toggle.bind(this); // ADDED: Bound toggle method
 
   constructor(private onToggleCallback: (isVisible: boolean) => void) {
     console.log('[FeedbackViewerImpl] Constructor called.');
@@ -121,17 +131,6 @@ export class FeedbackViewerImpl {
     this.domElements.previewApplyButton.addEventListener('click', this.handlePreviewApplyClick);
     this.domElements.cancelButton.addEventListener('click', this.handleCancelFixClick);
 
-    // Outside click handler
-    this.outsideClickHandler = (e: MouseEvent) => {
-      if (this.domElements && this.domManager &&
-        !this.domElements.viewer.classList.contains('hidden') &&
-        e.target instanceof Node &&
-        !this.domElements.viewer.contains(e.target)) {
-        this.hide();
-      }
-    };
-    document.addEventListener('mousedown', this.outsideClickHandler);
-
     // Ensure cancel button SVG is correct if DOM didn't set it initially (belt and braces)
     this.domElements.cancelButton.innerHTML = `
             <span class="button-text">Undo fix</span>
@@ -144,19 +143,26 @@ export class FeedbackViewerImpl {
     // Add listener for settings button
     this.domElements.settingsButton?.addEventListener('click', this.handleSettingsClick);
 
-    console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners.');
+    // ADDED: Subscribe to AI service events using BOUND methods
+    eventEmitter.on('aiResponseChunk', this.boundUpdateResponse);
+    eventEmitter.on('aiUserMessage', this.boundRenderUserMessage);
+    eventEmitter.on('aiError', this.boundShowError);
+    eventEmitter.on('aiFinalized', this.boundFinalizeResponse);
+    eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
+
+    console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
   }
 
   public cleanup(): void {
-    if (!this.domElements || !this.outsideClickHandler) return;
+    if (!this.domElements /* REMOVED: || !this.outsideClickHandler */) return;
 
     // Remove general listeners
     this.domElements.promptTextarea.removeEventListener('keydown', this.handleTextareaKeydown);
     this.domElements.submitButton.removeEventListener('click', this.handleSubmit);
     this.domElements.previewApplyButton.removeEventListener('click', this.handlePreviewApplyClick);
     this.domElements.cancelButton.removeEventListener('click', this.handleCancelFixClick);
-    document.removeEventListener('mousedown', this.outsideClickHandler);
+    // REMOVED: document.removeEventListener('mousedown', this.outsideClickHandler);
 
     // --- Clean up listeners on applied fixes ---
     this.appliedFixListeners.forEach((listeners, fixId) => {
@@ -186,11 +192,18 @@ export class FeedbackViewerImpl {
     // Remove mini select listener
     this.domElements.miniSelectButton?.removeEventListener('click', this.handleMiniSelectClick);
 
+    // ADDED: Unsubscribe from AI service events using BOUND methods
+    eventEmitter.off('aiResponseChunk', this.boundUpdateResponse);
+    eventEmitter.off('aiUserMessage', this.boundRenderUserMessage);
+    eventEmitter.off('aiError', this.boundShowError);
+    eventEmitter.off('aiFinalized', this.boundFinalizeResponse);
+    eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
+
     this.domElements = null;
     this.domManager = null;
-    this.outsideClickHandler = null;
+    // REMOVED: this.outsideClickHandler = null;
     this.removeGlobalListeners();
-    console.log('[FeedbackViewerLogic] Cleaned up listeners.');
+    console.log('[FeedbackViewerLogic] Cleaned up listeners and unsubscribed from AI events.');
   }
 
   // --- Public API ---
@@ -208,6 +221,7 @@ export class FeedbackViewerImpl {
     targetRect: DOMRect | null,
     targetElement: Element | null
   ): void {
+    this.isScreenCapturing = false; // << RESET FLAG HERE
     console.log(`[Impl.prepareForInput] Received selectedHtml length: ${selectedHtml?.length ?? 'null'}, targetElement: ${targetElement?.tagName}`);
 
     if (!this.domManager || !this.domElements) {
@@ -612,7 +626,15 @@ export class FeedbackViewerImpl {
            this.previewInsertionParent = null;
            this.previewInsertionBeforeNode = null;
            // --- END EDIT ---
-           this.hide(); // Close the viewer panel
+           // Panel should remain open after applying the fix.
+           // The UI should be reset for the next interaction or to show a success message.
+           // For now, just ensure the panel stays open.
+           // Consider resetting the prompt or showing a success message here.
+           this.domManager?.setPromptState(true, ''); // Re-enable prompt
+           this.domManager?.updateSubmitButtonState(true, 'Get Feedback');
+           this.domManager?.updateActionButtonsVisibility(false); // Hide preview/apply buttons
+           this.domManager?.clearAIResponseContent(); // Clear old AI response
+           this.domManager?.showPromptInputArea(true); // Show prompt area
 
       } catch (error) {
            console.error('[FeedbackViewerLogic] Error applying fix:', error);
@@ -1074,20 +1096,17 @@ export class FeedbackViewerImpl {
   private handleOnboardingSelectSection = (): void => {
     console.log('[FeedbackViewerLogic] Onboarding: Select Section clicked.');
     this.isQuickAuditRun = false; // Ensure flag is false before starting selection
+    this.isScreenCapturing = true; // << SET FLAG HERE to prevent outside click hide
     this.cleanupOnboardingListeners();
     if (this.domManager) {
-        this.domManager.showOnboardingView(false);
+        this.domManager.showOnboardingView(false); // Hide onboarding UI
+        this.domManager.showPromptInputArea(true); // Show normal prompt area
     }
-    this.hide();
+    // Panel should remain open. Screen capture will overlay.
     screenCapture.startCapture(
-      (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
-        if (targetElement) {
-            console.log('[FeedbackViewerLogic] Section selected via onboarding flow.');
-            this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
-        } else {
-            console.log('[FeedbackViewerLogic] Section selection cancelled after onboarding.');
-        }
-    });
+      // Bind prepareForInput directly. It will set isScreenCapturing = false.
+      this.prepareForInput.bind(this) 
+    );
   }
 
   // Helper to remove onboarding listeners
@@ -1248,27 +1267,11 @@ ${aboveFoldHtml}
     e.stopPropagation(); // Prevent triggering other clicks
     console.log('[FeedbackViewerLogic] Mini select (crosshair) button clicked.');
     this.isQuickAuditRun = false; // Ensure not in audit mode
-    // REMOVED: this.hide(); // Do not hide the panel during selection
+    this.isScreenCapturing = true; // << SET FLAG HERE
 
     // Trigger screen capture
     screenCapture.startCapture(
-      (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
-        // Log the received HTML for debugging
-        console.log(`[FeedbackViewerLogic] screenCapture callback received. Target: ${targetElement?.tagName}, HTML length: ${selectedHtml?.length ?? 'null'}`);
-        
-        if (targetElement && selectedHtml) { // Ensure both exist
-          console.log('[FeedbackViewerLogic] Section selected via mini select button. Calling prepareForInput.');
-          // prepareForInput will store selectedHtml and show the panel
-          this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
-          // Focus the textarea after selection
-          this.domElements?.promptTextarea.focus();
-        } else {
-          console.log('[FeedbackViewerLogic] Section selection cancelled or failed after mini select.');
-          // Panel remains open, user can try again or type a prompt
-          // Optionally re-focus textarea?
-          this.domElements?.promptTextarea.focus();
-        }
-      }
+      this.prepareForInput.bind(this) // Pass the bound method
     );
   }
 
@@ -1294,10 +1297,7 @@ ${aboveFoldHtml}
         console.log('[FeedbackViewerImpl] Added escape keydown listener.');
     }
     // Add outside click listener here if not added elsewhere
-    if (this.outsideClickHandler) {
-        document.addEventListener('mousedown', this.outsideClickHandler);
-        console.log('[FeedbackViewerImpl] Added outside click listener.');
-    }
+    // REMOVED: if (this.outsideClickHandler) { ... }
   }
 
   private removeGlobalListeners(): void {
@@ -1306,9 +1306,6 @@ ${aboveFoldHtml}
         console.log('[FeedbackViewerImpl] Removed escape keydown listener.');
     }
     // Remove outside click listener here
-    if (this.outsideClickHandler) {
-        document.removeEventListener('mousedown', this.outsideClickHandler);
-        console.log('[FeedbackViewerImpl] Removed outside click listener.');
-    }
+    // REMOVED: if (this.outsideClickHandler) { ... }
   }
 }
