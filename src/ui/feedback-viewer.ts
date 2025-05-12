@@ -1,35 +1,49 @@
 import { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { FeedbackViewerImpl } from './feedback-viewer-impl';
+import { SettingsModal } from './settings-modal';
 
 /**
  * Main class coordinating the Feedback Viewer's DOM and Logic.
  */
-class FeedbackViewerCoordinator {
+class FeedbackViewer {
   private domManager: FeedbackViewerDOM;
   private logicManager: FeedbackViewerImpl;
-  private isInitialized = false;
+  private isInitialized: boolean = false;
+  private static instance: FeedbackViewer | null = null;
 
-  constructor() {
+  private constructor(
+    settingsModal: SettingsModal
+  ) {
     this.domManager = new FeedbackViewerDOM();
-    this.logicManager = new FeedbackViewerImpl();
+    this.logicManager = new FeedbackViewerImpl(this.handleToggle.bind(this));
+    
+    // Pass domManager and settingsModal to initialize
+    // Impl.initialize will call domManager.create() internally
+    this.logicManager.initialize(this.domManager, settingsModal);
+    
+    this.isInitialized = true;
+    console.log('[FeedbackViewerCoordinator] Initialized.');
   }
 
-  private initializeIfNeeded(): void {
-    if (!this.isInitialized) {
-      const elements = this.domManager.create(); // Create DOM elements
-      this.logicManager.initialize(elements, this.domManager); // Initialize logic with elements and DOM manager ref
-      this.isInitialized = true;
-      console.log('[FeedbackViewerCoordinator] Initialized.');
+  /**
+   * Gets the singleton instance of the Coordinator.
+   */
+  public static getInstance(settingsModal: SettingsModal): FeedbackViewer {
+    if (!FeedbackViewer.instance) {
+      if (!settingsModal) {
+        console.error('[FeedbackViewerCoordinator] Cannot create instance without SettingsModal.');
+        throw new Error('SettingsModal instance is required to initialize FeedbackViewerCoordinator');
+      }
+      FeedbackViewer.instance = new FeedbackViewer(settingsModal);
     }
+    return FeedbackViewer.instance;
   }
 
   /**
    * Toggles the visibility of the feedback viewer.
    */
   public toggle(): void {
-    this.initializeIfNeeded(); // Ensure initialized before toggling
-
-    if (this.logicManager.isVisible()) {
+    if (this.logicManager.getIsVisible()) {
       console.log('[Coordinator.toggle] Panel is visible, calling hide.');
       this.logicManager.hide();
     } else {
@@ -52,8 +66,6 @@ class FeedbackViewerCoordinator {
    * Shows the onboarding view.
    */
   public showOnboarding(): void {
-    this.initializeIfNeeded();
-    console.log('[Coordinator.showOnboarding] Calling logicManager.showOnboarding.');
     this.logicManager.showOnboarding();
   }
 
@@ -70,8 +82,6 @@ class FeedbackViewerCoordinator {
     targetRect: DOMRect | null,
     targetElement: Element | null
   ): void {
-    this.initializeIfNeeded();
-    console.log('[Coordinator.showInputArea] Calling logicManager.prepareForInput.');
     this.logicManager.prepareForInput(imageDataUrl, selectedHtml, targetRect, targetElement);
   }
 
@@ -80,10 +90,6 @@ class FeedbackViewerCoordinator {
    * @param chunk - The text chunk received from the stream.
    */
   public updateResponse(chunk: string): void {
-    if (!this.isInitialized) {
-      console.warn("[FeedbackViewerCoordinator] updateResponse called before initialization.");
-      return;
-    }
     this.logicManager.updateResponse(chunk);
   }
 
@@ -92,11 +98,6 @@ class FeedbackViewerCoordinator {
    * @param html - The HTML string to render.
    */
   public renderUserMessage(html: string): void {
-    if (!this.isInitialized) {
-      console.warn("[FeedbackViewerCoordinator] renderUserMessage called before initialization.");
-      // Initialize if needed, as this might be the first visible output
-      this.initializeIfNeeded();
-    }
     this.logicManager.renderUserMessage(html);
   }
 
@@ -104,10 +105,6 @@ class FeedbackViewerCoordinator {
    * Finalizes the response stream, enabling inputs and showing action buttons if applicable.
    */
   public finalizeResponse(): void {
-    if (!this.isInitialized) {
-      console.warn("[FeedbackViewerCoordinator] finalizeResponse called before initialization.");
-      return;
-    }
     this.logicManager.finalizeResponse();
   }
 
@@ -116,8 +113,6 @@ class FeedbackViewerCoordinator {
    * @param error - The error message string or Error object.
    */
   public showError(error: Error | string): void {
-    // Allow showing errors even if initialization didn't fully complete via showInputArea
-    this.initializeIfNeeded();
     this.logicManager.showError(error);
   }
 
@@ -125,7 +120,6 @@ class FeedbackViewerCoordinator {
    * Hides the feedback viewer panel and resets its state.
    */
   public hide(): void {
-    if (!this.isInitialized) return; // Nothing to hide if not initialized
     this.logicManager.hide();
   }
 
@@ -133,13 +127,20 @@ class FeedbackViewerCoordinator {
    * Destroys the feedback viewer instance, removing elements and listeners.
    */
   public destroy(): void {
-    if (!this.isInitialized) return;
     this.logicManager.cleanup(); // Clean up logic listeners first
     this.domManager.destroy();   // Then destroy DOM elements
     this.isInitialized = false;
     console.log('[FeedbackViewerCoordinator] Destroyed.');
   }
+
+  // Add a handler that can be passed to the logic manager
+  private handleToggle(isVisible: boolean): void {
+    console.log(`[Coordinator] Toggle requested. New visibility: ${isVisible}`);
+    // This callback might be used for notifying other parts of the system
+    // or could directly call logicManager.toggle() if needed, 
+    // but logicManager handles its own toggle logic internally.
+  }
 }
 
-// Export a single instance
-export const feedbackViewer = new FeedbackViewerCoordinator();
+// Export the class itself so getInstance can be called externally
+export default FeedbackViewer;

@@ -1,5 +1,5 @@
 import Settings from '../settings';
-import { feedbackViewer } from '../ui/feedback-viewer';
+import FeedbackViewer from '../ui/feedback-viewer';
 import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { AiSettings } from '../ui/settings-modal';
 
@@ -114,6 +114,7 @@ const fetchFeedbackBase = async (
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let feedbackViewerInstance: FeedbackViewer | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -128,12 +129,24 @@ const fetchFeedbackBase = async (
                 if (jsonString) {
                   const data = JSON.parse(jsonString);
                   if (data.userMessage) {
-                    feedbackViewer.renderUserMessage(data.userMessage);
+                    if (!feedbackViewerInstance) {
+                      feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
+                      if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
+                    }
+                    feedbackViewerInstance.renderUserMessage(data.userMessage);
                   } else if (data.content) {
-                    feedbackViewer.updateResponse(data.content);
+                    if (!feedbackViewerInstance) {
+                      feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
+                      if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
+                    }
+                    feedbackViewerInstance.updateResponse(data.content);
                   } else if (data.error) {
                     console.error("Received error via SSE:", data.error);
-                    feedbackViewer.showError(`Stream Error: ${data.error}`);
+                    if (!feedbackViewerInstance) {
+                      feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
+                      if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
+                    }
+                    feedbackViewerInstance.showError(`Stream Error: ${data.error}`);
                   }
                 }
               }
@@ -142,7 +155,7 @@ const fetchFeedbackBase = async (
             console.error("Error processing final buffer chunk:", e, buffer);
           }
         }
-        feedbackViewer.finalizeResponse();
+        if (feedbackViewerInstance) feedbackViewerInstance.finalizeResponse();
         break;
       }
 
@@ -157,12 +170,24 @@ const fetchFeedbackBase = async (
             if (jsonString) {
               const data = JSON.parse(jsonString);
               if (data.userMessage) {
-                feedbackViewer.renderUserMessage(data.userMessage);
+                if (!feedbackViewerInstance) {
+                  feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
+                  if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
+                }
+                feedbackViewerInstance.renderUserMessage(data.userMessage);
               } else if (data.content) {
-                feedbackViewer.updateResponse(data.content);
+                if (!feedbackViewerInstance) {
+                  feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
+                  if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
+                }
+                feedbackViewerInstance.updateResponse(data.content);
               } else if (data.error) {
                 console.error("Received error via SSE:", data.error);
-                feedbackViewer.showError(`Stream Error: ${data.error}`);
+                if (!feedbackViewerInstance) {
+                  feedbackViewerInstance = FeedbackViewer.getInstance(null as any);
+                  if (!feedbackViewerInstance) throw new Error("FeedbackViewer instance not available");
+                }
+                feedbackViewerInstance.showError(`Stream Error: ${data.error}`);
               }
             }
           } catch (e) {
@@ -176,7 +201,16 @@ const fetchFeedbackBase = async (
 
   } catch (error) {
     console.error("Error in fetchFeedbackBase:", error);
-    feedbackViewer.showError(error instanceof Error ? error.message : String(error));
+    try {
+      const instance = FeedbackViewer.getInstance(null as any);
+      if (instance) {
+        instance.showError(error instanceof Error ? error.message : String(error));
+      } else {
+        console.error("Could not get FeedbackViewer instance to show fetch error.");
+      }
+    } catch (getInstanceError) {
+      console.error("Error getting FeedbackViewer instance during fetch error handling:", getInstanceError);
+    }
   }
 };
 
@@ -205,7 +239,16 @@ export const fetchAudit = async (
   // Ensure HTML is provided for audit
   if (!html) {
       console.error('[fetchAudit] HTML content is required for audit requests.');
-      feedbackViewer.showError('Cannot run audit: Missing required HTML content.');
+      try {
+        const instance = FeedbackViewer.getInstance(null as any);
+        if (instance) {
+          instance.showError('Cannot run audit: Missing required HTML content.');
+        } else {
+          console.error("Could not get FeedbackViewer instance to show fetch error.");
+        }
+      } catch (e) {
+        console.error("Error getting FeedbackViewer instance during fetch error handling:", e);
+      }
       return;
   }
   return fetchFeedbackBase(apiUrl, promptText, html);

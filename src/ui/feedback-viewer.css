@@ -191,19 +191,19 @@
 }
 
 #checkra-feedback-response-header {
-  position: sticky;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px 10px 20px;
-  background-color: rgba(35, 45, 75, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-  z-index: 5;
+  display: flex; /* Use flexbox for alignment */
+  align-items: center; /* Center items vertically */
+  justify-content: space-between; /* Space out items */
+  padding: 8px 15px 8px 15px; /* Adjust padding */
+  background-color: rgba(40, 50, 80, 0.95); /* Slightly darker/more opaque header */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 10; /* Ensure header is above content */
+  min-height: 40px; /* Ensure a minimum height */
   box-sizing: border-box;
-  display: flex;
-  align-items: center;
 }
 
 #checkra-feedback-content-wrapper {
@@ -359,7 +359,7 @@
   font-size: 0.9em;
   display: none; /* Replaced by visibility class */
   order: 1;
-  margin-right: auto;
+  margin-left: 5px; /* Add a little space from settings button */
 }
 
 /* --- Resize Handle --- */
@@ -373,7 +373,7 @@
   gap: 8px;
   align-items: center;
   order: 2;
-  margin-left: auto;
+  margin-left: 10px; /* Add space between loading/actions and settings/close */
 }
 
 #checkra-feedback-action-buttons button {
@@ -557,21 +557,47 @@
     display: block; /* Default state */
 }
 
-/* Style the close button */
-#checkra-close-viewer-btn {
-  background: transparent;
+/* Style for the new settings button */
+#checkra-header-settings-btn {
+  background: none;
   border: none;
-  color: #ccc;
-  font-size: 22px; /* Make it larger */
-  font-weight: bold;
-  line-height: 1;
+  padding: 4px; /* Add some padding for click area */
+  margin: 0;
   cursor: pointer;
-  padding: 0 5px; /* Add some padding */
-  margin-left: auto; /* Push to the right */
-  order: 3; /* Ensure it appears after action buttons */
-  transition: color 0.2s;
+  color: #aab8d4; /* Light grey/blue color */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: auto; /* Push other items (actions, close) to the right */
+  opacity: 0.7;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+#checkra-header-settings-btn:hover {
+  color: #ffffff;
+  opacity: 1;
+}
+
+#checkra-header-settings-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+#checkra-close-viewer-btn {
+  background: none;
+  border: none;
+  color: #aab8d4; /* Match settings icon color */
+  font-size: 24px; /* Make X slightly larger */
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0 5px; /* Add some horizontal padding */
+  line-height: 1; /* Ensure tight line height */
+  margin-left: 10px; /* Add some space from action buttons */
+  opacity: 0.7;
+  transition: opacity 0.2s ease, color 0.2s ease;
 }
 
 #checkra-close-viewer-btn:hover {
-  color: #fff;
+  color: #ffffff;
+  opacity: 1;
 }

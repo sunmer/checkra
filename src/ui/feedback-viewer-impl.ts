@@ -5,6 +5,7 @@ import { copyViewportToClipboard } from '../utils/clipboard-utils';
 import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { screenCapture } from './screen-capture';
+import type { SettingsModal } from './settings-modal';
 
 // Regex patterns for extracting HTML
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
@@ -51,9 +52,11 @@ const getHeadMetadata = (): Record<string, string | null> => {
  */
 export class FeedbackViewerImpl {
   private domElements: FeedbackViewerElements | null = null;
-  private domManager: FeedbackViewerDOM | null = null; // Use the imported type
+  private domManager: FeedbackViewerDOM | null = null;
+  private settingsModal: SettingsModal | null = null;
 
   // --- State ---
+  private isVisible: boolean = false;
   private currentImageDataUrl: string | null = null;
   private initialSelectedElement: Element | null = null; // The element *initially* selected by the user for the cycle
   private originalOuterHTMLForCurrentCycle: string | null = null; // Store the initial HTML of the selected element
@@ -86,22 +89,31 @@ export class FeedbackViewerImpl {
 
   private miniSelectListener: (() => void) | null = null; // Add listener reference
 
-  constructor() {
-    // Bind methods used as event handlers
+  private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
+  private boundHandlePanelClick: ((event: MouseEvent) => void) | null = null;
+
+  constructor(private onToggleCallback: (isVisible: boolean) => void) {
+    console.log('[FeedbackViewerImpl] Constructor called.');
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handlePreviewApplyClick = this.handlePreviewApplyClick.bind(this);
-    this.handleCancelFixClick = this.handleCancelFixClick.bind(this); // Keep binding
-    // Bind new handlers for applied fix buttons
+    this.handleCancelFixClick = this.handleCancelFixClick.bind(this);
     this.handleAppliedFixClose = this.handleAppliedFixClose.bind(this);
     this.handleAppliedFixCopy = this.handleAppliedFixCopy.bind(this);
     this.handleAppliedFixToggle = this.handleAppliedFixToggle.bind(this);
-    this.handleMiniSelectClick = this.handleMiniSelectClick.bind(this); // Bind the new handler
+    this.handleMiniSelectClick = this.handleMiniSelectClick.bind(this);
+    this.handleSettingsClick = this.handleSettingsClick.bind(this);
+    this.boundHandleEscapeKey = this.handleEscapeKey.bind(this);
   }
 
-  public initialize(elements: FeedbackViewerElements, domManager: FeedbackViewerDOM): void {
-    this.domElements = elements;
+  public initialize(
+    domManager: FeedbackViewerDOM,
+    settingsModal: SettingsModal
+  ): void {
+    // Get elements from domManager inside initialize
+    this.domElements = domManager.create(); 
     this.domManager = domManager; // Store reference to DOM manager
+    this.settingsModal = settingsModal;
 
     // --- Setup Listeners ---
     this.domElements.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
@@ -121,7 +133,7 @@ export class FeedbackViewerImpl {
     document.addEventListener('mousedown', this.outsideClickHandler);
 
     // Ensure cancel button SVG is correct if DOM didn't set it initially (belt and braces)
-    elements.cancelButton.innerHTML = `
+    this.domElements.cancelButton.innerHTML = `
             <span class="button-text">Undo fix</span>
             ${UNDO_ICON_SVG}
         `;
@@ -129,7 +141,11 @@ export class FeedbackViewerImpl {
     // Add listener for mini select button
     this.domElements.miniSelectButton?.addEventListener('click', this.handleMiniSelectClick);
 
-    console.log('[FeedbackViewerLogic] Initialized.');
+    // Add listener for settings button
+    this.domElements.settingsButton?.addEventListener('click', this.handleSettingsClick);
+
+    console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners.');
+    this.addGlobalListeners();
   }
 
   public cleanup(): void {
@@ -173,10 +189,18 @@ export class FeedbackViewerImpl {
     this.domElements = null;
     this.domManager = null;
     this.outsideClickHandler = null;
+    this.removeGlobalListeners();
     console.log('[FeedbackViewerLogic] Cleaned up listeners.');
   }
 
   // --- Public API ---
+
+  /**
+   * Gets the current visibility state of the panel.
+   */
+  public getIsVisible(): boolean {
+    return this.isVisible;
+  }
 
   public prepareForInput(
     imageDataUrl: string | null,
@@ -224,7 +248,7 @@ export class FeedbackViewerImpl {
     this.previewInsertionParent = null;
     this.previewInsertionBeforeNode = null;
 
-    const wasVisible = this.isVisible(); // Check visibility *before* resetting UI
+    const wasVisible = this.isVisible; // Check internal state *before* resetting UI
 
     // Reset UI
     this.domManager.setPromptState(true, '');
@@ -250,6 +274,8 @@ export class FeedbackViewerImpl {
     if (!wasVisible) {
         console.log('[Impl.prepareForInput] Panel was hidden, calling domManager.show()');
         this.domManager.show(); 
+        this.isVisible = true; // << SET isVisible to true
+        this.onToggleCallback(true); // Notify coordinator/external
     } else {
         console.log('[Impl.prepareForInput] Panel was already visible. UI reset, not re-showing explicitly.');
         // Ensure focus if it was already visible but textarea might have lost it
@@ -317,14 +343,20 @@ export class FeedbackViewerImpl {
     this.revertPreviewIfNeeded(); // Add this helper call
   }
 
-  public hide(): void {
-    if (!this.domManager || !this.domElements) return; // Added check for elements
+  public hide(initiatedByUser: boolean = true): void {
+    if (!this.isVisible && !initiatedByUser) return; // Don't hide if already hidden, unless user forces it (e.g. from toggle)
+    if (!this.domManager || !this.domElements) {
+      this.isVisible = false; // Ensure state is false even if DOM elements are missing
+      return;
+    }
 
     // Revert any active preview *before* hiding
     this.revertPreviewIfNeeded();
 
     // Hide the viewer UI
     this.domManager.hide();
+    this.isVisible = false; // << SET isVisible to false
+    this.onToggleCallback(false); // Notify coordinator/external
 
     // Reset transient state for the next cycle
     this.currentImageDataUrl = null;
@@ -342,6 +374,14 @@ export class FeedbackViewerImpl {
 
     this.domManager?.showFooterCTA(false); // Add this line
     this.isQuickAuditRun = false; // Reset flag on hide
+
+    if (initiatedByUser) {
+      // Listeners are now global or managed by DOM state, so don't remove on every hide
+      console.log('[FeedbackViewerImpl] Panel hidden by user action.');
+      // localStorage logic for panelExplicitlyClosedByUser will go here (Phase 1, Item 2.b)
+    } else {
+      console.log('[FeedbackViewerImpl] Panel hidden programmatically.');
+    }
   }
 
   /**
@@ -968,20 +1008,12 @@ export class FeedbackViewerImpl {
   }
 
   /**
-   * Checks if the feedback viewer is currently visible.
-   */
-  public isVisible(): boolean {
-    // Check if the viewer element exists and doesn't have the 'hidden' class
-    return !!this.domElements?.viewer && !this.domElements.viewer.classList.contains('hidden');
-  }
-
-  /**
    * Toggles the visibility of the feedback viewer.
    * Assumes initialization is handled by the coordinator.
    */
   public toggle(): void {
-    if (this.isVisible()) {
-      this.hide();
+    if (this.isVisible) { // Use the private property
+      this.hide(true); // User initiated hide via toggle
     } else {
       const firstRun = !localStorage.getItem('checkra_onboarded');
       if (firstRun) {
@@ -1006,7 +1038,9 @@ export class FeedbackViewerImpl {
     this.domManager.clearAIResponseContent();
     this.domManager.updateActionButtonsVisibility(false);
     this.domManager.updateLoaderVisibility(false);
-    this.domManager.show();
+    this.domManager.show(); // This makes the panel visible
+    this.isVisible = true; // << SET isVisible to true
+    this.onToggleCallback(true); // Notify coordinator/external
     console.log('[FeedbackViewerLogic] Showing onboarding.');
 
     const runAuditBtn = this.domElements.viewer.querySelector('#checkra-btn-run-audit');
@@ -1238,4 +1272,43 @@ ${aboveFoldHtml}
     );
   }
 
+  private handleSettingsClick(): void {
+    console.log('[FeedbackViewerLogic] Settings button clicked.');
+    if (this.settingsModal) {
+      this.settingsModal.showModal();
+    } else {
+      console.error('[FeedbackViewerLogic] SettingsModal instance is not available.');
+    }
+  }
+
+  private handleEscapeKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.isVisible) { // Use the private property
+      console.log('[FeedbackViewerImpl] Escape key pressed.');
+      this.hide(true); // User initiated hide via Escape
+    }
+  }
+
+  private addGlobalListeners(): void {
+    if (this.boundHandleEscapeKey) {
+        document.addEventListener('keydown', this.boundHandleEscapeKey);
+        console.log('[FeedbackViewerImpl] Added escape keydown listener.');
+    }
+    // Add outside click listener here if not added elsewhere
+    if (this.outsideClickHandler) {
+        document.addEventListener('mousedown', this.outsideClickHandler);
+        console.log('[FeedbackViewerImpl] Added outside click listener.');
+    }
+  }
+
+  private removeGlobalListeners(): void {
+    if (this.boundHandleEscapeKey) {
+        document.removeEventListener('keydown', this.boundHandleEscapeKey);
+        console.log('[FeedbackViewerImpl] Removed escape keydown listener.');
+    }
+    // Remove outside click listener here
+    if (this.outsideClickHandler) {
+        document.removeEventListener('mousedown', this.outsideClickHandler);
+        console.log('[FeedbackViewerImpl] Removed outside click listener.');
+    }
+  }
 }

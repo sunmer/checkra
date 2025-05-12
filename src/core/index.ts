@@ -1,7 +1,8 @@
 import { CheckraOptions } from '../types';
 import { AiSettings as CoreAiSettings } from '../ui/settings-modal';
-import { FloatingMenu } from '../ui/floating-menu';
 import { SettingsModal } from '../ui/settings-modal';
+import FeedbackViewer from '../ui/feedback-viewer';
+import '../ui/shortcut-handler';
 
 // --- Module-level instance variable ---
 let settingsModalInstance: SettingsModal | null = null;
@@ -74,7 +75,7 @@ export interface CheckraAPI {
 export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
   const config = {
     apiKey: options?.apiKey ?? undefined, // Keep undefined if not provided
-    isVisible: options?.isVisible ?? true, // Default for isVisible
+    // isVisible option is deprecated
   };
 
   // --- Determine Effective API Key ---
@@ -96,62 +97,43 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
   }
 
   // --- Create instances and assign to module-level variables ---
-  let feedbackMenuInstance: FloatingMenu | null = null; // Keep local ref for API object closure
+  // let feedbackMenuInstance: FloatingMenu | null = null;
 
   try {
-    if (config.isVisible) {
-      // Assign to module-level variable
-      settingsModalInstance = new SettingsModal();
+    // Instantiate SettingsModal regardless of old isVisible
+    settingsModalInstance = new SettingsModal();
 
-      // Pass the instance to FloatingMenu
-      feedbackMenuInstance = new FloatingMenu(settingsModalInstance);
+    // Get the FeedbackViewer singleton instance using the imported class
+    const feedbackViewerInstance = FeedbackViewer.getInstance(settingsModalInstance);
 
-      const created = feedbackMenuInstance.create();
-      if (!created) {
-        console.error("[Checkra] Failed to create FloatingMenu DOM.");
-        // If floating menu fails, we might still want settings modal? Or destroy both?
-        // For now, just nullify feedback menu instance
-        if (feedbackMenuInstance) feedbackMenuInstance.destroy(); // Destroy partially created menu
-        feedbackMenuInstance = null;
-        // Decide if settings modal should also be destroyed if menu fails
-        // if (settingsModalInstance) settingsModalInstance.destroy();
-        // settingsModalInstance = null;
-      }
-    }
+    // TODO: Add initial visibility logic based on localStorage here (Phase 1, Item 2)
 
-    console.log(`[Checkra] Initialized. UI Visible: ${config.isVisible}`);
+    console.log(`[Checkra] Initialized.`);
 
     const api: CheckraAPI = {
       showFeedback: () => {
-        if (feedbackMenuInstance) {
-          feedbackMenuInstance.triggerFeedbackCapture();
-        } else if (config.isVisible) {
-          console.warn('[Checkra API] Feedback menu instance not found or creation failed, cannot show feedback.');
-        } else {
-          console.log('[Checkra API] UI is hidden, showFeedback() ignored.');
-        }
+        // TODO: Replace with feedbackViewer.toggle() or similar based on new shortcut logic
+        console.log('[Checkra API] showFeedback called - behavior TBD');
+        feedbackViewerInstance.toggle(); // Use the obtained instance
       },
       showSettings: () => {
         // Use the module-level instance
         if (settingsModalInstance) {
           settingsModalInstance.showModal();
-        } else if (config.isVisible) {
-          console.warn('[Checkra API] Settings modal instance not found, cannot show settings.');
-        } else {
-          console.log('[Checkra API] UI is hidden, showSettings() ignored.');
+        }
+        // Removed isVisible check - settings always available via header button now
+        else {
+            console.warn('[Checkra API] Settings modal instance not found.');
         }
       },
       destroy: () => {
         console.log('[Checkra API] Destroy called.');
-        if (feedbackMenuInstance) {
-          feedbackMenuInstance.destroy();
-          feedbackMenuInstance = null;
-        }
         // Destroy and nullify the module-level settings instance
         if (settingsModalInstance) {
           settingsModalInstance.destroy();
-          settingsModalInstance = null;
         }
+        // Destroy the feedback viewer instance as well
+        feedbackViewerInstance.destroy();
         console.log('[Checkra API] Cleanup complete.');
       }
     };
@@ -162,9 +144,10 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     console.error('[Checkra] Failed to initialize:', error);
     effectiveApiKey = null;
     // Ensure cleanup on error
-    if (feedbackMenuInstance) feedbackMenuInstance.destroy();
+    // if (feedbackMenuInstance) feedbackMenuInstance.destroy();
     if (settingsModalInstance) settingsModalInstance.destroy();
     settingsModalInstance = null; // Ensure module-level ref is cleared
+    // Potentially destroy feedback viewer instance here too on error?
     return null;
   }
 }

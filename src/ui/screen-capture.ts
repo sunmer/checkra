@@ -193,12 +193,10 @@ class ScreenCapture {
       // Define the click listener function
       this.clickListener = async (event: MouseEvent) => {
         const target = event.target as HTMLElement;
-        const floatingMenu = document.getElementById('checkra-floating-menu-container');
 
         // Ignore clicks on the floating menu (overlay check removed)
-        if (floatingMenu && floatingMenu.contains(target)) {
-          return;
-        }
+        // We might need to ignore clicks on the new settings button if it's added outside the main viewer?
+        // However, the settings button will be INSIDE the viewer, so clicks there won't trigger capture anyway.
 
         // Prevent default browser action and stop event bubbling *now*
         event.preventDefault();
@@ -220,9 +218,7 @@ class ScreenCapture {
         // --- Explicitly restore styles BEFORE cleanup and outerHTML ---
         if (selectedElement) {
           const targetId = selectedElement.id || selectedElement.tagName;
-          if (targetId === 'checkra-floating-menu-container') {
-            console.warn('[ScreenCapture Click] !!! Restoring styles for floating menu container in click listener !!!');
-          }
+          // Removed check related to floating menu container restoration.
 
           selectedElement.style.removeProperty('outline');
 

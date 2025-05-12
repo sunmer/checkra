@@ -1,15 +1,26 @@
-import { feedbackViewer } from './feedback-viewer';
+import FeedbackViewer from './feedback-viewer';
 
 document.addEventListener('keydown', (e: KeyboardEvent) => {
-  // Check for Cmd+L on Mac or Ctrl+L on Windows/Linux
-  if ((e.metaKey && e.key === 'l') || (e.ctrlKey && e.key === 'l')) {
-    // Prevent default browser action (like focusing address bar on Ctrl+L)
-    // Note: This might not always work reliably across all browsers/OS configurations for Ctrl+L
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const shortcutPressed = (isMac && e.metaKey && e.key.toLowerCase() === 'l') || 
+                          (!isMac && e.ctrlKey && e.key.toLowerCase() === 'l');
+
+  if (shortcutPressed) {
     e.preventDefault();
-    feedbackViewer.toggle(); // We will implement this toggle method next
-    console.log('[Shortcut] Toggle shortcut triggered.');
+    try {
+      // HACK: Relies on FeedbackViewer.instance already being initialized by core/index.ts
+      // with a valid SettingsModal. Passing null here is unsafe if core hasn't run.
+      const viewerInstance = FeedbackViewer.getInstance(null as any);
+      if (viewerInstance) {
+        viewerInstance.toggle();
+        console.log('[ShortcutHandler] Toggle triggered via FeedbackViewer instance.');
+      } else {
+        console.error('[ShortcutHandler] FeedbackViewer instance not available. core/index.ts might not have initialized it.');
+      }
+    } catch (error) {
+      console.error('[ShortcutHandler] Error toggling viewer:', error);
+    }
   }
 });
 
-// Log registration
-console.log('[Shortcut] Global shortcut listener registered (Cmd/Ctrl + L).'); 
+console.log('[ShortcutHandler] Global shortcut listener (Cmd/Ctrl + L) registered.'); 
