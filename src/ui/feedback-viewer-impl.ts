@@ -78,16 +78,8 @@ export class FeedbackViewerImpl {
   private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
   private currentFixId: string | null = null; // Unique ID for the element being worked on
   private fixIdCounter: number = 0; // Counter for generating unique IDs
-  private isPreviewActive: boolean = false; // Tracks if preview (direct replacement) is active
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
-
-  // --- EDIT: Add state for tracking preview nodes and insertion point ---
-  private previewInsertedNodes: Node[] = []; // Stores references to all top-level nodes inserted during preview
-  private previewInsertionParent: Node | null = null; // Parent element where the preview nodes were inserted
-  private previewInsertionBeforeNode: Node | null = null; // The node *before* the first preview node (or null if first child)
-  // --- END EDIT ---
-
 
   // --- Global Tracking for Applied Fixes ---
   private appliedFixes: Map<string, AppliedFixInfo> = new Map();
@@ -123,8 +115,6 @@ export class FeedbackViewerImpl {
     console.log('[FeedbackViewerImpl] Constructor called.');
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
-    this.handlePreviewApplyClick = this.handlePreviewApplyClick.bind(this);
-    this.handleCancelFixClick = this.handleCancelFixClick.bind(this);
     this.handleAppliedFixClose = this.handleAppliedFixClose.bind(this);
     this.handleAppliedFixCopy = this.handleAppliedFixCopy.bind(this);
     this.handleAppliedFixToggle = this.handleAppliedFixToggle.bind(this);
@@ -152,14 +142,6 @@ export class FeedbackViewerImpl {
     // --- Setup Listeners ---
     this.domElements.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
     this.domElements.submitButton.addEventListener('click', this.handleSubmit);
-    this.domElements.previewApplyButton.addEventListener('click', this.handlePreviewApplyClick);
-    this.domElements.cancelButton.addEventListener('click', this.handleCancelFixClick);
-
-    // Ensure cancel button SVG is correct if DOM didn't set it initially (belt and braces)
-    this.domElements.cancelButton.innerHTML = `
-            <span class="button-text">Undo fix</span>
-            ${UNDO_ICON_SVG}
-        `;
 
     // Add listener for mini select button
     this.domElements.miniSelectButton?.addEventListener('click', this.handleMiniSelectClick);
@@ -185,9 +167,6 @@ export class FeedbackViewerImpl {
     // Remove general listeners
     this.domElements.promptTextarea.removeEventListener('keydown', this.handleTextareaKeydown);
     this.domElements.submitButton.removeEventListener('click', this.handleSubmit);
-    this.domElements.previewApplyButton.removeEventListener('click', this.handlePreviewApplyClick);
-    this.domElements.cancelButton.removeEventListener('click', this.handleCancelFixClick);
-    // REMOVED: document.removeEventListener('mousedown', this.outsideClickHandler);
 
     // --- Clean up listeners on applied fixes ---
     this.appliedFixListeners.forEach((listeners, fixId) => {
@@ -292,13 +271,9 @@ export class FeedbackViewerImpl {
     console.log(`[FeedbackViewerLogic] Preparing for new input cycle. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement?.tagName ?? 'null'}`); // Handle null element
 
     // Reset fix-specific state for this NEW cycle, but keep conversation history
-    this.isPreviewActive = false;
-    this.fixedOuterHTMLForCurrentCycle = null; // Clear any fix from a *previous* interaction cycle
+    this.fixedOuterHTMLForCurrentCycle = null; 
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
-    this.previewInsertedNodes = [];
-    this.previewInsertionParent = null;
-    this.previewInsertionBeforeNode = null;
 
     // --- Update UI elements (assuming panel is already visible) ---
     const currentPromptText = this.domElements.promptTextarea.value;
@@ -309,8 +284,8 @@ export class FeedbackViewerImpl {
     this.domManager.showFooterCTA(false); 
 
     if (this.domElements) { 
-        this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-        this.domElements.cancelButton.style.display = 'none';
+        // REMOVED: this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
+        // REMOVED: if (this.domElements.cancelButton) { this.domElements.cancelButton.style.display = 'none'; }
     }
     
     this.domElements?.promptTextarea.focus();
@@ -359,7 +334,6 @@ export class FeedbackViewerImpl {
     this.domManager.updateLoaderVisibility(false);
     this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true, 'Ask a question');
-    this.updateActionButtonsVisibility(); // Update header buttons based on the latest fix (if any)
 
     if (this.isQuickAuditRun) {
         this.showFooterCTALogic();
@@ -371,14 +345,16 @@ export class FeedbackViewerImpl {
     const contentWrapper = this.domElements.contentWrapper;
     contentWrapper.scrollTop = contentWrapper.scrollHeight;
 
-    // TODO: Trigger DOM update (full re-render or append/update last)
-    if(this.domManager) {
-       if (lastItem) {
-         this.domManager.appendHistoryItem(lastItem);
-       } else {
-         // If no new item, it means an existing item (last AI message) was updated (e.g., content stream, or finalized)
-         // The updateResponse and finalizeResponse should handle calling updateLastAIMessage directly.
-       }
+    // Apply fix if available
+    if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
+        const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
+        if (lastAiItem && lastAiItem.fix) { // Ensure fix data is stored with AI message
+            this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml);
+        } else {
+            // Fallback or log error if fix data not found with AI message
+            console.warn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
+            this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle);
+        }
     }
   }
 
@@ -395,7 +371,6 @@ export class FeedbackViewerImpl {
     this.domManager.showPromptInputArea(true);
 
     this.saveHistory({ type: 'error', content: errorMessage }); // ADDED: Save error to history
-    this.revertPreviewIfNeeded(); // Add this helper call
   }
 
   public hide(initiatedByUser: boolean = true, fromCloseButton: boolean = false): void {
@@ -404,9 +379,6 @@ export class FeedbackViewerImpl {
       this.isVisible = false; // Ensure state is false even if DOM elements are missing
       return;
     }
-
-    // Revert any active preview *before* hiding
-    this.revertPreviewIfNeeded();
 
     // Hide the viewer UI
     this.domManager.hide();
@@ -419,11 +391,6 @@ export class FeedbackViewerImpl {
     this.originalOuterHTMLForCurrentCycle = null;
     this.fixedOuterHTMLForCurrentCycle = null;
     this.currentFixId = null;
-    this.isPreviewActive = false; // Ensure false
-
-    this.previewInsertedNodes = [];
-    this.previewInsertionParent = null;
-    this.previewInsertionBeforeNode = null;
 
     this.domManager?.showFooterCTA(false); // Add this line
     this.isQuickAuditRun = false; // Reset flag on hide
@@ -497,208 +464,19 @@ export class FeedbackViewerImpl {
     this.domManager.setPromptState(false);
     this.domManager.updateSubmitButtonState(false, 'Sending...');
     this.domManager.updateLoaderVisibility(true, 'Getting feedback...');
-    this.domManager.updateActionButtonsVisibility(false); // Hide during request
+    this.domManager.updateActionButtonsVisibility(false);
     this.domManager.clearUserMessage();
-    this.domManager.clearAIResponseContent();
     this.domManager.showPromptInputArea(false, promptText);
 
     this.saveHistory({ type: 'user', content: promptText });
     // ADDED: Immediately add a placeholder for AI response
     this.saveHistory({ type: 'ai', content: '' }); 
 
-    this.revertPreviewIfNeeded();
-
     // --- Call API ---
     fetchFeedback(this.currentImageDataUrl, promptText, processedHtmlForAI);
   }
 
-  private handlePreviewApplyClick(): void {
-    console.log('[FeedbackViewerLogic] Preview/Apply button clicked.');
-    if (!this.domManager || !this.domElements || !this.currentFixId || !this.originalOuterHTMLForCurrentCycle) {
-      console.warn('[FeedbackViewerLogic] Cannot preview/apply: Missing refs, ID, or original HTML.');
-      return;
-    }
-    if (!this.fixedOuterHTMLForCurrentCycle) {
-      console.warn('[FeedbackViewerLogic] Cannot preview/apply: Fixed HTML not extracted yet.');
-      return;
-    }
-
-    if (!this.isPreviewActive) {
-      // --- ACTION: Start Preview (Replace Element) ---
-      console.log(`[FeedbackViewerLogic] Starting preview for Fix ID: ${this.currentFixId}`);
-      try {
-        // Find the *original* element that still has the ID
-        const elementToReplace = document.querySelector(`[data-checkra-fix-id="${this.currentFixId}"]`);
-        if (!elementToReplace) {
-            throw new Error(`Original element with ID ${this.currentFixId} not found in DOM for starting preview.`);
-        }
-        if (!elementToReplace.parentNode) {
-            throw new Error(`Original element with ID ${this.currentFixId} has no parent node.`);
-        }
-
-        const fragment = this.createFragmentFromHTML(this.fixedOuterHTMLForCurrentCycle);
-        if (!fragment || fragment.childNodes.length === 0) {
-             throw new Error('Failed to parse fixed HTML string into a non-empty fragment.');
-        }
-
-        // --- EDIT: Store insertion point and track nodes ---
-        this.previewInsertionParent = elementToReplace.parentNode;
-        this.previewInsertionBeforeNode = elementToReplace.nextSibling; // Store the node *after* the original one
-        this.previewInsertedNodes = Array.from(fragment.childNodes); // Store nodes *before* inserting
-        // --- END EDIT ---
-
-        // Assign ID and class to the *first* element in the fragment for tracking/styling
-        const firstPreviewElement = fragment.firstElementChild;
-        if (firstPreviewElement) {
-            firstPreviewElement.setAttribute('data-checkra-fix-id', this.currentFixId); // Move ID to first preview element
-            firstPreviewElement.classList.add('checkra-fix-previewing');
-            elementToReplace.removeAttribute('data-checkra-fix-id'); // Remove ID from original element
-        } else {
-            // If no first element child (e.g., only text nodes), keep ID on original for revert?
-            // This case is tricky. Let's assume for now fixes usually involve elements.
-            console.warn(`[FeedbackViewerLogic] Fixed HTML fragment for ${this.currentFixId} has no element child. ID remains on original.`);
-        }
-
-        // Replace the current element with *all* nodes from the fragment
-        elementToReplace.replaceWith(fragment);
-
-
-        // Update button states
-        this.domManager.updatePreviewApplyButtonContent('Apply Fix', CHECK_ICON_SVG);
-        this.domElements.cancelButton.style.display = 'inline-flex';
-        this.isPreviewActive = true;
-        console.log(`[FeedbackViewerLogic] Preview active for ${this.currentFixId}. Element replaced with fragment.`);
-
-      } catch (error) {
-         console.error('[FeedbackViewerLogic] Error starting preview:', error);
-         this.showError(`Failed to start preview: ${error instanceof Error ? error.message : String(error)}`);
-         this.revertPreviewIfNeeded(); // Attempt to clean up if replacement failed partially
-      }
-
-    } else {
-      // --- ACTION: Apply Permanently (Create Wrapper) ---
-      console.log(`[FeedbackViewerLogic] Applying fix permanently for Fix ID: ${this.currentFixId}`);
-      try {
-           // --- EDIT: Check insertion point validity and remove preview nodes ---
-           if (!this.previewInsertionParent) {
-               throw new Error("Cannot apply fix: Preview insertion parent node is missing.");
-           }
-           if (this.previewInsertedNodes.length === 0) {
-               console.warn(`[FeedbackViewerLogic] No preview nodes tracked for ${this.currentFixId}. Applying wrapper at original location if possible.`);
-               // Fallback logic might be needed here if the original element reference is still valid
-           }
-
-           console.log(`[FeedbackViewerLogic] Removing ${this.previewInsertedNodes.length} preview nodes for ${this.currentFixId} during revert...`);
-           let firstPreviewNodeParent: Node | null = null;
-           this.previewInsertedNodes.forEach(node => {
-               if (node.parentNode) {
-                   if (!firstPreviewNodeParent) firstPreviewNodeParent = node.parentNode; // Capture parent just in case
-                   node.parentNode.removeChild(node);
-               }
-           });
-           // Ensure insertion parent is valid, potentially using the captured parent from removal
-           const insertionParent = this.previewInsertionParent || firstPreviewNodeParent;
-           if (!insertionParent) {
-                throw new Error("Cannot apply fix: Could not determine valid parent node for inserting wrapper.");
-           }
-           // --- END EDIT ---
-
-
-           // 1. Create the persistent wrapper
-           const wrapper = document.createElement('div');
-           wrapper.className = 'checkra-feedback-applied-fix';
-           wrapper.setAttribute('data-checkra-fix-id', this.currentFixId);
-
-           // 2. Create the content container inside
-           const contentContainer = document.createElement('div');
-           contentContainer.className = 'checkra-applied-fix-content';
-
-           const fixedContentFragment = this.createFragmentFromHTML(this.fixedOuterHTMLForCurrentCycle);
-            if (!fixedContentFragment || fixedContentFragment.childNodes.length === 0) {
-                throw new Error('Failed to parse fixed HTML for content container fragment.');
-            }
-           contentContainer.appendChild(fixedContentFragment);
-           wrapper.appendChild(contentContainer);
-
-           // --- CAPTURE FIX ID VALUE ---
-           const fixIdForListener = this.currentFixId;
-           if (!fixIdForListener) {
-               throw new Error("Critical error: currentFixId became null unexpectedly during fix application.");
-           }
-           // --- END CAPTURE ---
-
-           // 3. Add Buttons (Close, Copy, Toggle)
-           const closeBtn = this.createAppliedFixButton('close', fixIdForListener);
-           const copyBtn = this.createAppliedFixButton('copy', fixIdForListener);
-           const toggleBtn = this.createAppliedFixButton('toggle', fixIdForListener);
-           wrapper.appendChild(closeBtn);
-           wrapper.appendChild(copyBtn);
-           wrapper.appendChild(toggleBtn);
-
-           // --- EDIT: Insert the wrapper at the stored position ---
-           // Insert the wrapper before the 'previewInsertionBeforeNode' (which was the node *after* the original)
-           insertionParent.insertBefore(wrapper, this.previewInsertionBeforeNode);
-           console.log(`[FeedbackViewerLogic] Inserted permanent wrapper for ${this.currentFixId}.`);
-           // --- END EDIT ---
-
-
-           // 5. Store fix information
-           const fixInfo: AppliedFixInfo = {
-               originalElementId: fixIdForListener,
-               originalOuterHTML: this.originalOuterHTMLForCurrentCycle!,
-               fixedOuterHTML: this.fixedOuterHTMLForCurrentCycle!,
-               appliedWrapperElement: wrapper,
-               isCurrentlyFixed: true
-           };
-           this.appliedFixes.set(fixIdForListener, fixInfo);
-           console.log(`[FeedbackViewerLogic] Stored applied fix info for ${fixIdForListener}`);
-
-           // 6. Store listeners for cleanup
-           const listeners = {
-               close: (e: Event) => this.handleAppliedFixClose(fixIdForListener, e),
-               copy: (e: Event) => this.handleAppliedFixCopy(fixIdForListener, e),
-               toggle: (e: Event) => this.handleAppliedFixToggle(fixIdForListener, e)
-           };
-           this.appliedFixListeners.set(fixIdForListener, listeners);
-           closeBtn.addEventListener('click', listeners.close);
-           copyBtn.addEventListener('click', listeners.copy);
-           toggleBtn.addEventListener('click', listeners.toggle);
-
-
-           // 7. Reset viewer state for this cycle & hide
-           this.isPreviewActive = false;
-           // --- EDIT: Clear preview tracking state ---
-           this.previewInsertedNodes = [];
-           this.previewInsertionParent = null;
-           this.previewInsertionBeforeNode = null;
-           // --- END EDIT ---
-           // Panel should remain open after applying the fix.
-           // Consider resetting the prompt or showing a success message here.
-           this.domManager?.setPromptState(true, ''); // Re-enable prompt
-           this.domManager?.updateSubmitButtonState(true, 'Ask a question');
-           this.domManager?.updateActionButtonsVisibility(false); // Hide preview/apply buttons
-           this.domManager?.showPromptInputArea(true); // Show prompt area
-
-      } catch (error) {
-           console.error('[FeedbackViewerLogic] Error applying fix:', error);
-           this.showError(`Failed to apply fix: ${error instanceof Error ? error.message : String(error)}`);
-           this.revertPreviewIfNeeded(); // This will attempt to remove preview nodes and restore original
-      }
-    }
-  }
-
-  private handleCancelFixClick(): void {
-    console.log('[FeedbackViewerLogic] Revert (during preview) button clicked.');
-    if (!this.isPreviewActive || !this.currentFixId) {
-      console.warn('[FeedbackViewerLogic] Cannot revert: Preview not active or Fix ID missing.');
-      return;
-    }
-
-    this.revertPreview(); // Use the common revert logic
-  }
-
-  // --- Applied Fix Button Handlers ---
-
+  // --- Applied Fix Button Handlers --- (These remain for already applied fixes)
   private handleAppliedFixClose(fixId: string, event: Event): void {
       event.stopPropagation();
       console.log(`[FeedbackViewerLogic] Close button clicked for applied Fix ID: ${fixId}`);
@@ -939,120 +717,98 @@ export class FeedbackViewerImpl {
       // REMOVED: this.updateActionButtonsVisibility(); // Let finalizeResponse handle this
   }
 
-  /**
-   * Helper to revert an active preview back to the original element.
-   */
-   private revertPreviewIfNeeded(): boolean {
-       if (this.isPreviewActive && this.currentFixId) {
-           return this.revertPreview();
-       }
-       // --- EDIT: Clear preview tracking state even if not active (belt-and-suspenders) ---
-       this.previewInsertedNodes = [];
-       this.previewInsertionParent = null;
-       this.previewInsertionBeforeNode = null;
-       // --- END EDIT ---
-       return false;
-   }
+  // --- ADDED: New method to directly apply the fix to the page --- 
+  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string): void {
+    console.log(`[FeedbackViewerLogic] Applying fix directly to page for Fix ID: ${fixId}`);
+    if (!this.domManager || !this.domElements) {
+      console.warn('[FeedbackViewerLogic] Cannot apply fix: Missing DOM Manager or elements.');
+      return;
+    }
 
-   private revertPreview(): boolean {
-        console.log(`[FeedbackViewerLogic] Reverting preview for Fix ID: ${this.currentFixId}`);
-        if (!this.originalOuterHTMLForCurrentCycle || !this.currentFixId || !this.domManager || !this.domElements) {
-             console.warn(`[FeedbackViewerLogic] Cannot revert preview: Missing original HTML, Fix ID, or DOM elements.`);
-             return false;
+    try {
+        // Find the original element. It should still have the data-checkra-fix-id attribute
+        // if this is the first time applying this specific fix, or we need a way to re-target it.
+        // For simplicity, assume the ID is still on the original element if it hasn't been wrapped yet.
+        let elementToReplace = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
+        let insertionParent: Node | null = null;
+        let insertionBeforeNode: Node | null = null;
+
+        if (elementToReplace) {
+            if (!elementToReplace.parentNode) {
+                 throw new Error(`Original element with ID ${fixId} has no parent node.`);
+            }
+            insertionParent = elementToReplace.parentNode;
+            insertionBeforeNode = elementToReplace.nextSibling;
+            elementToReplace.remove(); // Remove the original element before inserting wrapper
+        } else {
+            // This case is problematic. If the original element is gone (e.g. due to previous UI updates, or if this is a re-apply)
+            // we need a robust way to find where to insert it. This was handled by previewInsertionParent before.
+            // For now, if elementToReplace is not found, we cannot proceed reliably. This needs more thought for re-application scenarios.
+            console.error(`[FeedbackViewerLogic] Original element with ID ${fixId} not found. Cannot apply fix.`);
+            // Attempt to show an error to the user, perhaps in the panel?
+            this.showError(`Failed to apply fix: Original target element for fix ${fixId} not found.`);
+            return;
         }
 
-        try {
-            // --- EDIT: Remove previously inserted nodes and restore original ---
-            if (!this.previewInsertionParent) {
-                 throw new Error("Cannot revert preview: Insertion parent node is missing.");
-            }
-            if (this.previewInsertedNodes.length === 0) {
-                console.warn(`[FeedbackViewerLogic] No preview nodes tracked for ${this.currentFixId}. Revert aborted.`);
-                // Reset state without modifying DOM further
-                this.isPreviewActive = false;
-                this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-                this.domElements.cancelButton.style.display = 'none';
-                this.previewInsertionParent = null;
-                this.previewInsertionBeforeNode = null;
-                return false;
-            }
+        const wrapper = document.createElement('div');
+        wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in'; // ADD fade-in class
+        wrapper.setAttribute('data-checkra-fix-id', fixId);
 
-            console.log(`[FeedbackViewerLogic] Removing ${this.previewInsertedNodes.length} preview nodes for ${this.currentFixId} during revert...`);
-            this.previewInsertedNodes.forEach(node => {
-                 if (node.parentNode) {
-                     node.parentNode.removeChild(node);
-                 }
-            });
-
-
-            const originalFragment = this.createFragmentFromHTML(this.originalOuterHTMLForCurrentCycle);
-             if (!originalFragment || originalFragment.childNodes.length === 0) {
-                throw new Error('Failed to parse original HTML string into non-empty fragment for revert.');
-             }
-            // Re-apply ID to the first element of the original fragment if it exists
-            const firstOriginalElement = originalFragment.firstElementChild;
-            if (firstOriginalElement) {
-                firstOriginalElement.setAttribute('data-checkra-fix-id', this.currentFixId);
-            }
-
-            // Insert the original fragment back at the stored position
-            this.previewInsertionParent.insertBefore(originalFragment, this.previewInsertionBeforeNode);
-
-            // ADDED: Re-apply highlight to the reverted element
-            let elementToHighlight: Element | null = null;
-            if (firstOriginalElement) {
-                elementToHighlight = firstOriginalElement;
-            } else if (this.previewInsertionParent instanceof Element) { // Check if parent is an Element
-                // Search within the parent only if it's an element
-                elementToHighlight = this.previewInsertionParent.querySelector(`[data-checkra-fix-id="${this.currentFixId}"]`);
-            }
-            
-            if (elementToHighlight && elementToHighlight !== document.body) {
-                 elementToHighlight.classList.add('checkra-selected-element-outline');
-                 this.currentlyHighlightedElement = elementToHighlight;
-            } else {
-                this.currentlyHighlightedElement = null;
-            }
-
-            console.log(`[FeedbackViewerLogic] Preview reverted for ${this.currentFixId} by restoring original fragment.`);
-            // --- END EDIT ---
-
-            // Update state and UI
-            this.isPreviewActive = false;
-            this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-            this.domElements.cancelButton.style.display = 'none';
-             // Clear tracking state
-             this.previewInsertedNodes = [];
-             this.previewInsertionParent = null;
-             this.previewInsertionBeforeNode = null;
-
-            return true; // Indicate revert happened
-
-        } catch (error) {
-            console.error('[FeedbackViewerLogic] Error reverting preview:', error);
-            this.showError(`Failed to revert preview: ${error instanceof Error ? error.message : String(error)}`);
-            // State might be inconsistent here, but resetting flags is safest
-            this.isPreviewActive = false;
-            // --- EDIT: Clear preview tracking state on error too ---
-            this.previewInsertedNodes = [];
-            this.previewInsertionParent = null;
-            this.previewInsertionBeforeNode = null;
-            // --- END EDIT ---
-            if (this.domManager && this.domElements) {
-                 this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-                 this.domElements.cancelButton.style.display = 'none';
-            }
-            return false;
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'checkra-applied-fix-content';
+        const fixedContentFragment = this.createFragmentFromHTML(fixedHtml);
+        if (!fixedContentFragment || fixedContentFragment.childNodes.length === 0) {
+            throw new Error('Failed to parse fixed HTML for content container fragment.');
         }
-   }
+        contentContainer.appendChild(fixedContentFragment);
+        wrapper.appendChild(contentContainer);
 
-  // --- ADDED: Helper to remove highlight --- 
-  private removeSelectionHighlight(): void {
-      if (this.currentlyHighlightedElement) {
-          this.currentlyHighlightedElement.classList.remove('checkra-selected-element-outline');
-          this.currentlyHighlightedElement = null;
-          console.log('[FeedbackViewerLogic] Removed selection highlight.');
-      }
+        const closeBtn = this.createAppliedFixButton('close', fixId);
+        const copyBtn = this.createAppliedFixButton('copy', fixId);
+        const toggleBtn = this.createAppliedFixButton('toggle', fixId);
+        wrapper.appendChild(closeBtn);
+        wrapper.appendChild(copyBtn);
+        wrapper.appendChild(toggleBtn);
+
+        insertionParent.insertBefore(wrapper, insertionBeforeNode);
+        console.log(`[FeedbackViewerLogic] Inserted permanent wrapper for ${fixId}.`);
+
+        const fixInfo: AppliedFixInfo = {
+            originalElementId: fixId,
+            originalOuterHTML: originalHtml,
+            fixedOuterHTML: fixedHtml,
+            appliedWrapperElement: wrapper,
+            isCurrentlyFixed: true
+        };
+        this.appliedFixes.set(fixId, fixInfo);
+        console.log(`[FeedbackViewerLogic] Stored applied fix info for ${fixId}`);
+
+        const listeners = {
+            close: (e: Event) => this.handleAppliedFixClose(fixId, e),
+            copy: (e: Event) => this.handleAppliedFixCopy(fixId, e),
+            toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e)
+        };
+        this.appliedFixListeners.set(fixId, listeners);
+        closeBtn.addEventListener('click', listeners.close);
+        copyBtn.addEventListener('click', listeners.copy);
+        toggleBtn.addEventListener('click', listeners.toggle);
+
+        // After successful application, clear the current cycle's fix proposal
+        // to prevent re-application on next finalizeResponse without new AI feedback.
+        this.fixedOuterHTMLForCurrentCycle = null; 
+        // The currentFixId and originalOuterHTMLForCurrentCycle remain as they define the *current context*.
+
+        // Optionally, clear the main prompt and AI response area in the panel after successful application.
+        // this.domManager?.setPromptState(true, '');
+        // this.domManager?.clearAIResponseContent(); 
+        // Consider what should happen in the panel UI after this.
+
+    } catch (error) {
+        console.error('[FeedbackViewerLogic] Error applying fix directly to page:', error);
+        this.showError(`Failed to apply fix: ${error instanceof Error ? error.message : String(error)}`);
+        // If elementToReplace was found and removed, but wrapper insertion failed, we need to restore original.
+        // This is complex. For now, an error is shown. A more robust undo for failed apply would be needed.
+    }
   }
 
   // --- Helpers ---
@@ -1099,16 +855,14 @@ export class FeedbackViewerImpl {
 
   private updateActionButtonsVisibility(): void {
     if (!this.domManager || !this.domElements) return;
-    const showContainer = !!this.fixedOuterHTMLForCurrentCycle;
-
-    console.log(`[FeedbackViewerLogic] updateActionButtonsVisibility: showContainer=${showContainer}, isPreviewActive=${this.isPreviewActive}`);
-    this.domManager.updateActionButtonsVisibility(showContainer);
-
-    if (showContainer) {
-      this.domElements.cancelButton.style.display = this.isPreviewActive ? 'inline-flex' : 'none';
-    } else {
-      this.domElements.cancelButton.style.display = 'none';
-    }
+    // This method is now effectively a NO-OP as preview/apply buttons in header are removed.
+    // It might be fully removed later if no other header actions need dynamic visibility.
+    console.log('[FeedbackViewerLogic] updateActionButtonsVisibility called - no header preview/apply buttons to update.');
+    // All previous logic that toggled this.domElements.cancelButton or called 
+    // this.domManager.updateActionButtonsVisibility() is removed.
+    // If this.domElements.actionButtonsContainer itself needs to be hidden/shown for other reasons,
+    // that logic would go here, but currently, only settings/close are always visible in the header.
+    this.domManager.updateActionButtonsVisibility(false); // Explicitly hide the container for old buttons
   }
 
   /**
@@ -1180,10 +934,15 @@ export class FeedbackViewerImpl {
         this.domManager.showPromptInputArea(true); // Show normal prompt area
     }
     // Panel should remain open. Screen capture will overlay.
-    screenCapture.startCapture(
-      // Bind prepareForInput directly. It will set isScreenCapturing = false.
-      this.prepareForInput.bind(this) 
-    );
+    if (this.domElements?.viewer) {
+      screenCapture.startCapture(
+        this.prepareForInput.bind(this),
+        this.domElements.viewer // Pass the panel element to ignore
+      );
+    } else {
+      console.error('[FeedbackViewerImpl] Cannot start screen capture from onboarding: domElements.viewer is not available.');
+      this.isScreenCapturing = false; // Reset flag
+    }
   }
 
   // Helper to remove onboarding listeners
@@ -1276,7 +1035,6 @@ ${aboveFoldHtml}
       this.domManager.updateLoaderVisibility(true, 'Running quick audit...'); // This will show the header
       this.domManager.updateActionButtonsVisibility(false);
       this.domManager.clearUserMessage();
-      this.domManager.clearAIResponseContent();
       this.domManager.showPromptInputArea(false, 'Running Quick Audit...'); // Show title
 
       // Set flag right before fetch
@@ -1319,18 +1077,22 @@ ${aboveFoldHtml}
         console.log('[FeedbackViewerLogic] Footer Select Section clicked.');
         this.domManager?.showFooterCTA(false); // Hide footer
         this.hide(); // Hide panel temporarily
-        screenCapture.startCapture(
-            (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
-                if (targetElement) {
-                    console.log('[FeedbackViewerLogic] Section selected via footer CTA.');
-                    this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
-                } else {
-                    console.log('[FeedbackViewerLogic] Section selection cancelled after footer CTA.');
-                    // Maybe re-show the footer?
-                    this.domManager?.showFooterCTA(true);
-                }
-            }
-        );
+        if (this.domElements?.viewer) {
+          screenCapture.startCapture(
+              (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
+                  if (targetElement) {
+                      console.log('[FeedbackViewerLogic] Section selected via footer CTA.');
+                      this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
+                  } else {
+                      console.log('[FeedbackViewerLogic] Section selection cancelled after footer CTA.');
+                      this.domManager?.showFooterCTA(true);
+                  }
+              },
+              this.domElements.viewer // Pass the panel element to ignore
+          );
+        } else {
+            console.error('[FeedbackViewerImpl] Cannot start screen capture from footer: domElements.viewer is not available.');
+        }
     };
 
     // Add the new listener
@@ -1346,10 +1108,16 @@ ${aboveFoldHtml}
     this.isQuickAuditRun = false; // Ensure not in audit mode
     this.isScreenCapturing = true; // << SET FLAG HERE
 
-    // Trigger screen capture
-    screenCapture.startCapture(
-      this.prepareForInput.bind(this) // Pass the bound method
-    );
+    // Trigger screen capture, passing the main viewer element to be ignored
+    if (this.domElements?.viewer) {
+      screenCapture.startCapture(
+        this.prepareForInput.bind(this), // Pass the bound method
+        this.domElements.viewer // Pass the panel element to ignore
+      );
+    } else {
+      console.error('[FeedbackViewerImpl] Cannot start screen capture: domElements.viewer is not available.');
+      this.isScreenCapturing = false; // Reset flag
+    }
   }
 
   private handleSettingsClick(): void {
@@ -1467,5 +1235,14 @@ ${aboveFoldHtml}
         // Those methods are now responsible for calling domManager.updateLastAIMessage directly.
         // So, no DOM update needed here when newItem is null.
     }
+  }
+
+  // --- ADDED: Helper to remove highlight --- 
+  private removeSelectionHighlight(): void {
+      if (this.currentlyHighlightedElement) {
+          this.currentlyHighlightedElement.classList.remove('checkra-selected-element-outline');
+          this.currentlyHighlightedElement = null;
+          console.log('[FeedbackViewerLogic] Removed selection highlight.');
+      }
   }
 }

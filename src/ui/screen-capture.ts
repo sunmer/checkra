@@ -23,6 +23,7 @@ class ScreenCapture {
   private originalZIndex: string | null = null;
   private viewerHoverListener: (() => void) | null = null;
   private viewerLeaveListener: (() => void) | null = null;
+  private ignoreElement: HTMLElement | null = null;
 
   private cleanup(): void {
     document.body.classList.remove('capturing-mode');
@@ -64,6 +65,7 @@ class ScreenCapture {
 
     this.isCapturing = false;
     this.captureCallback = null;
+    this.ignoreElement = null;
   }
 
   private highlightElement(element: HTMLElement | null): void {
@@ -159,13 +161,15 @@ class ScreenCapture {
     clickX: number,
     clickY: number,
     effectiveBackgroundColor: string | null
-  ) => void): void {
+  ) => void,
+  elementToIgnore?: HTMLElement): void {
     if (this.isCapturing) {
       console.warn('[ScreenCapture] Capture already in progress. Ignoring request.');
       return;
     }
 
     this.captureCallback = callback;
+    this.ignoreElement = elementToIgnore || null;
     this.isCapturing = true;
     document.body.classList.add('capturing-mode');
 
@@ -181,24 +185,38 @@ class ScreenCapture {
 
       // Set up mousemove handler to highlight elements under cursor
       this.mouseMoveListener = (event: MouseEvent) => {
-        // Use elementFromPoint for better accuracy in complex layouts
         const elementAtPoint = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-        const target = elementAtPoint;
-        if (target && target !== this.currentHighlight) {
-          this.highlightElement(target);
+
+        // ADDED: Check if the element under the mouse is part of the ignored element
+        if (this.ignoreElement && elementAtPoint && this.ignoreElement.contains(elementAtPoint)) {
+          // If currently highlighting something else (outside the panel), remove that highlight
+          if (this.currentHighlight && !this.ignoreElement.contains(this.currentHighlight)) {
+            this.highlightElement(null); 
+          }
+          // Do not highlight anything inside the ignored panel
+          return; 
+        }
+
+        // Original logic: If target is valid and different from current highlight, update.
+        if (elementAtPoint && elementAtPoint !== this.currentHighlight) {
+          this.highlightElement(elementAtPoint);
+        } else if (!elementAtPoint && this.currentHighlight) {
+          // If mouse is over no element (e.g., edge of screen) but something is highlighted, clear it.
+          this.highlightElement(null);
         }
       };
       document.addEventListener('mousemove', this.mouseMoveListener);
 
       // Define the click listener function
       this.clickListener = async (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
+        const clickedElement = event.target as HTMLElement;
 
-        // Ignore clicks on the floating menu (overlay check removed)
-        // We might need to ignore clicks on the new settings button if it's added outside the main viewer?
-        // However, the settings button will be INSIDE the viewer, so clicks there won't trigger capture anyway.
+        if (this.ignoreElement && this.ignoreElement.contains(clickedElement)) {
+          console.log('[ScreenCapture] Click occurred inside the ignored element (feedback panel). Ignoring selection.');
+          return; 
+        }
 
-        // Prevent default browser action and stop event bubbling *now*
+        // Prevent default browser action and stop event bubbling *now* for non-ignored elements
         event.preventDefault();
         event.stopPropagation();
 
@@ -206,7 +224,6 @@ class ScreenCapture {
         const clickX = event.clientX;
         const clickY = event.clientY;
         const selectedElement = this.currentHighlight; // Use the highlighted element
-
 
         // --- Get effective background color BEFORE removing highlight ---
         let effectiveBackgroundColor: string | null = null;

@@ -34,10 +34,7 @@ export interface FeedbackViewerElements {
   responseContent: HTMLDivElement;
   loadingIndicator: HTMLDivElement;
   loadingIndicatorText: HTMLSpanElement;
-  resizeHandle: HTMLDivElement | null;
   actionButtonsContainer: HTMLDivElement;
-  previewApplyButton: HTMLButtonElement;
-  cancelButton: HTMLButtonElement;
   responseHeader: HTMLDivElement;
   contentWrapper: HTMLDivElement;
   userMessageContainer: HTMLDivElement;
@@ -120,26 +117,10 @@ export class FeedbackViewerDOM {
     const loadingIndicatorText = loadingIndicator.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text')!;
     responseHeader.appendChild(loadingIndicator);
 
-    // --- Action Buttons (in Header) ---
+    // --- Action Buttons (in Header) --- (Container remains for now, but buttons removed)
     const actionButtonsContainer = document.createElement('div');
     actionButtonsContainer.id = 'checkra-feedback-action-buttons';
-
-    const previewApplyButton = document.createElement('button');
-    previewApplyButton.innerHTML = `
-          <span class="button-text">Preview Fix</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-        `;
-    previewApplyButton.classList.add('preview-apply-fix');
-    actionButtonsContainer.appendChild(previewApplyButton);
-
-    const cancelButton = document.createElement('button');
-    cancelButton.innerHTML = `
-          <span class="button-text">Undo fix</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2-icon lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-        `;
-    cancelButton.classList.add('cancel-fix');
-    // cancelButton.style.display = 'none'; // Initial state handled by CSS
-    actionButtonsContainer.appendChild(cancelButton);
+    actionButtonsContainer.classList.add('hidden'); // Keep it hidden by default
 
     // Add Settings Button (before close button)
     const settingsButton = document.createElement('button');
@@ -248,10 +229,7 @@ export class FeedbackViewerDOM {
       responseContent,
       loadingIndicator,
       loadingIndicatorText,
-      resizeHandle: null, // Set to null since we removed it
       actionButtonsContainer,
-      previewApplyButton,
-      cancelButton,
       responseHeader,
       contentWrapper,
       userMessageContainer,
@@ -377,13 +355,18 @@ export class FeedbackViewerDOM {
 
   public updateActionButtonsVisibility(visible: boolean): void {
     if (!this.elements) return;
-    const { actionButtonsContainer, responseHeader, contentWrapper } = this.elements;
+    // This method will now just ensure the container is hidden, 
+    // as its buttons are removed.
+    // If other buttons were to be added here later, this logic would change.
+    this.elements.actionButtonsContainer.classList.add('hidden');
+    this.elements.actionButtonsContainer.classList.remove('visible-flex');
 
-    responseHeader.classList.remove('hidden');
-    responseHeader.classList.add('visible-flex');
-
-    actionButtonsContainer.classList.toggle('hidden', !visible);
-    actionButtonsContainer.classList.toggle('visible-flex', visible);
+    // Recalculate header padding if needed, though it should be static now.
+    // const { responseHeader, contentWrapper } = this.elements;
+    // requestAnimationFrame(() => {
+    //     const headerHeight = responseHeader.offsetHeight;
+    //     contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
+    // });
   }
 
   public updateSubmitButtonState(enabled: boolean, text: string): void {
@@ -532,17 +515,6 @@ export class FeedbackViewerDOM {
   }
 
   /**
-   * Updates the content (text and icon) of the Preview/Apply button.
-   */
-  public updatePreviewApplyButtonContent(text: string, svgIcon: string): void {
-    if (!this.elements) return;
-    this.elements.previewApplyButton.innerHTML = `
-            <span class="button-text">${escapeHTML(text)}</span>
-            ${svgIcon}
-        `;
-  }
-
-  /**
    * Renders HTML content into the dedicated user message container.
    * This will be adapted for history: append a new usermessage bubble.
    */
@@ -643,7 +615,8 @@ export class FeedbackViewerDOM {
 
   public renderFullHistory(history: ConversationItem[]): void {
     if (!this.elements) return;
-    this.clearAIResponseContent(); // Clear existing before rendering full history
+    console.log(`[DOM] renderFullHistory: Rendering ${history.length} items.`);
+    this.clearAIResponseContent(); 
     this.elements.responseContent.classList.remove('hidden');
     this.elements.responseContent.classList.add('visible');
 
@@ -665,6 +638,7 @@ export class FeedbackViewerDOM {
 
   public appendHistoryItem(item: ConversationItem): void {
     if (!this.elements) return;
+    console.log(`[DOM] appendHistoryItem: TYPE=${item.type}, CONTENT_START=${item.content?.substring(0, 30)}`);
     this.elements.responseContent.classList.remove('hidden');
     this.elements.responseContent.classList.add('visible');
 
@@ -687,17 +661,19 @@ export class FeedbackViewerDOM {
     const { responseContent, contentWrapper } = this.elements;
     const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
 
+    console.log(`[DOM] updateLastAIMessage: Found bubble=${!!lastAiMessageBubble}, CurrentHTML_Len=${lastAiMessageBubble?.innerHTML?.length ?? 0}, NewContent_Len=${newContent.length}, Streaming=${isStreaming}`);
+
     if (lastAiMessageBubble) {
         lastAiMessageBubble.innerHTML = marked.parse(newContent) as string;
         lastAiMessageBubble.classList.toggle('streaming', isStreaming);
-        // Re-attach code copy buttons if necessary
         this.attachCodeCopyButtonsTo(lastAiMessageBubble as HTMLElement);
-
-        contentWrapper.scrollTop = contentWrapper.scrollHeight; // Auto-scroll
+        if (isStreaming || contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < 20) { // Auto-scroll if streaming or near bottom
+            contentWrapper.scrollTop = contentWrapper.scrollHeight;
+        }
     } else {
-        console.warn('[DOM] updateLastAIMessage called but no last AI message bubble found.');
-        // Fallback: append as a new message if none exists (should ideally be handled by appendHistoryItem)
-        this.appendHistoryItem({ type: 'ai', content: newContent, isStreaming: isStreaming});
+        console.warn('[DOM] updateLastAIMessage called but no last AI message bubble found. This might indicate an issue with initial AI message append.');
+        // REMOVED: Fallback to appendHistoryItem
+        // this.appendHistoryItem({ type: 'ai', content: newContent, isStreaming: isStreaming});
     }
   }
   
