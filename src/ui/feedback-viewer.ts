@@ -8,7 +8,6 @@ import { SettingsModal } from './settings-modal';
 class FeedbackViewer {
   private domManager: FeedbackViewerDOM;
   private logicManager: FeedbackViewerImpl;
-  private isInitialized: boolean = false;
   private static instance: FeedbackViewer | null = null;
   private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed';
 
@@ -41,7 +40,6 @@ class FeedbackViewer {
         console.log('[Coordinator] Panel was explicitly closed by user, not showing initially.');
     }
     
-    this.isInitialized = true;
     console.log('[FeedbackViewerCoordinator] Initialized.');
   }
 
@@ -149,7 +147,6 @@ class FeedbackViewer {
   public destroy(): void {
     this.logicManager.cleanup(); // Clean up logic listeners first
     this.domManager.destroy();   // Then destroy DOM elements
-    this.isInitialized = false;
     console.log('[FeedbackViewerCoordinator] Destroyed.');
   }
 

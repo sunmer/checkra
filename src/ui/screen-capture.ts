@@ -234,7 +234,7 @@ class ScreenCapture {
 
         // --- Explicitly restore styles BEFORE cleanup and outerHTML ---
         if (selectedElement) {
-          const targetId = selectedElement.id || selectedElement.tagName;
+          // REMOVED: const targetId = selectedElement.id || selectedElement.tagName;
           // Removed check related to floating menu container restoration.
 
           selectedElement.style.removeProperty('outline');

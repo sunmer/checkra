@@ -1,19 +1,18 @@
 import './feedback-viewer.css';
-import { escapeHTML } from './utils';
-import { marked } from 'marked';
+// import { escapeHTML } from './utils'; // REMOVED
+import { marked } from 'marked'; // RE-ADDED import
 
 const DEFAULT_WIDTH = 450;
-const DEFAULT_HEIGHT = 220;
+// const DEFAULT_HEIGHT = 220; // REMOVED
 const MIN_WIDTH = 300;
-const MIN_HEIGHT = 220;
+// const MIN_HEIGHT = 220; // REMOVED
 const MAX_WIDTH_VW = 80;
 const LOCALSTORAGE_PANEL_WIDTH_KEY = 'checkra_panel_width';
 
 // Define the settings SVG icon as a constant
-const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
-// Define the CROSSHAIR_SVG constant
-const CROSSHAIR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>`;
+// REMOVED: const CROSSHAIR_SVG = ...;
 
 // ADDED: ConversationItem interface (should match the one in -impl.ts)
 // This is duplicative; ideally, it would be in a shared types file.
@@ -318,11 +317,10 @@ export class FeedbackViewerDOM {
 
   public show(): void {
     if (!this.elements) return;
-    const { viewer, promptTextarea, responseHeader, contentWrapper } = this.elements;
+    const { viewer, promptTextarea } = this.elements; 
 
     this.showPromptInputArea(true);
-    this.updateLoaderVisibility(false);
-    this.updateActionButtonsVisibility(false);
+    this.updateLoaderVisibility(false); 
 
     viewer.classList.remove('hidden');
     viewer.classList.add('visible-flex');
@@ -338,7 +336,8 @@ export class FeedbackViewerDOM {
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
     if (!this.elements) return;
-    const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper } = this.elements;
+    // REMOVED contentWrapper from destructuring
+    const { loadingIndicator, loadingIndicatorText, responseHeader } = this.elements; 
 
     responseHeader.classList.remove('hidden');
     responseHeader.classList.add('visible-flex');
@@ -353,31 +352,15 @@ export class FeedbackViewerDOM {
     }
   }
 
-  public updateActionButtonsVisibility(visible: boolean): void {
-    if (!this.elements) return;
-    // This method will now just ensure the container is hidden, 
-    // as its buttons are removed.
-    // If other buttons were to be added here later, this logic would change.
-    this.elements.actionButtonsContainer.classList.add('hidden');
-    this.elements.actionButtonsContainer.classList.remove('visible-flex');
-
-    // Recalculate header padding if needed, though it should be static now.
-    // const { responseHeader, contentWrapper } = this.elements;
-    // requestAnimationFrame(() => {
-    //     const headerHeight = responseHeader.offsetHeight;
-    //     contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-    // });
-  }
-
   public updateSubmitButtonState(enabled: boolean, text: string): void {
     if (!this.elements) return;
     this.elements.submitButton.disabled = !enabled;
     this.elements.submitButtonTextSpan.textContent = text;
   }
 
-  public setResponseContent(html: string, scrollToBottom: boolean): void {
+  public setResponseContent(html: string): void {
     if (!this.elements) return;
-    const { responseContent, contentWrapper } = this.elements;
+    const { responseContent } = this.elements;
 
     // For now, this will just update the content of the main response area.
     // Later, this will target a specific AI message bubble.
@@ -658,7 +641,8 @@ export class FeedbackViewerDOM {
 
   public updateLastAIMessage(newContent: string, isStreaming: boolean): void {
     if (!this.elements) return;
-    const { responseContent, contentWrapper } = this.elements;
+    // REMOVED: contentWrapper from destructuring
+    const { responseContent } = this.elements;
     const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
 
     console.log(`[DOM] updateLastAIMessage: Found bubble=${!!lastAiMessageBubble}, CurrentHTML_Len=${lastAiMessageBubble?.innerHTML?.length ?? 0}, NewContent_Len=${newContent.length}, Streaming=${isStreaming}`);
@@ -667,13 +651,12 @@ export class FeedbackViewerDOM {
         lastAiMessageBubble.innerHTML = marked.parse(newContent) as string;
         lastAiMessageBubble.classList.toggle('streaming', isStreaming);
         this.attachCodeCopyButtonsTo(lastAiMessageBubble as HTMLElement);
-        if (isStreaming || contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < 20) { // Auto-scroll if streaming or near bottom
-            contentWrapper.scrollTop = contentWrapper.scrollHeight;
+        // Access contentWrapper via this.elements if needed for scrolling
+        if (isStreaming || this.elements.contentWrapper.scrollHeight - this.elements.contentWrapper.scrollTop - this.elements.contentWrapper.clientHeight < 20) { 
+            this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
         }
     } else {
         console.warn('[DOM] updateLastAIMessage called but no last AI message bubble found. This might indicate an issue with initial AI message append.');
-        // REMOVED: Fallback to appendHistoryItem
-        // this.appendHistoryItem({ type: 'ai', content: newContent, isStreaming: isStreaming});
     }
   }
   

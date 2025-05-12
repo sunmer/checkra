@@ -1,6 +1,6 @@
 import { escapeHTML } from './utils';
 import { fetchFeedback, fetchAudit } from '../services/ai-service';
-import { marked } from 'marked';
+// import { marked } from 'marked'; // REMOVED - Not used here
 import { copyViewportToClipboard } from '../utils/clipboard-utils';
 import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
@@ -28,9 +28,6 @@ const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
 const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/svg>/g;
 
 // ADDED: SVG Icon Constants
-const EYE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
-const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-icon lucide-check"><path d="M20 6 9 17l-5-5"/></svg>`;
-const UNDO_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
 const DISPLAY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const HIDE_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
 
@@ -92,12 +89,7 @@ export class FeedbackViewerImpl {
   private isQuickAuditRun: boolean = false;
   private footerSelectListener: (() => void) | null = null; // Listener for footer button
 
-  private miniSelectListener: (() => void) | null = null; // Add listener reference
-
   private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
-  private boundHandlePanelClick: ((event: MouseEvent) => void) | null = null;
-
-  private isScreenCapturing: boolean = false; // << ADD THIS STATE
 
   // --- Helpers for binding methods for event listeners ---
   private boundUpdateResponse = this.updateResponse.bind(this);
@@ -233,7 +225,6 @@ export class FeedbackViewerImpl {
     targetRect: DOMRect | null,
     targetElement: Element | null
   ): void {
-    this.isScreenCapturing = false; 
     console.log(`[Impl.prepareForInput] Received selectedHtml length: ${selectedHtml?.length ?? 'null'}, targetElement: ${targetElement?.tagName}`);
 
     if (!this.domManager || !this.domElements) {
@@ -276,11 +267,9 @@ export class FeedbackViewerImpl {
     this.svgPlaceholderCounter = 0;
 
     // --- Update UI elements (assuming panel is already visible) ---
-    const currentPromptText = this.domElements.promptTextarea.value;
-    this.domManager.setPromptState(true, currentPromptText); // Re-enable, preserve text
+    this.domManager.setPromptState(true, ''); // Clear textarea for new context
     this.domManager.updateSubmitButtonState(true, 'Ask a question');
     this.domManager.updateLoaderVisibility(false);
-    this.domManager.updateActionButtonsVisibility(false); 
     this.domManager.showFooterCTA(false); 
 
     if (this.domElements) { 
@@ -364,8 +353,7 @@ export class FeedbackViewerImpl {
     console.error("[FeedbackViewerLogic] Error:", errorMessage);
 
     this.domManager.updateLoaderVisibility(false);
-    this.domManager.updateActionButtonsVisibility(false);
-    this.domManager.setResponseContent(`<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`, false);
+    this.domManager.setResponseContent(`<div style="color:#ff8a8a; white-space: pre-wrap;"><strong>Error:</strong> ${escapeHTML(errorMessage)}</div>`);
     this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true, 'Ask a question');
     this.domManager.showPromptInputArea(true);
@@ -464,7 +452,6 @@ export class FeedbackViewerImpl {
     this.domManager.setPromptState(false);
     this.domManager.updateSubmitButtonState(false, 'Sending...');
     this.domManager.updateLoaderVisibility(true, 'Getting feedback...');
-    this.domManager.updateActionButtonsVisibility(false);
     this.domManager.clearUserMessage();
     this.domManager.showPromptInputArea(false, promptText);
 
@@ -852,19 +839,6 @@ export class FeedbackViewerImpl {
         return button;
     }
 
-
-  private updateActionButtonsVisibility(): void {
-    if (!this.domManager || !this.domElements) return;
-    // This method is now effectively a NO-OP as preview/apply buttons in header are removed.
-    // It might be fully removed later if no other header actions need dynamic visibility.
-    console.log('[FeedbackViewerLogic] updateActionButtonsVisibility called - no header preview/apply buttons to update.');
-    // All previous logic that toggled this.domElements.cancelButton or called 
-    // this.domManager.updateActionButtonsVisibility() is removed.
-    // If this.domElements.actionButtonsContainer itself needs to be hidden/shown for other reasons,
-    // that logic would go here, but currently, only settings/close are always visible in the header.
-    this.domManager.updateActionButtonsVisibility(false); // Explicitly hide the container for old buttons
-  }
-
   /**
    * Toggles the visibility of the feedback viewer.
    * Assumes initialization is handled by the coordinator.
@@ -889,7 +863,6 @@ export class FeedbackViewerImpl {
     this.domManager.showOnboardingView(true);
     this.domManager.showPromptInputArea(false);
     this.domManager.clearAIResponseContent();
-    this.domManager.updateActionButtonsVisibility(false);
     this.domManager.updateLoaderVisibility(false);
     this.domManager.show(); // This makes the panel visible
     this.isVisible = true; // << SET isVisible to true
@@ -927,7 +900,6 @@ export class FeedbackViewerImpl {
   private handleOnboardingSelectSection = (): void => {
     console.log('[FeedbackViewerLogic] Onboarding: Select Section clicked.');
     this.isQuickAuditRun = false; // Ensure flag is false before starting selection
-    this.isScreenCapturing = true; // << SET FLAG HERE to prevent outside click hide
     this.cleanupOnboardingListeners();
     if (this.domManager) {
         this.domManager.showOnboardingView(false); // Hide onboarding UI
@@ -941,7 +913,6 @@ export class FeedbackViewerImpl {
       );
     } else {
       console.error('[FeedbackViewerImpl] Cannot start screen capture from onboarding: domElements.viewer is not available.');
-      this.isScreenCapturing = false; // Reset flag
     }
   }
 
@@ -1033,7 +1004,6 @@ ${aboveFoldHtml}
       this.domManager.setPromptState(false); // Disable prompt area during audit
       this.domManager.updateSubmitButtonState(false, 'Auditing...');
       this.domManager.updateLoaderVisibility(true, 'Running quick audit...'); // This will show the header
-      this.domManager.updateActionButtonsVisibility(false);
       this.domManager.clearUserMessage();
       this.domManager.showPromptInputArea(false, 'Running Quick Audit...'); // Show title
 
@@ -1106,7 +1076,6 @@ ${aboveFoldHtml}
     e.stopPropagation(); // Prevent triggering other clicks
     console.log('[FeedbackViewerLogic] Mini select (crosshair) button clicked.');
     this.isQuickAuditRun = false; // Ensure not in audit mode
-    this.isScreenCapturing = true; // << SET FLAG HERE
 
     // Trigger screen capture, passing the main viewer element to be ignored
     if (this.domElements?.viewer) {
@@ -1116,7 +1085,6 @@ ${aboveFoldHtml}
       );
     } else {
       console.error('[FeedbackViewerImpl] Cannot start screen capture: domElements.viewer is not available.');
-      this.isScreenCapturing = false; // Reset flag
     }
   }
 
