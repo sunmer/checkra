@@ -61,15 +61,13 @@
 
 /* --- Applied Fix Styles (New Wrapper) --- */
 .checkra-feedback-applied-fix {
-  position: relative; /* Needed for absolute positioning of buttons */
-  outline: none; /* No outline by default when applied */
-  /* Add any other base styling needed for the wrapper itself */
+  position: relative;
+  outline: none;
   box-sizing: border-box;
 }
 
 /* Container for the actual content inside the applied fix wrapper */
 .checkra-feedback-applied-fix .checkra-applied-fix-content {
-  /* Content takes up full space, buttons overlay */
   width: 100%;
   height: 100%;
 }
