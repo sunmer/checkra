@@ -1,5 +1,6 @@
 import { initCheckra } from './core/index';
 import { CheckraOptions } from './types';
+import './ui/shortcut-handler'; // Import to register the global shortcut
 
 // Re-export core functions and types
 export { initCheckra } from './core/index';
@@ -61,3 +62,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     initialize();
   }
 }
+
+// Initialize the core functionality
+initCheckra();

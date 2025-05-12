@@ -21,6 +21,8 @@ class ScreenCapture {
   private currentHighlight: HTMLElement | null = null;
   private originalPosition: string | null = null;
   private originalZIndex: string | null = null;
+  private viewerHoverListener: (() => void) | null = null;
+  private viewerLeaveListener: (() => void) | null = null;
 
   private cleanup(): void {
     document.body.classList.remove('capturing-mode');
@@ -49,8 +51,19 @@ class ScreenCapture {
 
     this.highlightElement(null);
 
+    // Remove viewer hover/leave listeners
+    const viewerElement = document.getElementById('checkra-feedback-viewer');
+    if (this.viewerHoverListener && viewerElement) {
+      viewerElement.removeEventListener('mouseenter', this.viewerHoverListener);
+      this.viewerHoverListener = null;
+    }
+    if (this.viewerLeaveListener && viewerElement) {
+      viewerElement.removeEventListener('mouseleave', this.viewerLeaveListener);
+      this.viewerLeaveListener = null;
+    }
+
     this.isCapturing = false;
-    this.captureCallback = null; // Clear callback reference
+    this.captureCallback = null;
   }
 
   private highlightElement(element: HTMLElement | null): void {
@@ -302,6 +315,27 @@ class ScreenCapture {
 
       // Add the click listener with capture: true
       document.addEventListener('click', this.clickListener, { capture: true });
+
+      // Add listeners for mouse entering/leaving the feedback viewer panel
+      const viewerElement = document.getElementById('checkra-feedback-viewer');
+      if (viewerElement) {
+        this.viewerHoverListener = () => {
+          console.log('[ScreenCapture] Mouse entered viewer, removing crosshair.');
+          document.body.classList.remove('capturing-mode');
+        };
+        this.viewerLeaveListener = () => {
+          // Re-apply crosshair only if capture is still active
+          if (this.isCapturing) {
+            console.log('[ScreenCapture] Mouse left viewer, restoring crosshair.');
+            document.body.classList.add('capturing-mode');
+          }
+        };
+
+        viewerElement.addEventListener('mouseenter', this.viewerHoverListener);
+        viewerElement.addEventListener('mouseleave', this.viewerLeaveListener);
+      } else {
+        console.warn('[ScreenCapture] Could not find viewer element to attach hover listeners.');
+      }
 
     } catch (error) {
       console.error('[ScreenCapture] Error initializing capture:', error);

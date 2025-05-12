@@ -24,6 +24,40 @@ class FeedbackViewerCoordinator {
   }
 
   /**
+   * Toggles the visibility of the feedback viewer.
+   */
+  public toggle(): void {
+    this.initializeIfNeeded(); // Ensure initialized before toggling
+
+    if (this.logicManager.isVisible()) {
+      console.log('[Coordinator.toggle] Panel is visible, calling hide.');
+      this.logicManager.hide();
+    } else {
+      console.log('[Coordinator.toggle] Panel is hidden, deciding how to show.');
+      const firstRun = !localStorage.getItem('checkra_onboarded');
+      if (firstRun) {
+        console.log('[Coordinator.toggle] First run, showing onboarding.');
+        // showOnboarding in Impl will call domManager.show() and set its state
+        this.logicManager.showOnboarding(); 
+        // localStorage.setItem('checkra_onboarded', '1'); // This is now set inside Impl.showOnboarding
+      } else {
+        console.log('[Coordinator.toggle] Not first run, calling prepareForInput.');
+        // prepareForInput in Impl will call domManager.show() and set its state
+        this.logicManager.prepareForInput(null, null, null, null); 
+      }
+    }
+  }
+
+  /**
+   * Shows the onboarding view.
+   */
+  public showOnboarding(): void {
+    this.initializeIfNeeded();
+    console.log('[Coordinator.showOnboarding] Calling logicManager.showOnboarding.');
+    this.logicManager.showOnboarding();
+  }
+
+  /**
    * Shows the feedback input area, positioned relative to the target element.
    * @param imageDataUrl - Base64 encoded image data URL or null.
    * @param selectedHtml - The HTML string of the selected element or null.
@@ -37,6 +71,7 @@ class FeedbackViewerCoordinator {
     targetElement: Element | null
   ): void {
     this.initializeIfNeeded();
+    console.log('[Coordinator.showInputArea] Calling logicManager.prepareForInput.');
     this.logicManager.prepareForInput(imageDataUrl, selectedHtml, targetRect, targetElement);
   }
 

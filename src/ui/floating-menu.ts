@@ -148,7 +148,7 @@ export class FloatingMenu {
   }
 
   /**
-   * Programmatically triggers the feedback capture process.
+   * Programmatically triggers the feedback capture process or onboarding.
    */
   public triggerFeedbackCapture(): void {
     if (!this.isCreated) {
@@ -156,34 +156,26 @@ export class FloatingMenu {
         return;
     }
 
-    console.log('[Feedback] Triggered programmatically, starting screen capture...');
-    screenCapture.startCapture((
-      imageDataUrl,
-      selectedHtml,
-      bounds,
-      targetElement,
-      clickX,
-      clickY,
-      _effectiveBackgroundColor
-    ) => {
-      console.log('[Feedback] Screen capture callback executed.');
-      if ((clickX !== 0 || clickY !== 0) || imageDataUrl || selectedHtml || targetElement) {
-          console.log('[Feedback] Data or valid click/element received. Showing input area...');
-          try {
-              feedbackViewer.showInputArea(
-                  imageDataUrl,
-                  selectedHtml,
-                  bounds,
-                  targetElement
-              );
-              console.log('[Feedback] Feedback input area shown.');
-          } catch (viewerError) {
-              console.error('[Feedback] Error showing feedback input area:', viewerError);
-          }
-      } else {
-          console.warn('[Feedback] Screen capture cancelled or failed. No data received.');
-      }
-    });
+    const firstRun = !localStorage.getItem('checkra_onboarded');
+    if (firstRun) {
+        console.log('[Feedback] First run detected, showing onboarding...');
+        try {
+            feedbackViewer.showOnboarding(); // Call the new onboarding method
+            // Flag will be set inside showOnboarding logic now
+            console.log('[Feedback] Onboarding shown.');
+        } catch (viewerError) {
+            console.error('[Feedback] Error showing onboarding:', viewerError);
+        }
+    } else {
+        console.log('[Feedback] Not first run, showing feedback viewer directly...');
+        try {
+            // Show viewer directly, logic inside will handle default state (body target)
+            feedbackViewer.showInputArea(null, null, null, null);
+            console.log('[Feedback] Feedback viewer shown.');
+        } catch (viewerError) {
+            console.error('[Feedback] Error showing feedback viewer:', viewerError);
+        }
+    }
   }
 
   /**

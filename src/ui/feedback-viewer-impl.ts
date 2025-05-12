@@ -1,9 +1,10 @@
 import { escapeHTML } from './utils';
-import { fetchFeedback } from '../services/ai-service';
+import { fetchFeedback, fetchAudit } from '../services/ai-service';
 import { marked } from 'marked';
 import { copyViewportToClipboard } from '../utils/clipboard-utils';
 import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
+import { screenCapture } from './screen-capture';
 
 // Regex patterns for extracting HTML
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
@@ -26,6 +27,24 @@ interface AppliedFixInfo {
   appliedWrapperElement: HTMLDivElement | null; // Reference to the '.checkra-feedback-applied-fix' wrapper
   isCurrentlyFixed: boolean; // Tracks if the displayed version in the wrapper is the fix
 }
+
+// Helper function to get head metadata (can be moved to a utils file)
+const getHeadMetadata = (): Record<string, string | null> => {
+  const data: Record<string, string | null> = {};
+  data.title = document.title || null;
+  const descriptionTag = document.querySelector('meta[name="description"]');
+  data.description = descriptionTag ? descriptionTag.getAttribute('content') : null;
+  const ogTitleTag = document.querySelector('meta[property="og:title"]');
+  data.ogTitle = ogTitleTag ? ogTitleTag.getAttribute('content') : null;
+  const ogDescTag = document.querySelector('meta[property="og:description"]');
+  data.ogDescription = ogDescTag ? ogDescTag.getAttribute('content') : null;
+  const viewportTag = document.querySelector('meta[name="viewport"]');
+  data.viewport = viewportTag ? viewportTag.getAttribute('content') : null;
+  const canonicalTag = document.querySelector('link[rel="canonical"]');
+  data.canonical = canonicalTag ? canonicalTag.getAttribute('href') : null;
+  // Add more tags as needed (e.g., robots, keywords)
+  return data;
+};
 
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
@@ -62,6 +81,11 @@ export class FeedbackViewerImpl {
   // --- Listeners ---
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
+  private isQuickAuditRun: boolean = false; // Track if current session started with quick audit
+  private footerSelectListener: (() => void) | null = null; // Listener for footer button
+
+  private miniSelectListener: (() => void) | null = null; // Add listener reference
+
   constructor() {
     // Bind methods used as event handlers
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
@@ -72,6 +96,7 @@ export class FeedbackViewerImpl {
     this.handleAppliedFixClose = this.handleAppliedFixClose.bind(this);
     this.handleAppliedFixCopy = this.handleAppliedFixCopy.bind(this);
     this.handleAppliedFixToggle = this.handleAppliedFixToggle.bind(this);
+    this.handleMiniSelectClick = this.handleMiniSelectClick.bind(this); // Bind the new handler
   }
 
   public initialize(elements: FeedbackViewerElements, domManager: FeedbackViewerDOM): void {
@@ -100,6 +125,9 @@ export class FeedbackViewerImpl {
             <span class="button-text">Undo fix</span>
             ${UNDO_ICON_SVG}
         `;
+
+    // Add listener for mini select button
+    this.domElements.miniSelectButton?.addEventListener('click', this.handleMiniSelectClick);
 
     console.log('[FeedbackViewerLogic] Initialized.');
   }
@@ -130,6 +158,18 @@ export class FeedbackViewerImpl {
     // We don't clear this.appliedFixes itself, as the fixes might persist beyond the viewer's lifecycle if not closed.
     // The user might close the viewer and expect applied fixes to remain toggleable/closable.
 
+    if (this.domElements && this.footerSelectListener) {
+        const footerSelectBtn = this.domElements.viewer.querySelector('#checkra-btn-footer-select-section');
+        footerSelectBtn?.removeEventListener('click', this.footerSelectListener);
+        this.footerSelectListener = null;
+    }
+
+    this.cleanupOnboardingListeners();
+    this.isQuickAuditRun = false; // Reset flag on cleanup
+
+    // Remove mini select listener
+    this.domElements.miniSelectButton?.removeEventListener('click', this.handleMiniSelectClick);
+
     this.domElements = null;
     this.domManager = null;
     this.outsideClickHandler = null;
@@ -144,6 +184,8 @@ export class FeedbackViewerImpl {
     targetRect: DOMRect | null,
     targetElement: Element | null
   ): void {
+    console.log(`[Impl.prepareForInput] Received selectedHtml length: ${selectedHtml?.length ?? 'null'}, targetElement: ${targetElement?.tagName}`);
+
     if (!this.domManager || !this.domElements) {
       console.error("[FeedbackViewerLogic] Cannot prepare for input: DOM Manager or elements not initialized.");
       return;
@@ -151,50 +193,67 @@ export class FeedbackViewerImpl {
 
     // Store data
     this.currentImageDataUrl = imageDataUrl;
-    this.initialSelectedElement = targetElement;
-    this.originalOuterHTMLForCurrentCycle = targetElement?.outerHTML || ''; // Store initial outerHTML
+    this.initialSelectedElement = targetElement || document.body; // Fallback to body if no target
+    
+    // CRITICAL: Ensure we are using the passed selectedHtml from screenCapture
+    // If it's a specific selection, selectedHtml should be populated.
+    // If it's a general opening (e.g. toggle, quick audit init), selectedHtml might be null.
+    if (selectedHtml && targetElement) { 
+        this.originalOuterHTMLForCurrentCycle = selectedHtml;
+        console.log(`[Impl.prepareForInput] USING specific selectedHtml for ${targetElement.tagName}, length: ${selectedHtml.length}`);
+    } else {
+        this.originalOuterHTMLForCurrentCycle = document.body.outerHTML;
+        console.log(`[Impl.prepareForInput] FALLBACK to document.body.outerHTML, length: ${this.originalOuterHTMLForCurrentCycle.length}`);
+    }
+
     this.currentFixId = `checkra-fix-${this.fixIdCounter++}`;
-    this.initialSelectedElement?.setAttribute('data-checkra-fix-id', this.currentFixId);
-    console.log(`[FeedbackViewerLogic] Preparing for input. Assigned ID ${this.currentFixId}`);
+    // Only set attribute if it's not the body, or for a specific reason
+    if (this.initialSelectedElement !== document.body) {
+        this.initialSelectedElement?.setAttribute('data-checkra-fix-id', this.currentFixId);
+    }
+    console.log(`[FeedbackViewerLogic] Preparing for input. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement.tagName}`);
 
     // Reset state
     this.accumulatedResponseText = '';
     this.isStreamStarted = false;
     this.isPreviewActive = false;
-    this.fixedOuterHTMLForCurrentCycle = null; // Reset fixed HTML for the new cycle
+    this.fixedOuterHTMLForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
-    // --- EDIT: Reset preview tracking state ---
     this.previewInsertedNodes = [];
     this.previewInsertionParent = null;
     this.previewInsertionBeforeNode = null;
-    // --- END EDIT ---
+
+    const wasVisible = this.isVisible(); // Check visibility *before* resetting UI
 
     // Reset UI
     this.domManager.setPromptState(true, '');
     this.domManager.updateSubmitButtonState(true, 'Get Feedback');
     this.domManager.clearUserMessage();
     this.domManager.clearAIResponseContent();
-    this.domManager.showPromptInputArea(true);
+    this.domManager.showPromptInputArea(true); // This ensures textarea container is ready
     this.domManager.updateLoaderVisibility(false);
-    this.domManager.updateActionButtonsVisibility(false); // Hide container initially
-    // Reset button states explicitly using the new helper
-    if (this.domManager && this.domElements) {
-      this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-      this.domElements.cancelButton.style.display = 'none'; // Keep hiding cancel button
-    }
+    this.domManager.updateActionButtonsVisibility(false); // Hide action buttons
+    this.domManager.showFooterCTA(false); // Ensure footer CTA is hidden
 
-    // Calculate position and show viewer
-    let position: { top: number; left: number; mode: 'fixed' | 'absolute' } | null = null;
-    if (this.initialSelectedElement && targetRect) {
-      position = this.domManager.calculateOptimalPosition(targetRect);
+    if (this.domElements) { // Check if domElements is not null
+        this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
+        this.domElements.cancelButton.style.display = 'none';
     }
-
-    if (position) {
-      this.domManager.show(position);
+    
+    // Show viewer panel IF IT WASN'T ALREADY VISIBLE or if it needs re-showing after selection
+    // When selecting with mini-select, the panel is already visible. 
+    // Calling domManager.show() again might be redundant or cause flicker if it re-does setup.
+    // However, domManager.show() also handles focusing and ensures class states, so it's safer to call.
+    // The flicker might be due to class re-application triggering transitions.
+    // For now, let's ensure it is called, and if flicker persists, we can make domManager.show() more idempotent.
+    if (!wasVisible) {
+        console.log('[Impl.prepareForInput] Panel was hidden, calling domManager.show()');
+        this.domManager.show(); 
     } else {
-      console.warn('[FeedbackViewerLogic] Could not calculate position, showing centered.');
-      this.domManager.show(); // Show centered as fallback
+        console.log('[Impl.prepareForInput] Panel was already visible. UI reset, not re-showing explicitly.');
+        // Ensure focus if it was already visible but textarea might have lost it
+        this.domElements?.promptTextarea.focus();
     }
   }
 
@@ -218,17 +277,25 @@ export class FeedbackViewerImpl {
 
   public finalizeResponse(): void {
     console.log("[FeedbackViewerLogic] Feedback stream finalized.");
-    if (!this.domManager) return;
+    if (!this.domManager || !this.domElements) return;
 
     this.domManager.updateLoaderVisibility(false); // Hide loader first
-    this.domManager.setPromptState(true);
+    this.domManager.setPromptState(true); // Re-enable prompt area
     this.domManager.updateSubmitButtonState(true, 'Get Feedback');
 
-    // Ensure fix extraction happens on final response
-    this.extractAndStoreFixHtml();
+    this.extractAndStoreFixHtml(); // Ensure final extraction
+    this.updateActionButtonsVisibility(); // Update header buttons based on extraction
 
-    // Update button visibility *after* loader is hidden and final extraction is attempted
-    this.updateActionButtonsVisibility();
+    // If this was a quick audit run, show the footer CTA
+    if (this.isQuickAuditRun) {
+        this.showFooterCTALogic();
+        this.isQuickAuditRun = false; // Reset flag for next interaction
+    }
+
+    // Scroll to bottom if applicable (e.g., if footer was added)
+    // Optional: You might only want to scroll if the footer was *just* added
+    const contentWrapper = this.domElements.contentWrapper;
+    contentWrapper.scrollTop = contentWrapper.scrollHeight;
   }
 
   public showError(error: Error | string): void {
@@ -272,6 +339,9 @@ export class FeedbackViewerImpl {
     this.previewInsertedNodes = [];
     this.previewInsertionParent = null;
     this.previewInsertionBeforeNode = null;
+
+    this.domManager?.showFooterCTA(false); // Add this line
+    this.isQuickAuditRun = false; // Reset flag on hide
   }
 
   /**
@@ -895,6 +965,277 @@ export class FeedbackViewerImpl {
     } else {
       this.domElements.cancelButton.style.display = 'none';
     }
+  }
+
+  /**
+   * Checks if the feedback viewer is currently visible.
+   */
+  public isVisible(): boolean {
+    // Check if the viewer element exists and doesn't have the 'hidden' class
+    return !!this.domElements?.viewer && !this.domElements.viewer.classList.contains('hidden');
+  }
+
+  /**
+   * Toggles the visibility of the feedback viewer.
+   * Assumes initialization is handled by the coordinator.
+   */
+  public toggle(): void {
+    if (this.isVisible()) {
+      this.hide();
+    } else {
+      const firstRun = !localStorage.getItem('checkra_onboarded');
+      if (firstRun) {
+        this.showOnboarding();
+      } else {
+        this.prepareForInput(null, null, null, null);
+      }
+    }
+  }
+
+  /**
+   * Shows the onboarding state.
+   * Assumes initialization is handled by the coordinator.
+   */
+  public showOnboarding(): void {
+    if (!this.domManager || !this.domElements) {
+      console.error("[FeedbackViewerLogic] Cannot show onboarding: DOM Manager or elements not initialized.");
+      return;
+    }
+    this.domManager.showOnboardingView(true);
+    this.domManager.showPromptInputArea(false);
+    this.domManager.clearAIResponseContent();
+    this.domManager.updateActionButtonsVisibility(false);
+    this.domManager.updateLoaderVisibility(false);
+    this.domManager.show();
+    console.log('[FeedbackViewerLogic] Showing onboarding.');
+
+    const runAuditBtn = this.domElements.viewer.querySelector('#checkra-btn-run-audit');
+    const selectSectionBtn = this.domElements.viewer.querySelector('#checkra-btn-select-section');
+
+    // Add listeners only if buttons exist
+    if (runAuditBtn && selectSectionBtn) {
+        runAuditBtn.addEventListener('click', this.handleOnboardingRunAudit);
+        selectSectionBtn.addEventListener('click', this.handleOnboardingSelectSection);
+
+        this.onboardingListeners = {
+            runAudit: this.handleOnboardingRunAudit,
+            selectSection: this.handleOnboardingSelectSection
+        };
+
+        localStorage.setItem('checkra_onboarded', '1');
+    } else {
+        console.error('[FeedbackViewerLogic] Could not find onboarding buttons to attach listeners.');
+    }
+  }
+
+  private handleOnboardingRunAudit = (): void => {
+    console.log('[FeedbackViewerLogic] Onboarding: Run Audit clicked.');
+    this.cleanupOnboardingListeners();
+    if (this.domManager) {
+        this.domManager.showOnboardingView(false);
+    }
+    this.quickAudit();
+  }
+
+  private handleOnboardingSelectSection = (): void => {
+    console.log('[FeedbackViewerLogic] Onboarding: Select Section clicked.');
+    this.isQuickAuditRun = false; // Ensure flag is false before starting selection
+    this.cleanupOnboardingListeners();
+    if (this.domManager) {
+        this.domManager.showOnboardingView(false);
+    }
+    this.hide();
+    screenCapture.startCapture(
+      (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
+        if (targetElement) {
+            console.log('[FeedbackViewerLogic] Section selected via onboarding flow.');
+            this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
+        } else {
+            console.log('[FeedbackViewerLogic] Section selection cancelled after onboarding.');
+        }
+    });
+  }
+
+  // Helper to remove onboarding listeners
+  private cleanupOnboardingListeners(): void {
+    if (this.domElements && this.onboardingListeners) {
+        const runAuditBtn = this.domElements.viewer.querySelector('#checkra-btn-run-audit');
+        const selectSectionBtn = this.domElements.viewer.querySelector('#checkra-btn-select-section');
+        runAuditBtn?.removeEventListener('click', this.onboardingListeners.runAudit);
+        selectSectionBtn?.removeEventListener('click', this.onboardingListeners.selectSection);
+        this.onboardingListeners = null; // Clear stored listeners
+    }
+  }
+
+  // Add a placeholder for the quickAudit function
+  private quickAudit(): void {
+    console.log('[FeedbackViewerLogic] Starting Quick Audit...');
+    if (!this.domManager) {
+        this.showError('Cannot run quick audit: DOM Manager not available.');
+        return;
+    }
+
+    try {
+      // 1. Collect head data
+      const headData = getHeadMetadata();
+      const headHtml = `<head>
+  <title>${headData.title || ''}</title>
+  <meta name="description" content="${headData.description || ''}">
+  <meta property="og:title" content="${headData.ogTitle || ''}">
+  <meta property="og:description" content="${headData.ogDescription || ''}">
+  <meta name="viewport" content="${headData.viewport || ''}">
+  <link rel="canonical" href="${headData.canonical || ''}">
+</head>`;
+
+      // 2. Collect above-the-fold HTML
+      const fold = window.innerHeight;
+      const bodyChildren = Array.from(document.body.children);
+      const topLevelElementsInFold = bodyChildren.filter(el => {
+          if (!(el instanceof HTMLElement)) return false;
+          try {
+              const rect = el.getBoundingClientRect();
+              // Include elements starting above the fold or partially visible
+              return rect.top < fold && rect.bottom > 0;
+          } catch (e) {
+              console.warn('[QuickAudit] Error getting bounding rect for element:', el, e);
+              return false;
+          }
+      });
+
+      // Include first H1 and first interactive element if possible and not already included
+      let firstH1: Element | null = document.querySelector('h1');
+      let firstCTA: Element | null = document.querySelector('button, a[role="button"], input[type="submit"]');
+
+      const elementsToInclude = [...topLevelElementsInFold];
+      if (firstH1 && !elementsToInclude.some(el => el.contains(firstH1))) {
+          elementsToInclude.push(firstH1);
+      }
+      if (firstCTA && !elementsToInclude.some(el => el.contains(firstCTA))) {
+          elementsToInclude.push(firstCTA);
+      }
+
+      let aboveFoldHtml = elementsToInclude
+          .map(el => el.outerHTML)
+          .join('\n<!-- Checkra Element Separator -->\n');
+
+      // Limit size (e.g., 8KB)
+      const MAX_HTML_LENGTH = 8 * 1024;
+      if (aboveFoldHtml.length > MAX_HTML_LENGTH) {
+          console.warn(`[QuickAudit] Above-fold HTML truncated from ${aboveFoldHtml.length} to ${MAX_HTML_LENGTH} bytes.`);
+          aboveFoldHtml = aboveFoldHtml.substring(0, MAX_HTML_LENGTH);
+          // Try to avoid cutting mid-tag
+          const lastTagClose = aboveFoldHtml.lastIndexOf('>');
+          if (lastTagClose > 0) {
+            aboveFoldHtml = aboveFoldHtml.substring(0, lastTagClose + 1);
+          }
+      }
+
+      // Combine head and body snippets
+      const combinedHtml = `${headHtml}
+
+<body>
+${aboveFoldHtml}
+</body>`;
+
+      // 3. Compose prompt
+      const prompt = "Quick audit of head tags and above-the-fold section. Provide SEO/CRO recommendations for <head> as a bullet list (no previews). Provide at least two previewable HTML fixes for the <body> content if issues are found.";
+
+      // --- Update UI for Loading --- 
+      this.domManager.setPromptState(false); // Disable prompt area during audit
+      this.domManager.updateSubmitButtonState(false, 'Auditing...');
+      this.domManager.updateLoaderVisibility(true, 'Running quick audit...'); // This will show the header
+      this.domManager.updateActionButtonsVisibility(false);
+      this.domManager.clearUserMessage();
+      this.domManager.clearAIResponseContent();
+      this.domManager.showPromptInputArea(false, 'Running Quick Audit...'); // Show title
+
+      // Set flag right before fetch
+      this.isQuickAuditRun = true;
+
+      // 4. Call fetchAudit
+      console.log('[QuickAudit] Sending request...');
+      fetchAudit(prompt, combinedHtml);
+
+    } catch (error) {
+        console.error('[QuickAudit] Error preparing or running audit:', error);
+        this.isQuickAuditRun = false; // Reset flag on error
+        this.showError(`Failed to run quick audit: ${error instanceof Error ? error.message : String(error)}`);
+        // Reset UI state on error
+        if (this.domManager) {
+            this.domManager.setPromptState(true);
+            this.domManager.updateSubmitButtonState(true, 'Get Feedback');
+            this.domManager.updateLoaderVisibility(false);
+        }
+    }
+  }
+
+  // Need to add onboardingListeners property to the class
+  private onboardingListeners: { runAudit: () => void; selectSection: () => void; } | null = null;
+
+  private showFooterCTALogic(): void {
+    if (!this.domManager || !this.domElements?.footerCTAContainer) return;
+
+    this.domManager.showFooterCTA(true);
+
+    const footerSelectBtn = this.domElements.viewer.querySelector('#checkra-btn-footer-select-section');
+
+    // Remove any previous listener first
+    if (this.footerSelectListener && footerSelectBtn) {
+        footerSelectBtn.removeEventListener('click', this.footerSelectListener);
+    }
+
+    // Define the new listener
+    this.footerSelectListener = () => {
+        console.log('[FeedbackViewerLogic] Footer Select Section clicked.');
+        this.domManager?.showFooterCTA(false); // Hide footer
+        this.hide(); // Hide panel temporarily
+        screenCapture.startCapture(
+            (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
+                if (targetElement) {
+                    console.log('[FeedbackViewerLogic] Section selected via footer CTA.');
+                    this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
+                } else {
+                    console.log('[FeedbackViewerLogic] Section selection cancelled after footer CTA.');
+                    // Maybe re-show the footer?
+                    this.domManager?.showFooterCTA(true);
+                }
+            }
+        );
+    };
+
+    // Add the new listener
+    if (footerSelectBtn) {
+        footerSelectBtn.addEventListener('click', this.footerSelectListener);
+    }
+  }
+
+  // Handler for the mini select button click
+  private handleMiniSelectClick(e: MouseEvent): void {
+    e.stopPropagation(); // Prevent triggering other clicks
+    console.log('[FeedbackViewerLogic] Mini select (crosshair) button clicked.');
+    this.isQuickAuditRun = false; // Ensure not in audit mode
+    // REMOVED: this.hide(); // Do not hide the panel during selection
+
+    // Trigger screen capture
+    screenCapture.startCapture(
+      (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
+        // Log the received HTML for debugging
+        console.log(`[FeedbackViewerLogic] screenCapture callback received. Target: ${targetElement?.tagName}, HTML length: ${selectedHtml?.length ?? 'null'}`);
+        
+        if (targetElement && selectedHtml) { // Ensure both exist
+          console.log('[FeedbackViewerLogic] Section selected via mini select button. Calling prepareForInput.');
+          // prepareForInput will store selectedHtml and show the panel
+          this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
+          // Focus the textarea after selection
+          this.domElements?.promptTextarea.focus();
+        } else {
+          console.log('[FeedbackViewerLogic] Section selection cancelled or failed after mini select.');
+          // Panel remains open, user can try again or type a prompt
+          // Optionally re-focus textarea?
+          this.domElements?.promptTextarea.focus();
+        }
+      }
+    );
   }
 
 }
