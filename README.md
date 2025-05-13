@@ -2,6 +2,9 @@
 
 Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed live on your site.
 
+=======
+Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed live on your site..
+
 
  ## Features
 
