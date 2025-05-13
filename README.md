@@ -1,6 +1,10 @@
-# Checkra, a js library for getting inline feedback for your website
+# Checkra, get instant UX and conversion tips without leaving your website
 
+Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed live on your site.
+
+=======
 Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed live on your site..
+
 
  ## Features
 

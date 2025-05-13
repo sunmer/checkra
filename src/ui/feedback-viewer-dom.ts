@@ -1,30 +1,43 @@
 import './feedback-viewer.css';
-import { escapeHTML } from './utils';
+import { marked } from 'marked';
 
 const DEFAULT_WIDTH = 450;
-const DEFAULT_HEIGHT = 220;
 const MIN_WIDTH = 300;
-const MIN_HEIGHT = 220;
 const MAX_WIDTH_VW = 80;
+const LOCALSTORAGE_PANEL_WIDTH_KEY = 'checkra_panel_width';
+
+// Define the settings SVG icon as a constant
+const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+interface ConversationItem {
+  type: 'user' | 'ai' | 'usermessage' | 'error';
+  content: string;
+  isStreaming?: boolean;
+  fix?: any;
+}
 
 export interface FeedbackViewerElements {
   viewer: HTMLDivElement;
   promptTextarea: HTMLTextAreaElement;
   submitButton: HTMLButtonElement;
-  submitButtonTextSpan: HTMLSpanElement;
   textareaContainer: HTMLDivElement;
   promptTitle: HTMLHeadingElement;
   responseContent: HTMLDivElement;
   loadingIndicator: HTMLDivElement;
   loadingIndicatorText: HTMLSpanElement;
-  resizeHandle: HTMLDivElement;
   actionButtonsContainer: HTMLDivElement;
-  previewApplyButton: HTMLButtonElement;
-  cancelButton: HTMLButtonElement;
   responseHeader: HTMLDivElement;
   contentWrapper: HTMLDivElement;
   userMessageContainer: HTMLDivElement;
+  closeViewerButton?: HTMLButtonElement;
+  onboardingContainer?: HTMLDivElement;
+  footerCTAContainer?: HTMLDivElement;
+  miniSelectButton?: HTMLButtonElement;
+  settingsButton: HTMLButtonElement;
 }
+
+const SUBMIT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -2 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
+const SELECT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="4"></circle><path d="m16 16-1.5-1.5"></path></svg>`;
 
 /**
  * Manages the DOM elements, styling, positioning, dragging, and resizing
@@ -32,71 +45,62 @@ export interface FeedbackViewerElements {
  */
 export class FeedbackViewerDOM {
   private elements: FeedbackViewerElements | null = null;
-  private readonly originalPromptTitleText = 'Describe what you need help with';
-
-  // --- Dragging State ---
-  private isDragging: boolean = false;
-  private dragStartX: number = 0;
-  private dragStartY: number = 0;
-  private dragInitialLeft: number = 0;
-  private dragInitialTop: number = 0;
+  private readonly originalPromptTitleText = '';
+  private closeButtonCallback: (() => void) | null = null;
 
   // --- Resizing State ---
   private isResizing: boolean = false;
   private resizeStartX: number = 0;
-  private resizeStartY: number = 0;
   private initialWidth: number = 0;
-  private initialHeight: number = 0;
 
   constructor() {
-    // Bind methods that will be used as event listeners
-    this.handleDragStart = this.handleDragStart.bind(this);
-    this.handleDragMove = this.handleDragMove.bind(this);
-    this.handleDragEnd = this.handleDragEnd.bind(this);
+    // Bind resize handlers
     this.handleResizeStart = this.handleResizeStart.bind(this);
     this.handleResizeMove = this.handleResizeMove.bind(this);
     this.handleResizeEnd = this.handleResizeEnd.bind(this);
+    this.handleCloseClick = this.handleCloseClick.bind(this); // Bind close handler
   }
 
-  // --- Initialization and Cleanup ---
+  // Define the handler method
+  private handleCloseClick(): void {
+    this.closeButtonCallback?.();
+  }
 
-  public create(): FeedbackViewerElements {
+  public create(onCloseButtonClick: () => void): FeedbackViewerElements {
     if (this.elements) return this.elements;
+    this.closeButtonCallback = onCloseButtonClick;
 
     const viewer = document.createElement('div');
     viewer.id = 'checkra-feedback-viewer';
 
-    const initialWidth = DEFAULT_WIDTH;
-    const initialHeight = DEFAULT_HEIGHT;
+    // Add resize event listeners
+    viewer.addEventListener('mousedown', this.handleResizeStart);
 
-    viewer.style.width = `${initialWidth}px`;
-    viewer.style.height = `${initialHeight}px`;
-    viewer.style.minWidth = `${MIN_WIDTH}px`;
-    viewer.style.minHeight = `${MIN_HEIGHT}px`;
-    viewer.style.maxWidth = `${MAX_WIDTH_VW}vw`;
-    // viewer.style.maxHeight = `${MAX_HEIGHT_VH}vh`; // << REMOVE or comment out this line
-    // viewer.style.display = 'none'; // Initial state - Handled by CSS
+    // Remove width/height setting since it's handled by CSS
+    // viewer.style.width = '450px'; // Default handled by CSS now
+    // viewer.style.height = '100vh'; // Default handled by CSS
 
-    // Add listener regardless, handler will check device type
-    // viewer.addEventListener('mousedown', this.handleDragStart);
-
-    // --- BEGIN EDIT ---
-    // Only attach drag listener on non-mobile devices
-    viewer.addEventListener('mousedown', this.handleDragStart); // Attach drag listener unconditionally
-    // --- END EDIT ---
+    // ADDED: Restore width from localStorage
+    try {
+      const storedWidth = localStorage.getItem(LOCALSTORAGE_PANEL_WIDTH_KEY);
+      if (storedWidth) {
+        const width = parseInt(storedWidth, 10);
+        if (width >= MIN_WIDTH && width <= (window.innerWidth * MAX_WIDTH_VW / 100)) {
+          viewer.style.width = `${width}px`;
+        } else {
+          viewer.style.width = `${DEFAULT_WIDTH}px`; // Fallback to default if stored is invalid
+        }
+      } else {
+        viewer.style.width = `${DEFAULT_WIDTH}px`; // Default if not stored
+      }
+    } catch (e) {
+      console.warn('[FeedbackViewerDOM] Error reading panel width from localStorage:', e);
+      viewer.style.width = `${DEFAULT_WIDTH}px`; // Fallback on error
+    }
 
     // --- Header ---
     const responseHeader = document.createElement('div');
     responseHeader.id = 'checkra-feedback-response-header';
-
-    const responseTitle = document.createElement('h4');
-    responseTitle.textContent = 'Feedback Response';
-    // Style handled by CSS: #checkra-feedback-response-header h4
-    // responseTitle.style.color = '#a0c8ff';
-    // responseTitle.style.fontSize = '14px';
-    // responseTitle.style.fontWeight = '600';
-    // responseTitle.style.margin = '0';
-    responseHeader.appendChild(responseTitle);
 
     const loadingIndicator = document.createElement('div');
     loadingIndicator.id = 'checkra-feedback-loading-indicator';
@@ -107,26 +111,24 @@ export class FeedbackViewerDOM {
     const loadingIndicatorText = loadingIndicator.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text')!;
     responseHeader.appendChild(loadingIndicator);
 
-    // --- Action Buttons (in Header) ---
+    // --- Action Buttons (in Header) --- (Container remains for now, but buttons removed)
     const actionButtonsContainer = document.createElement('div');
     actionButtonsContainer.id = 'checkra-feedback-action-buttons';
+    actionButtonsContainer.classList.add('hidden'); // Keep it hidden by default
 
-    const previewApplyButton = document.createElement('button');
-    previewApplyButton.innerHTML = `
-          <span class="button-text">Preview Fix</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-        `;
-    previewApplyButton.classList.add('preview-apply-fix');
-    actionButtonsContainer.appendChild(previewApplyButton);
+    // Add Settings Button (before close button)
+    const settingsButton = document.createElement('button');
+    settingsButton.id = 'checkra-header-settings-btn';
+    settingsButton.innerHTML = SETTINGS_SVG;
+    settingsButton.title = 'Open Settings';
+    responseHeader.appendChild(settingsButton); // Add to header
 
-    const cancelButton = document.createElement('button');
-    cancelButton.innerHTML = `
-          <span class="button-text">Undo fix</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2-icon lucide-undo-2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
-        `;
-    cancelButton.classList.add('cancel-fix');
-    // cancelButton.style.display = 'none'; // Initial state handled by CSS
-    actionButtonsContainer.appendChild(cancelButton);
+    // Add Close Button
+    const closeViewerButton = document.createElement('button');
+    closeViewerButton.id = 'checkra-close-viewer-btn';
+    closeViewerButton.innerHTML = '&times;'; // Simple multiplication sign for X
+    closeViewerButton.title = 'Close Panel (Cmd/Ctrl + L)';
+    responseHeader.appendChild(closeViewerButton);
 
     responseHeader.appendChild(actionButtonsContainer);
     viewer.appendChild(responseHeader);
@@ -135,59 +137,58 @@ export class FeedbackViewerDOM {
     const contentWrapper = document.createElement('div');
     contentWrapper.id = 'checkra-feedback-content-wrapper';
 
+    // Add Onboarding Container (initially hidden)
+    const onboardingContainer = document.createElement('div');
+    onboardingContainer.id = 'checkra-onboarding-container';
+    onboardingContainer.classList.add('hidden'); // Start hidden
+    contentWrapper.appendChild(onboardingContainer);
+
     const promptTitle = document.createElement('h4');
-    promptTitle.textContent = '"' + this.originalPromptTitleText + '"';
+    promptTitle.textContent = this.originalPromptTitleText;
+    if (!this.originalPromptTitleText) {
+      promptTitle.classList.add('hidden');
+    }
     contentWrapper.appendChild(promptTitle);
 
+    // --- Textarea Container - Created here, but appended to viewer LATER ---
     const textareaContainer = document.createElement('div');
     textareaContainer.id = 'checkra-textarea-container';
-
     const promptTextarea = document.createElement('textarea');
     promptTextarea.id = 'checkra-prompt-textarea';
     promptTextarea.rows = 4;
     promptTextarea.placeholder = 'e.g., "How can I improve the UX or conversion of this section?"';
+    const buttonRow = document.createElement('div');
+    buttonRow.id = 'checkra-button-row';
+    const miniSelectButton = document.createElement('button');
+    miniSelectButton.id = 'checkra-mini-select-btn';
+    miniSelectButton.title = 'Select element on page';
+    miniSelectButton.innerHTML = SELECT_SVG_ICON;
+    buttonRow.appendChild(miniSelectButton);
+    const submitButton = this.createSubmitButton();
+    buttonRow.appendChild(submitButton);
     textareaContainer.appendChild(promptTextarea);
+    textareaContainer.appendChild(buttonRow);
+    // REMOVED: contentWrapper.appendChild(textareaContainer);
 
-    const submitButton = document.createElement('button');
-    submitButton.id = 'checkra-feedback-submit-button';
-    const submitButtonTextSpan = document.createElement('span');
-    submitButtonTextSpan.textContent = 'Get Feedback';
-    submitButton.appendChild(submitButtonTextSpan);
-    const shortcutHint = document.createElement('span');
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    shortcutHint.textContent = isMac ? '(Cmd + ⏎)' : '(Ctrl + ⏎)';
-    submitButton.appendChild(shortcutHint);
-    textareaContainer.appendChild(submitButton);
-
-    contentWrapper.appendChild(textareaContainer);
-
-    // --- BEGIN EDIT ---
-    // Create user message container *before* response content container
+    // --- User Message & Response Area (Children of contentWrapper) ---
     const userMessageContainer = document.createElement('div');
     userMessageContainer.id = 'checkra-user-message-container';
-    // Style handled by CSS: #checkra-user-message-container
-    // userMessageContainer.style.marginBottom = '10px';
-    // userMessageContainer.style.display = 'none'; // Initially hidden
-    contentWrapper.appendChild(userMessageContainer); // Append to contentWrapper
-    // --- END EDIT ---
+    contentWrapper.appendChild(userMessageContainer);
 
-    // --- Response Area (Now only for AI content) ---
     const responseContent = document.createElement('div');
     responseContent.id = 'checkra-feedback-response-content';
-    // Style handled by CSS: #checkra-feedback-response-content
-    // responseContent.style.wordWrap = 'break-word';
-    // responseContent.style.fontSize = '14px';
-    // responseContent.style.display = 'none';
+    contentWrapper.appendChild(responseContent);
 
-    contentWrapper.appendChild(responseContent); // Append responseContent to contentWrapper
+    // Add Footer CTA Container (initially hidden) to contentWrapper
+    const footerCTAContainer = document.createElement('div');
+    footerCTAContainer.id = 'checkra-footer-cta-container';
+    footerCTAContainer.classList.add('hidden');
+    // Basic styling for stickiness
+    footerCTAContainer.style.position = 'sticky';
+    contentWrapper.appendChild(footerCTAContainer);
 
-    viewer.appendChild(contentWrapper);
-
-    // --- Resize Handle ---
-    const resizeHandle = document.createElement('div');
-    resizeHandle.id = 'checkra-feedback-viewer-resize-handle';
-    resizeHandle.addEventListener('mousedown', this.handleResizeStart);
-    viewer.appendChild(resizeHandle);
+    viewer.appendChild(contentWrapper); // contentWrapper is now above textarea container
+    viewer.appendChild(textareaContainer); // Textarea container appended last to viewer
 
     document.body.appendChild(viewer);
 
@@ -195,89 +196,112 @@ export class FeedbackViewerDOM {
       viewer,
       promptTextarea,
       submitButton,
-      submitButtonTextSpan,
       textareaContainer,
       promptTitle,
       responseContent,
       loadingIndicator,
       loadingIndicatorText,
-      resizeHandle,
       actionButtonsContainer,
-      previewApplyButton,
-      cancelButton,
       responseHeader,
       contentWrapper,
       userMessageContainer,
+      closeViewerButton,
+      onboardingContainer,
+      footerCTAContainer,
+      miniSelectButton,
+      settingsButton
     };
+
+    // Use the bound method for the listener
+    this.elements.closeViewerButton?.addEventListener('click', this.handleCloseClick);
 
     return this.elements;
   }
 
   public destroy(): void {
     if (this.elements) {
-      this.elements.viewer.removeEventListener('mousedown', this.handleDragStart);
-      this.elements.resizeHandle.removeEventListener('mousedown', this.handleResizeStart);
-      // Remove document listeners if they might be active
-      document.removeEventListener('mousemove', this.handleDragMove);
-      document.removeEventListener('mouseup', this.handleDragEnd);
+      // Remove resize listeners
+      this.elements.viewer.removeEventListener('mousedown', this.handleResizeStart);
       document.removeEventListener('mousemove', this.handleResizeMove);
       document.removeEventListener('mouseup', this.handleResizeEnd);
 
+      // Use the bound method for removal
+      this.elements.closeViewerButton?.removeEventListener('click', this.handleCloseClick);
+
+      // Remove the viewer element
       this.elements.viewer.remove();
     }
     this.elements = null;
+    this.closeButtonCallback = null;
     console.log('[FeedbackViewerDOM] Instance destroyed.');
+  }
+
+  // --- Resizing Handlers ---
+  private handleResizeStart(e: MouseEvent): void {
+    if (!this.elements) return;
+
+    // Only handle clicks on the left edge (first 4px)
+    const rect = this.elements.viewer.getBoundingClientRect();
+    if (e.clientX > rect.left + 4) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    this.isResizing = true;
+    this.resizeStartX = e.clientX;
+    this.initialWidth = this.elements.viewer.offsetWidth;
+    document.addEventListener('mousemove', this.handleResizeMove);
+    document.addEventListener('mouseup', this.handleResizeEnd);
+    this.elements.viewer.classList.add('resizing');
+    // Disable pointer events on content during resize
+    this.elements.contentWrapper.style.pointerEvents = 'none';
+  }
+
+  private handleResizeMove(e: MouseEvent): void {
+    if (!this.isResizing || !this.elements) return;
+
+    const dx = this.resizeStartX - e.clientX; // Negative because we're resizing from right edge
+    let newWidth = this.initialWidth + dx;
+
+    // Clamp width between min and max
+    newWidth = Math.max(300, Math.min(newWidth, 450));
+
+    this.elements.viewer.style.width = `${newWidth}px`;
+  }
+
+  private handleResizeEnd(): void {
+    if (!this.isResizing || !this.elements) return;
+
+    this.isResizing = false;
+    document.removeEventListener('mousemove', this.handleResizeMove);
+    document.removeEventListener('mouseup', this.handleResizeEnd);
+    this.elements.contentWrapper.style.pointerEvents = '';
+    this.elements.viewer.classList.remove('resizing');
+
+    // ADDED: Save new width to localStorage
+    try {
+      const currentWidth = this.elements.viewer.offsetWidth;
+      localStorage.setItem(LOCALSTORAGE_PANEL_WIDTH_KEY, String(currentWidth));
+    } catch (e) {
+      console.warn('[FeedbackViewerDOM] Error saving panel width to localStorage:', e);
+    }
   }
 
   // --- Visibility and Content ---
 
-  public show(position?: { top: number; left: number; mode: 'fixed' | 'absolute' }): void {
+  public show(): void {
     if (!this.elements) return;
     const { viewer, promptTextarea } = this.elements;
-    // Apply persisted size or defaults
-    viewer.style.width = `${DEFAULT_WIDTH}px`;
-    viewer.style.height = `${DEFAULT_HEIGHT}px`;
 
-    // Reset visibility states using classes
     this.showPromptInputArea(true);
     this.updateLoaderVisibility(false);
-    this.updateActionButtonsVisibility(false);
-    this.elements.responseHeader.classList.add('hidden');
-    this.elements.responseHeader.classList.remove('visible-flex');
-    this.elements.contentWrapper.style.paddingTop = '15px'; // Reset padding
 
-    if (position) {
-      viewer.style.position = position.mode;
-      viewer.style.top = `${position.top}px`;
-      viewer.style.left = `${position.left}px`;
-      viewer.style.transform = 'none';
-      viewer.style.marginTop = '';
-      viewer.style.marginLeft = '';
-    } else {
-      // Fallback to center (fixed)
-      viewer.style.position = 'fixed';
-      viewer.style.top = '50%';
-      viewer.style.left = '50%';
-      // Use margins for centering after setting explicit width/height
-      viewer.style.marginTop = `-${viewer.offsetHeight / 2}px`;
-      viewer.style.marginLeft = `-${viewer.offsetWidth / 2}px`;
-      viewer.style.transform = 'none';
-    }
-
-    // viewer.style.display = 'flex'; // Replaced by class manipulation
     viewer.classList.remove('hidden');
     viewer.classList.add('visible-flex');
-
-    // --- BEGIN EDIT ---
-    // Attempt to focus the textarea
-    // Focus immediately on all devices
     promptTextarea.focus();
-    // --- END EDIT ---
   }
 
   public hide(): void {
     if (!this.elements) return;
-    // this.elements.viewer.style.display = 'none'; // Replaced by class manipulation
     this.elements.viewer.classList.add('hidden');
     this.elements.viewer.classList.remove('visible-flex');
     console.log('[FeedbackViewerDOM] Viewer hidden.');
@@ -285,164 +309,39 @@ export class FeedbackViewerDOM {
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
     if (!this.elements) return;
-    const { loadingIndicator, loadingIndicatorText, responseHeader, contentWrapper, actionButtonsContainer } = this.elements;
+    // REMOVED contentWrapper from destructuring
+    const { loadingIndicator, loadingIndicatorText, responseHeader } = this.elements;
+
+    responseHeader.classList.remove('hidden');
+    responseHeader.classList.add('visible-flex');
+
     if (visible) {
       loadingIndicatorText.textContent = text || 'Processing...';
-      // loadingIndicator.style.display = 'flex'; // Use class
       loadingIndicator.classList.remove('hidden');
       loadingIndicator.classList.add('visible-flex');
-      responseHeader.classList.remove('hidden');
-      responseHeader.classList.add('visible-flex');
-      requestAnimationFrame(() => {
-        const headerHeight = responseHeader.offsetHeight;
-        contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-      });
     } else {
       loadingIndicator.classList.add('hidden');
       loadingIndicator.classList.remove('visible-flex');
-      if (actionButtonsContainer.classList.contains('hidden')) {
-        responseHeader.classList.add('hidden');
-        responseHeader.classList.remove('visible-flex');
-        contentWrapper.style.paddingTop = '15px';
-      } else {
-        responseHeader.classList.remove('hidden');
-        responseHeader.classList.add('visible-flex');
-        requestAnimationFrame(() => {
-          const headerHeight = responseHeader.offsetHeight;
-          contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-        });
-      }
     }
   }
 
-  public updateActionButtonsVisibility(visible: boolean): void {
-    if (!this.elements) return;
-    const { actionButtonsContainer, responseHeader, contentWrapper, loadingIndicator } = this.elements;
-    actionButtonsContainer.classList.toggle('hidden', !visible);
-    actionButtonsContainer.classList.toggle('visible-flex', visible);
-
-    if (visible) {
-      responseHeader.classList.remove('hidden');
-      responseHeader.classList.add('visible-flex');
-      requestAnimationFrame(() => {
-        const headerHeight = responseHeader.offsetHeight;
-        contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-      });
-    } else {
-      if (loadingIndicator.classList.contains('hidden')) {
-        responseHeader.classList.add('hidden');
-        responseHeader.classList.remove('visible-flex');
-        contentWrapper.style.paddingTop = '15px';
-      } else {
-        responseHeader.classList.remove('hidden');
-        responseHeader.classList.add('visible-flex');
-        requestAnimationFrame(() => {
-          const headerHeight = responseHeader.offsetHeight;
-          contentWrapper.style.paddingTop = `${headerHeight + 10}px`;
-        });
-      }
-    }
-  }
-
-  public updateSubmitButtonState(enabled: boolean, text: string): void {
+  public updateSubmitButtonState(enabled: boolean): void {
     if (!this.elements) return;
     this.elements.submitButton.disabled = !enabled;
-    this.elements.submitButtonTextSpan.textContent = text;
-  }
-
-  public setResponseContent(html: string, scrollToBottom: boolean): void {
-    if (!this.elements) return;
-    const { responseContent, contentWrapper } = this.elements;
-
-    const scrollThreshold = 10;
-    const isScrolledToBottom = contentWrapper.scrollHeight - contentWrapper.scrollTop - contentWrapper.clientHeight < scrollThreshold;
-
-    // responseContent.style.display = 'block'; // Use class
-    responseContent.classList.remove('hidden');
-    responseContent.classList.add('visible');
-    responseContent.innerHTML = `<div class="checkra-streamed-content">${html}</div>`;
-
-    const preElements = responseContent.querySelectorAll('.checkra-streamed-content pre');
-
-    preElements.forEach(pre => {
-      const preElement = pre as HTMLPreElement;
-      if (preElement.querySelector('.checkra-code-copy-btn')) {
-        return;
-      }
-      (preElement as HTMLElement).style.position = 'relative';
-
-      const copyButton = document.createElement('button');
-      copyButton.className = 'checkra-code-copy-btn';
-      copyButton.innerHTML = `
-                <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            `;
-      copyButton.title = 'Copy code';
-
-      copyButton.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        console.log('[Copy Code] Button clicked.');
-
-        const codeElement = preElement.querySelector('code.language-html');
-
-        if (codeElement) {
-          console.log('[Copy Code] Found code element:', codeElement);
-          const codeToCopy = codeElement.textContent;
-          console.log('[Copy Code] Text content to copy (length):', codeToCopy?.length);
-
-          if (codeToCopy) {
-            try {
-              if (!navigator.clipboard) {
-                console.warn('[Copy Code] navigator.clipboard API not available.');
-                alert('Cannot copy code: Clipboard API not supported or not available in this context (e.g., non-HTTPS).');
-                return;
-              }
-
-              await navigator.clipboard.writeText(codeToCopy);
-              console.log('[Copy Code] Code successfully copied to clipboard.');
-
-              copyButton.classList.add('copied');
-              copyButton.title = 'Copied!';
-              setTimeout(() => {
-                copyButton.classList.remove('copied');
-                copyButton.title = 'Copy code';
-              }, 1500);
-
-            } catch (err) {
-              console.error('[Copy Code] Failed to copy code to clipboard:', err);
-              alert(`Error copying code: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          } else {
-            console.warn('[Copy Code] Code element (language-html) found, but its textContent is empty or null.');
-            alert('Cannot copy code: No text content found inside the HTML code block.');
-          }
-        } else {
-          console.warn('[Copy Code] Could not find <code class="language-html"> element inside the <pre> block.');
-        }
-      });
-
-      preElement.appendChild(copyButton);
-    });
-
-    if (scrollToBottom && isScrolledToBottom) {
-      contentWrapper.scrollTop = contentWrapper.scrollHeight;
-    }
   }
 
   public clearAIResponseContent(): void {
     if (!this.elements) return;
-    console.log('[DOM.clearAIResponseContent] Clearing AI messages.');
-    this.elements.responseContent.innerHTML = '';
-    // this.elements.responseContent.style.display = 'none'; // Use class
+    console.log('[DOM.clearAIResponseContent] Clearing all messages from AI response area.');
+    this.elements.responseContent.innerHTML = ''; // Clear all children
     this.elements.responseContent.classList.add('hidden');
     this.elements.responseContent.classList.remove('visible');
   }
 
   public clearUserMessage(): void {
     if (!this.elements) return;
-    console.log('[DOM.clearUserMessage] Clearing user message.');
+    console.log('[DOM.clearUserMessage] Clearing user message container.');
     this.elements.userMessageContainer.innerHTML = '';
-    // this.elements.userMessageContainer.style.display = 'none'; // Use class
     this.elements.userMessageContainer.classList.add('hidden');
     this.elements.userMessageContainer.classList.remove('visible');
   }
@@ -458,222 +357,247 @@ export class FeedbackViewerDOM {
   /**
    * Shows or hides the prompt textarea/button container, and updates
    * the text content of the prompt title element accordingly.
-   * @param show True to show input area and original title, false to hide input area and show submitted text.
-   * @param submittedPromptText The user's prompt text (only used when show is false).
+   * NOTE: With sticky textarea, this mostly just updates the title now.
    */
   public showPromptInputArea(show: boolean, submittedPromptText?: string): void {
-    if (!this.elements) return;
-    // Toggle textarea container visibility using class
-    // this.elements.textareaContainer.style.display = show ? 'block' : 'none';
-    this.elements.textareaContainer.classList.toggle('hidden', !show);
-    this.elements.textareaContainer.classList.toggle('visible', show);
+    if (!this.elements?.promptTitle || !this.elements.textareaContainer) return;
+
+    // Always keep textarea container visible now due to sticky positioning
+    this.elements.textareaContainer.classList.remove('hidden');
+    this.elements.textareaContainer.classList.add('visible'); // Or 'visible-flex' if needed later
 
     // Update the title text and visibility using class
     if (show) {
-      // Restore original title
+      // Restore original title (which is now empty)
       this.elements.promptTitle.textContent = this.originalPromptTitleText;
-      // this.elements.promptTitle.style.display = 'block'; // Ensure title is visible - Use class
-      this.elements.promptTitle.classList.remove('hidden');
-      this.elements.promptTitle.classList.add('visible');
-    } else if (submittedPromptText) {
-      // Show submitted prompt in the title element
-      this.elements.promptTitle.textContent = submittedPromptText;
-      // this.elements.promptTitle.style.display = 'block'; // Ensure title is visible - Use class
-      this.elements.promptTitle.classList.remove('hidden');
-      this.elements.promptTitle.classList.add('visible');
+      if (this.originalPromptTitleText) {
+        this.elements.promptTitle.classList.remove('hidden');
+        this.elements.promptTitle.classList.add('visible');
+      } else {
+        this.elements.promptTitle.classList.add('hidden');
+        this.elements.promptTitle.classList.remove('visible');
+      }
     } else {
+      // Hide the title if input is hidden (irrespective of submittedPromptText)
       this.elements.promptTitle.classList.add('hidden');
       this.elements.promptTitle.classList.remove('visible');
     }
   }
 
-  // --- Positioning ---
-
-  public calculateOptimalPosition(targetRect: DOMRect): { top: number; left: number; mode: 'fixed' | 'absolute' } | null {
-    if (!this.elements) return null;
-    const viewer = this.elements.viewer;
-
-    // Temporarily show offscreen to measure
-    viewer.style.visibility = 'hidden';
-    viewer.style.display = 'flex';
-    viewer.style.position = 'fixed'; // Use fixed for measurement consistency
-    viewer.style.left = '-9999px';
-    viewer.style.top = '-9999px';
-
-    const viewerWidth = viewer.offsetWidth;
-    const viewerHeight = viewer.offsetHeight;
-
-    // Hide it again immediately
-    viewer.style.display = 'none';
-    viewer.style.visibility = 'visible';
-    viewer.style.left = '';
-    viewer.style.top = '';
-
-    if (!viewerWidth || !viewerHeight) {
-      console.warn('[FeedbackViewerDOM] Could not determine viewer dimensions for positioning.');
-      return null; // Indicate failure to calculate
-    }
-
-    const placementMargin = 10;
-    const viewportMargin = 10;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    const doesOverlap = (rect1: DOMRect, rect2: DOMRect): boolean => {
-      return !(rect1.right < rect2.left || rect1.left > rect2.right || rect1.bottom < rect2.top || rect1.top > rect2.bottom);
-    };
-    const fitsInViewport = (rect: { top: number; left: number; bottom: number; right: number }): boolean => {
-      return rect.top >= viewportMargin && rect.left >= viewportMargin && rect.bottom <= viewportHeight - viewportMargin && rect.right <= viewportWidth - viewportMargin;
-    };
-
-    const potentialPositions = [
-      { top: targetRect.bottom + placementMargin, left: targetRect.left + targetRect.width / 2 - viewerWidth / 2, name: "Below" },
-      { top: targetRect.top - viewerHeight - placementMargin, left: targetRect.left + targetRect.width / 2 - viewerWidth / 2, name: "Above" },
-      { top: targetRect.top + targetRect.height / 2 - viewerHeight / 2, left: targetRect.right + placementMargin, name: "Right" },
-      { top: targetRect.top + targetRect.height / 2 - viewerHeight / 2, left: targetRect.left - viewerWidth - placementMargin, name: "Left" }
-    ];
-
-    for (const pos of potentialPositions) {
-      let clampedTop = Math.max(viewportMargin, Math.min(pos.top, viewportHeight - viewerHeight - viewportMargin));
-      let clampedLeft = Math.max(viewportMargin, Math.min(pos.left, viewportWidth - viewerWidth - viewportMargin));
-      const potentialRect = DOMRect.fromRect({ x: clampedLeft, y: clampedTop, width: viewerWidth, height: viewerHeight });
-
-      if (!doesOverlap(potentialRect, targetRect) && fitsInViewport(potentialRect)) {
-        // Found a good spot - use absolute positioning relative to document
-        const finalTop = potentialRect.top + window.scrollY;
-        const finalLeft = potentialRect.left + window.scrollX;
-        console.log(`[FeedbackViewerDOM] Found valid ABSOLUTE position: ${pos.name}`);
-        return { top: finalTop, left: finalLeft, mode: 'absolute' };
-      }
-    }
-
-    // Fallback: Place below and clamp using FIXED positioning
-    console.warn('[FeedbackViewerDOM] No ideal non-overlapping position found. Falling back to placing below (fixed, clamped).');
-    let fallbackTop = targetRect.bottom + placementMargin;
-    let fallbackLeft = targetRect.left + targetRect.width / 2 - viewerWidth / 2;
-    fallbackTop = Math.max(viewportMargin, Math.min(fallbackTop, viewportHeight - viewerHeight - viewportMargin));
-    fallbackLeft = Math.max(viewportMargin, Math.min(fallbackLeft, viewportWidth - viewerWidth - viewportMargin));
-    return { top: fallbackTop, left: fallbackLeft, mode: 'fixed' };
-  }
-
-  // --- Dragging Handlers ---
-  private handleDragStart(e: MouseEvent): void {
-    if (this.isResizing || !this.elements || (this.elements.resizeHandle && this.elements.resizeHandle.contains(e.target as Node))) return;
-
-    // Check if the click target is within an interactive element that shouldn't start drag
-    const target = e.target as Element;
-    const nonDraggableSelectors = [
-      'textarea',
-      'button',
-      'pre',
-      'code',
-      'a',
-      'input',
-      'select'
-    ];
-    if (target.closest(nonDraggableSelectors.join(','))) {
-      return;
-    }
-
-    // If the click is not on an explicitly non-draggable element, start the drag
-    e.preventDefault();
-    this.isDragging = true;
-    this.dragStartX = e.clientX;
-    this.dragStartY = e.clientY;
-    this.dragInitialLeft = this.elements.viewer.offsetLeft;
-    this.dragInitialTop = this.elements.viewer.offsetTop;
-    this.elements.viewer.style.transform = 'none'; // Reset transform if applied for centering
-    this.elements.viewer.style.marginTop = '';
-    this.elements.viewer.style.marginLeft = '';
-    this.elements.viewer.classList.add('dragging');
-    document.addEventListener('mousemove', this.handleDragMove);
-    document.addEventListener('mouseup', this.handleDragEnd);
-  }
-
-  private handleDragMove(e: MouseEvent): void {
-    if (!this.isDragging || !this.elements) return; // Keep original check
-
-    const dx = e.clientX - this.dragStartX;
-    const dy = e.clientY - this.dragStartY;
-    this.elements.viewer.style.left = `${this.dragInitialLeft + dx}px`;
-    this.elements.viewer.style.top = `${this.dragInitialTop + dy}px`;
-  }
-
-  private handleDragEnd(): void {
-    if (!this.isDragging || !this.elements) return; // Keep original check
-
-    this.isDragging = false;
-    this.elements.viewer.classList.remove('dragging');
-    document.removeEventListener('mousemove', this.handleDragMove);
-    document.removeEventListener('mouseup', this.handleDragEnd);
-  }
-
-  // --- Resizing Handlers ---
-  private handleResizeStart(e: MouseEvent): void {
-    if (!this.elements) return;
-    e.preventDefault();
-    e.stopPropagation();
-    this.isResizing = true;
-    this.resizeStartX = e.clientX;
-    this.resizeStartY = e.clientY;
-    this.initialWidth = this.elements.viewer.offsetWidth;
-    this.initialHeight = this.elements.viewer.offsetHeight;
-    document.addEventListener('mousemove', this.handleResizeMove);
-    document.addEventListener('mouseup', this.handleResizeEnd);
-    this.elements.viewer.classList.add('resizing');
-    // Disable pointer events on content during resize
-    this.elements.contentWrapper.style.pointerEvents = 'none';
-  }
-
-  private handleResizeMove(e: MouseEvent): void {
-    if (!this.isResizing || !this.elements) return; // Keep original check
-
-    const dx = e.clientX - this.resizeStartX;
-    const dy = e.clientY - this.resizeStartY;
-    let newWidth = this.initialWidth + dx;
-    let newHeight = this.initialHeight + dy;
-    const maxWidthPx = (window.innerWidth * MAX_WIDTH_VW) / 100;
-    // const maxHeightPx = (window.innerHeight * MAX_HEIGHT_VH) / 100; // << REMOVE or comment out
-
-    // Clamp width, but only clamp height to the minimum
-    newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, maxWidthPx));
-    newHeight = Math.max(MIN_HEIGHT, newHeight); // << REMOVE Math.min(..., maxHeightPx) clamping
-
-    this.elements.viewer.style.width = `${newWidth}px`;
-    this.elements.viewer.style.height = `${newHeight}px`;
-  }
-
-  private handleResizeEnd(): void {
-    if (!this.isResizing || !this.elements) return; // Keep original check
-
-    this.isResizing = false;
-    document.removeEventListener('mousemove', this.handleResizeMove);
-    document.removeEventListener('mouseup', this.handleResizeEnd);
-    this.elements.contentWrapper.style.pointerEvents = '';
-    this.elements.viewer.classList.remove('resizing');
-  }
-
-  /**
-   * Updates the content (text and icon) of the Preview/Apply button.
-   */
-  public updatePreviewApplyButtonContent(text: string, svgIcon: string): void {
-    if (!this.elements) return;
-    this.elements.previewApplyButton.innerHTML = `
-            <span class="button-text">${escapeHTML(text)}</span>
-            ${svgIcon}
-        `;
-  }
-
   /**
    * Renders HTML content into the dedicated user message container.
-   * Ensures the response area is visible.
+   * This will be adapted for history: append a new usermessage bubble.
    */
   public renderUserMessage(html: string): void {
     if (!this.elements) return;
+    // For history, this will append a new message bubble
+    // For now, it still uses the dedicated userMessageContainer, which Impl saves to history
     const { userMessageContainer } = this.elements;
-
     userMessageContainer.innerHTML = html;
     userMessageContainer.classList.toggle('hidden', !html);
     userMessageContainer.classList.toggle('visible', !!html);
+  }
+
+  /**
+   * Shows or hides the onboarding container and populates its content.
+   * Also manages visibility of other components based on onboarding state.
+   */
+  public showOnboardingView(show: boolean): void {
+    if (!this.elements?.onboardingContainer) return;
+    if (show) {
+      this.elements.onboardingContainer.classList.remove('hidden');
+      this.elements.onboardingContainer.classList.add('visible-flex');
+      // Update content when showing
+      this.elements.onboardingContainer.innerHTML = this.createOnboardingView();
+    } else {
+      this.elements.onboardingContainer.classList.add('hidden');
+      this.elements.onboardingContainer.classList.remove('visible-flex');
+    }
+  }
+
+  // Updated onboarding content to be Markdown within an AI bubble
+  private createOnboardingView(): string {
+    const selectButtonRepresentation =
+      `<span class="onboarding-button-representation" title="Select Element">${SELECT_SVG_ICON}</span>`;
+    const submitButtonRepresentation =
+      `<span class="onboarding-button-representation submit-representation" title="Submit Question">${SUBMIT_SVG_ICON}</span>`;
+
+    // ADDED: Dynamically determine shortcut text based on OS
+    const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const shortcutKeyGlyph = isMac ? '⌘' : 'Ctrl';
+    const shortcutText = `<kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">${shortcutKeyGlyph} L</kbd>`;
+
+    const markdownContent = `
+### Welcome to Checkra
+Use this chat to ask for UX, growth and conversion improvements for this website.
+
+**How to use:**
+* ${selectButtonRepresentation} Select a part of this page to ask questions about (better responses)
+* ${submitButtonRepresentation} Ask a question about the entire page
+
+**Pro tips:**
+* Toggle this panel anytime with ${shortcutText}.
+
+---
+
+<a href="#" id="checkra-btn-run-audit" class="onboarding-link-button">Would you like to run a quick audit?</a>
+    `;
+
+    return `
+      <div class="checkra-message-bubble message-ai" style="margin-left: 0; margin-right: 0; max-width: 100%;">
+        ${marked.parse(markdownContent) as string}
+      </div>
+    `;
+  }
+
+  /**
+   * Shows or hides the footer CTA container and populates it.
+   */
+  public showFooterCTA(show: boolean): void {
+    if (!this.elements?.footerCTAContainer) return;
+
+    if (show) {
+      this.elements.footerCTAContainer.classList.remove('hidden');
+      this.elements.footerCTAContainer.classList.add('visible');
+    } else {
+      this.elements.footerCTAContainer.classList.add('hidden');
+      this.elements.footerCTAContainer.classList.remove('visible');
+      this.elements.footerCTAContainer.innerHTML = ''; // Clear content
+    }
+  }
+
+  // --- ADDED: History Rendering Methods ---
+  private createMessageElement(item: ConversationItem): HTMLDivElement {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
+
+    // Sanitize/parse content appropriately
+    // For AI, use marked. For others, escapeHTML or handle as plain text.
+    if (item.type === 'ai' || item.type === 'usermessage') { // User messages can also contain HTML
+      messageDiv.innerHTML = item.content; // Assuming marked.parse happens before calling this for AI
+    } else {
+      messageDiv.textContent = item.content;
+    }
+
+    if (item.type === 'ai' && item.isStreaming) {
+      messageDiv.classList.add('streaming');
+    }
+    // TODO: Add data-id for easier updates if needed
+    return messageDiv;
+  }
+
+  public renderFullHistory(history: ConversationItem[]): void {
+    if (!this.elements) return;
+    console.log(`[DOM] renderFullHistory: Rendering ${history.length} items.`);
+    this.clearAIResponseContent();
+    this.elements.responseContent.classList.remove('hidden');
+    this.elements.responseContent.classList.add('visible');
+
+    history.forEach(item => {
+      // For AI messages that are not streaming, parse them with marked.
+      // Streaming messages will be updated by updateLastAIMessage.
+      let displayItem = { ...item };
+      if (item.type === 'ai' && !item.isStreaming && item.content) {
+        displayItem.content = marked.parse(item.content) as string;
+      }
+      // User messages (type: 'usermessage') might already be HTML
+
+      const messageEl = this.createMessageElement(displayItem);
+      this.elements!.responseContent.appendChild(messageEl);
+    });
+    // Scroll to bottom
+    this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
+  }
+
+  public appendHistoryItem(item: ConversationItem): void {
+    if (!this.elements) return;
+    console.log(`[DOM] appendHistoryItem: TYPE=${item.type}, CONTENT_START=${item.content?.substring(0, 30)}`);
+    this.elements.responseContent.classList.remove('hidden');
+    this.elements.responseContent.classList.add('visible');
+
+    let displayItem = { ...item };
+    if (item.type === 'ai' && item.content && !item.isStreaming) { // Parse if not streaming
+      displayItem.content = marked.parse(item.content) as string;
+    } else if (item.type === 'ai' && item.isStreaming) {
+      // For streaming AI, content is initially empty or placeholder, updated by updateLastAIMessage
+      // If there's initial content (e.g. "AI is thinking..."), let it pass through createMessageElement
+    }
+    // User messages (type: 'usermessage') might already be HTML
+
+    const messageEl = this.createMessageElement(displayItem);
+    this.elements.responseContent.appendChild(messageEl);
+    this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
+  }
+
+  public updateLastAIMessage(newContent: string, isStreaming: boolean): void {
+    if (!this.elements) return;
+    // REMOVED: contentWrapper from destructuring
+    const { responseContent } = this.elements;
+    const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
+
+    console.log(`[DOM] updateLastAIMessage: Found bubble=${!!lastAiMessageBubble}, CurrentHTML_Len=${lastAiMessageBubble?.innerHTML?.length ?? 0}, NewContent_Len=${newContent.length}, Streaming=${isStreaming}`);
+
+    if (lastAiMessageBubble) {
+      lastAiMessageBubble.innerHTML = marked.parse(newContent) as string;
+      lastAiMessageBubble.classList.toggle('streaming', isStreaming);
+      this.attachCodeCopyButtonsTo(lastAiMessageBubble as HTMLElement);
+      // Access contentWrapper via this.elements if needed for scrolling
+      if (isStreaming || this.elements.contentWrapper.scrollHeight - this.elements.contentWrapper.scrollTop - this.elements.contentWrapper.clientHeight < 20) {
+        this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
+      }
+    } else {
+      console.warn('[DOM] updateLastAIMessage called but no last AI message bubble found. This might indicate an issue with initial AI message append.');
+    }
+  }
+
+  // Helper to attach code copy buttons, to be called after innerHTML changes
+  private attachCodeCopyButtonsTo(parentElement: HTMLElement): void {
+    const preElements = parentElement.querySelectorAll('.checkra-streamed-content pre');
+    preElements.forEach(pre => {
+      // ... (copy button logic from setResponseContent, slightly refactored) ...
+      const preElement = pre as HTMLPreElement;
+      if (preElement.querySelector('.checkra-code-copy-btn')) {
+        return; // Already has one
+      }
+      (preElement as HTMLElement).style.position = 'relative';
+      const copyButton = document.createElement('button');
+      copyButton.className = 'checkra-code-copy-btn';
+      copyButton.innerHTML = `
+            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <svg class="check-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        `;
+      copyButton.title = 'Copy code';
+      copyButton.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const codeElement = preElement.querySelector('code');
+        if (codeElement && codeElement.textContent) {
+          try {
+            await navigator.clipboard.writeText(codeElement.textContent);
+            copyButton.classList.add('copied');
+            copyButton.title = 'Copied!';
+            setTimeout(() => {
+              copyButton.classList.remove('copied');
+              copyButton.title = 'Copy code';
+            }, 1500);
+          } catch (err) {
+            console.error('[Copy Code] Failed:', err);
+            alert(`Error copying: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      });
+      preElement.appendChild(copyButton);
+    });
+  }
+
+  private createSubmitButton(): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.id = 'checkra-feedback-submit-button';
+    button.title = 'Submit Feedback (Ctrl/Cmd + Enter)';
+    button.type = 'button'; // Prevent form submission if nested
+
+    // ADDED: SVG Icon
+    button.innerHTML = SUBMIT_SVG_ICON;
+
+    return button;
   }
 }

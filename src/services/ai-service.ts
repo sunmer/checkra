@@ -1,6 +1,5 @@
 import Settings from '../settings';
-import { feedbackViewer } from '../ui/feedback-viewer';
-import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
+import { getEffectiveApiKey, getCurrentAiSettings, eventEmitter } from '../core/index';
 import { AiSettings } from '../ui/settings-modal';
 
 interface PageMetadata {
@@ -48,23 +47,20 @@ const getPageMetadata = (): PageMetadata => {
   return metadata as PageMetadata;
 };
 
-
 /**
- * Sends feedback (including optional screenshot, optional HTML, and optional prompt) to the backend.
+ * Base function for handling feedback/audit requests and streaming SSE responses.
  */
-export const fetchFeedback = async (
-  _imageDataUrl: string | null,
+const fetchFeedbackBase = async (
+  apiUrl: string,
   promptText: string,
   selectedHtml: string | null
 ): Promise<void> => {
   try {
-    // Gather metadata
     const metadata = getPageMetadata();
-    // Get settings using the new function from core
     const currentAiSettings = getCurrentAiSettings();
 
     const requestBody: {
-      image?: string | null;
+      // No image field needed here as it's handled by the caller if necessary
       prompt: string;
       html?: string | null;
       metadata: PageMetadata;
@@ -79,43 +75,37 @@ export const fetchFeedback = async (
       requestBody.html = selectedHtml;
     }
 
-    // --- Add Authorization Header ---
     const currentApiKey = getEffectiveApiKey();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentApiKey) {
       headers['Authorization'] = `Bearer ${currentApiKey}`;
     } else {
-      console.warn('[Checkra Service] API key/anonymous ID not available for feedback request.');
+      console.warn('[Checkra Service] API key/anonymous ID not available for request.');
     }
-    
-    const response = await fetch(`${Settings.API_URL}/checkraCompletions/suggest/feedback`, {
+
+    console.log(`[Checkra Service] Sending request to: ${apiUrl}`);
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(requestBody),
     });
 
-    // --- Modified Error Handling for !response.ok ---
     if (!response.ok) {
-      let specificErrorMessage = `Feedback request failed: ${response.status} ${response.statusText}`;
+      let specificErrorMessage = `Request failed: ${response.status} ${response.statusText}`;
       try {
-        const errorBodyText = await response.text(); // Read body once
+        const errorBodyText = await response.text();
         if (errorBodyText) {
             const errorJson = JSON.parse(errorBodyText);
             if (errorJson && errorJson.error) {
-                // Use the specific error from JSON payload
                 specificErrorMessage = errorJson.error;
             }
         }
       } catch (parseError) {
-        // Ignore parsing error, stick with the original HTTP status error
         console.warn("[Checkra Service] Failed to parse error response body:", parseError);
       }
-      // Throw the determined error message to be caught by the outer catch block
       throw new Error(specificErrorMessage);
     }
-    // --- End Modified Error Handling ---
 
-    // Proceed with stream processing only if response.ok is true
     if (!response.body) {
         throw new Error("Response body is null, cannot process stream.");
     }
@@ -127,6 +117,7 @@ export const fetchFeedback = async (
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
+        // Process final buffer chunk
         if (buffer.trim()) {
           try {
             const lines = buffer.split('\n');
@@ -136,29 +127,27 @@ export const fetchFeedback = async (
                 if (jsonString) {
                   const data = JSON.parse(jsonString);
                   if (data.userMessage) {
-                    feedbackViewer.renderUserMessage(data.userMessage);
+                    eventEmitter.emit('aiUserMessage', data.userMessage);
                   } else if (data.content) {
-                    feedbackViewer.updateResponse(data.content);
+                    eventEmitter.emit('aiResponseChunk', data.content);
                   } else if (data.error) {
                     console.error("Received error via SSE:", data.error);
-                    feedbackViewer.showError(`Stream Error: ${data.error}`);
+                    eventEmitter.emit('aiError', `Stream Error: ${data.error}`);
                   }
                 }
               }
             }
           } catch (e) {
             console.error("Error processing final buffer chunk:", e, buffer);
+            eventEmitter.emit('aiError', `Error processing final stream data: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
-        feedbackViewer.finalizeResponse(); // Signal end of stream
+        eventEmitter.emit('aiFinalized');
         break;
       }
 
-      // Append new data to buffer and process line by line
       buffer += decoder.decode(value, { stream: true });
       let lines = buffer.split('\n');
-
-      // Keep the last partial line in the buffer
       buffer = lines.pop() || '';
 
       for (const line of lines) {
@@ -168,28 +157,58 @@ export const fetchFeedback = async (
             if (jsonString) {
               const data = JSON.parse(jsonString);
               if (data.userMessage) {
-                feedbackViewer.renderUserMessage(data.userMessage);
+                eventEmitter.emit('aiUserMessage', data.userMessage);
               } else if (data.content) {
-                feedbackViewer.updateResponse(data.content);
+                eventEmitter.emit('aiResponseChunk', data.content);
               } else if (data.error) {
                 console.error("Received error via SSE:", data.error);
-                feedbackViewer.showError(`Stream Error: ${data.error}`);
+                eventEmitter.emit('aiError', `Stream Error: ${data.error}`);
               }
             }
           } catch (e) {
             console.error("Error parsing SSE data line:", e, line);
+            eventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
           }
         } else if (line.trim() === '' && buffer.startsWith('data:')) {
-          // Handle potential empty line separating messages if needed, though OpenAI stream usually doesn't do this.
-          // If the buffer *only* contained 'data: ', this avoids erroring. Reset buffer.
-          // console.log("Empty line separator or incomplete data prefix.");
+          // Handle potential empty line separator
         }
       }
     }
 
   } catch (error) {
-    console.error("Error getting feedback:", error);
-    // Display error in the feedback viewer
-    feedbackViewer.showError(error instanceof Error ? error.message : String(error));
+    console.error("Error in fetchFeedbackBase:", error);
+    eventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
   }
+};
+
+/**
+ * Sends regular feedback (specific section or general prompt) to the /feedback endpoint.
+ */
+export const fetchFeedback = async (
+  _imageDataUrl: string | null, // Kept for signature compatibility, but not used in base
+  promptText: string,
+  selectedHtml: string | null
+): Promise<void> => {
+  // NOTE: _imageDataUrl is ignored here as the base function doesn't handle it.
+  // If image sending is needed for this specific endpoint later, logic must be added here.
+  const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/feedback`;
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml);
+};
+
+/**
+ * Sends a quick audit request to the /audit endpoint.
+ */
+export const fetchAudit = async (
+  promptText: string,
+  html: string | null // Audit specifically needs HTML
+): Promise<void> => {
+  const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/audit`;
+  // Ensure HTML is provided for audit
+  if (!html) {
+      const errorMsg = 'Cannot run audit: Missing required HTML content.';
+      console.error('[fetchAudit] HTML content is required for audit requests.');
+      eventEmitter.emit('aiError', errorMsg);
+      return;
+  }
+  return fetchFeedbackBase(apiUrl, promptText, html);
 };

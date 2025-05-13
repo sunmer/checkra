@@ -1,110 +1,118 @@
 import { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { FeedbackViewerImpl } from './feedback-viewer-impl';
+import { SettingsModal } from './settings-modal';
+import { eventEmitter } from '../core/index'; // Ensure this path is correct
 
-/**
- * Main class coordinating the Feedback Viewer's DOM and Logic.
- */
-class FeedbackViewerCoordinator {
-  private domManager: FeedbackViewerDOM;
-  private logicManager: FeedbackViewerImpl;
-  private isInitialized = false;
+const PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // Keep this key
 
-  constructor() {
-    this.domManager = new FeedbackViewerDOM();
-    this.logicManager = new FeedbackViewerImpl();
+export default class FeedbackViewer {
+  private feedbackViewerDOM: FeedbackViewerDOM;
+  private feedbackViewerImpl: FeedbackViewerImpl;
+  private settingsModal: SettingsModal;
+  private static instance: FeedbackViewer | null = null;
+
+  private constructor(settingsModal: SettingsModal) {
+    
+    console.log('[FeedbackViewer] Constructor called.');
+    this.feedbackViewerDOM = new FeedbackViewerDOM();
+    this.settingsModal = settingsModal;
+    this.feedbackViewerImpl = new FeedbackViewerImpl(this.handleToggle.bind(this));
+    this.feedbackViewerImpl.initialize(this.feedbackViewerDOM, this.settingsModal);
+
+    // --- Toast Logic --- 
+    try {
+      const panelWasClosed = localStorage.getItem(PANEL_CLOSED_BY_USER_KEY);
+      console.log(`[FeedbackViewer] Checked PANEL_CLOSED_BY_USER_KEY: ${panelWasClosed}`);
+      if (panelWasClosed === 'true') {
+        // Delay toast slightly to ensure page has settled
+        setTimeout(() => this.showAvailabilityToast(), 250);
+      }
+    } catch (e) {
+      console.warn('[FeedbackViewer] Failed to check localStorage for panel state:', e);
+    }
+    // --- End Toast Logic ---
+
+    console.log('[FeedbackViewer] Initialized.');
   }
 
-  private initializeIfNeeded(): void {
-    if (!this.isInitialized) {
-      const elements = this.domManager.create(); // Create DOM elements
-      this.logicManager.initialize(elements, this.domManager); // Initialize logic with elements and DOM manager ref
-      this.isInitialized = true;
-      console.log('[FeedbackViewerCoordinator] Initialized.');
+  public static getInstance(settingsModal: SettingsModal): FeedbackViewer {
+    if (!FeedbackViewer.instance) {
+      if (!settingsModal) {
+          console.error('[FeedbackViewer] getInstance called without settingsModal for new instance creation!');
+          throw new Error('SettingsModal instance is required to create a new FeedbackViewer instance.');
+      }
+      FeedbackViewer.instance = new FeedbackViewer(settingsModal);
+    }
+    return FeedbackViewer.instance;
+  }
+
+  private handleToggle(isVisible: boolean): void {
+    // This callback can be used for other components to react to visibility changes
+    console.log(`[FeedbackViewer] Panel visibility changed to: ${isVisible}`);
+    if (isVisible) {
+      eventEmitter.emit('viewerDidShow');
+    } else {
+      eventEmitter.emit('viewerDidHide');
+    }
+  }
+
+  // --- ADDED: Toast Method ---
+  private showAvailabilityToast(): void {
+    const toastId = 'checkra-availability-toast';
+    if (document.getElementById(toastId)) return; // Prevent multiple toasts
+
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const shortcutText = isMac ? '⌘ L' : 'Ctrl L';
+    toast.textContent = `Checkra is available. Use ${shortcutText} to open.`;
+
+    document.body.appendChild(toast);
+
+    // Force a reflow for the animation to apply correctly on add
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    toast.offsetHeight;
+
+    toast.classList.add('visible');
+
+    setTimeout(() => {
+      toast.classList.remove('visible');
+      toast.classList.add('hiding');
+      // Remove after fade out animation (e.g., 0.5s)
+      setTimeout(() => {
+        toast.remove();
+      }, 500); 
+    }, 2000); // Toast visible for 4.5s, then starts fading out
+  }
+
+  /**
+   * Shows the feedback viewer panel.
+   * This method might be called externally if direct control is needed.
+   */
+  public showPanel(): void {
+    if (!this.feedbackViewerImpl.getIsVisible()) {
+        this.feedbackViewerImpl.toggle(); // This will call showFromApi internally
     }
   }
 
   /**
-   * Shows the feedback input area, positioned relative to the target element.
-   * @param imageDataUrl - Base64 encoded image data URL or null.
-   * @param selectedHtml - The HTML string of the selected element or null.
-   * @param targetRect - The DOMRect of the target element for positioning.
-   * @param targetElement - The target DOM element itself.
+   * Hides the feedback viewer panel.
+   * This method might be called externally if direct control is needed.
    */
-  public showInputArea(
-    imageDataUrl: string | null,
-    selectedHtml: string | null,
-    targetRect: DOMRect | null,
-    targetElement: Element | null
-  ): void {
-    this.initializeIfNeeded();
-    this.logicManager.prepareForInput(imageDataUrl, selectedHtml, targetRect, targetElement);
-  }
-
-  /**
-   * Updates the response area with a chunk of streamed text.
-   * @param chunk - The text chunk received from the stream.
-   */
-  public updateResponse(chunk: string): void {
-    if (!this.isInitialized) {
-      console.warn("[FeedbackViewerCoordinator] updateResponse called before initialization.");
-      return;
+  public hidePanel(): void {
+    if (this.feedbackViewerImpl.getIsVisible()) {
+        this.feedbackViewerImpl.hide(false); // Programmatic hide
     }
-    this.logicManager.updateResponse(chunk);
-  }
-
-  /**
-   * Renders a prepended HTML message (e.g., warning, info) in a dedicated area.
-   * @param html - The HTML string to render.
-   */
-  public renderUserMessage(html: string): void {
-    if (!this.isInitialized) {
-      console.warn("[FeedbackViewerCoordinator] renderUserMessage called before initialization.");
-      // Initialize if needed, as this might be the first visible output
-      this.initializeIfNeeded();
-    }
-    this.logicManager.renderUserMessage(html);
-  }
-
-  /**
-   * Finalizes the response stream, enabling inputs and showing action buttons if applicable.
-   */
-  public finalizeResponse(): void {
-    if (!this.isInitialized) {
-      console.warn("[FeedbackViewerCoordinator] finalizeResponse called before initialization.");
-      return;
-    }
-    this.logicManager.finalizeResponse();
-  }
-
-  /**
-   * Displays an error message in the response area.
-   * @param error - The error message string or Error object.
-   */
-  public showError(error: Error | string): void {
-    // Allow showing errors even if initialization didn't fully complete via showInputArea
-    this.initializeIfNeeded();
-    this.logicManager.showError(error);
-  }
-
-  /**
-   * Hides the feedback viewer panel and resets its state.
-   */
-  public hide(): void {
-    if (!this.isInitialized) return; // Nothing to hide if not initialized
-    this.logicManager.hide();
   }
 
   /**
    * Destroys the feedback viewer instance, removing elements and listeners.
+   * Added to match the public API expected by src/core/index.ts
    */
   public destroy(): void {
-    if (!this.isInitialized) return;
-    this.logicManager.cleanup(); // Clean up logic listeners first
-    this.domManager.destroy();   // Then destroy DOM elements
-    this.isInitialized = false;
-    console.log('[FeedbackViewerCoordinator] Destroyed.');
+    this.feedbackViewerImpl.cleanup(); 
+    this.feedbackViewerDOM.destroy();   
+    FeedbackViewer.instance = null;
+    console.log('[FeedbackViewer] Destroyed.');
   }
-}
-
-// Export a single instance
-export const feedbackViewer = new FeedbackViewerCoordinator();
+} 

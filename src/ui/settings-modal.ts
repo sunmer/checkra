@@ -85,7 +85,7 @@ export class SettingsModal {
     const header = document.createElement('div');
 
     const title = document.createElement('h2');
-    title.textContent = 'AI Settings';
+    title.textContent = 'Settings';
 
     this.closeButton = document.createElement('button');
     this.closeButton.id = 'checkra-settings-modal-close'; // ADD ID for CSS targeting
@@ -233,15 +233,28 @@ export class SettingsModal {
       }
     };
 
+    // ADDED: Handler for clicking outside the modal content to close it
+    const boundOverlayClickHandler = (event: MouseEvent) => {
+      if (this.modalContainer && event.target === this.modalContainer) {
+        event.stopPropagation(); // Prevent click from reaching document listener
+        this.hideModal();
+      }
+    };
+
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
     this.temperatureSlider.addEventListener('input', this.boundTempSliderHandler);
+    // ADDED: Listener for overlay clicks
+    this.modalContainer?.addEventListener('click', boundOverlayClickHandler);
   }
 
   /**
    * Removes event listeners from the DOM elements.
    */
   private removeListeners(): void {
+    // NOTE: Need to properly remove the overlay click listener if we store its bound reference
+    // For now, it's added inline and will be removed when the DOM is destroyed.
+
     if (this.closeButton && this.boundHideModalHandler) {
       this.closeButton.removeEventListener('click', this.boundHideModalHandler);
       this.boundHideModalHandler = null;
