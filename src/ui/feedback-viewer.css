@@ -37,8 +37,8 @@
   background-color: transparent;
   padding: 0;
   border-radius: 0;
-  font-size: 14px;
-  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+  font-size: var(--checkra-base-font-size);
+  font-family: var(--checkra-base-font-stack);
 }
 
 #checkra-feedback-response-content .checkra-streamed-content ul,
@@ -165,28 +165,51 @@
 
 /* --- Viewer Layout & Header --- */
 #checkra-feedback-viewer {
+  all: initial; /* ADDED: Reset all inherited styles */
+
+  /* --- Re-declare essential properties after 'all: initial' --- */
+  display: flex;
+  flex-direction: column;
   position: fixed;
   top: 0;
   right: 0;
-  width: 300px;
+  width: 300px; /* Consider if this should be dynamic or use min/max */
   min-width: 300px;
   max-width: 450px;
   height: 100vh;
-  /* Full viewport height */
-  background: linear-gradient(rgb(2 3 6 / 80%), rgb(0 0 1 / 80%));
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(2px);
-  color: white;
+  background: linear-gradient(rgb(21 29 54 / 90%), rgb(4 6 9 / 95%));
+  backdrop-filter: blur(2px); /* May need -webkit-backdrop-filter for Safari */
+  color: white; /* Default text color for the viewer */
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
   z-index: 1002;
-  display: flex;
-  flex-direction: column;
-  /* Stack children vertically */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-  line-height: 1.5;
+  font-family: var(--checkra-base-font-stack);
+  line-height: 1.5; /* Base line height */
   border-left: 1px solid rgba(255, 255, 255, 0.1);
-  transition: transform 0.3s ease-in-out;
-  transform: translateX(100%);
+  box-sizing: border-box; /* Crucial for layout consistency */
+  transform: translateX(100%); /* For initial hidden state */
+  transition: transform 0.3s ease-in-out; /* For sliding animation */
+  padding: 5px 15px;
+  
+  /* Base font size variable */
+  --checkra-base-font-size: 12px; 
+  font-size: var(--checkra-base-font-size); 
+
+  /* ADDED: Base font stack variable */
+  --checkra-base-font-stack: 
+    "SF Mono", /* San Francisco Mono (macOS, newer) */
+    "Consolas", /* Windows (since Vista/Office 2007) - Very popular, clear */
+    "Menlo", /* macOS (older, still very good) */
+    "DejaVu Sans Mono", /* Linux - Very common and good */
+    "Liberation Mono", /* Linux - Another common and good one */
+    "Roboto Mono", /* Android, or if user has it installed */
+    -apple-system, /* Keep your existing UI fallbacks */
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    monospace, /* Final monospace fallback */
+    sans-serif; /* Absolute final fallback */
 }
 
 /* Add resizable border */
@@ -225,61 +248,66 @@
 
 #checkra-feedback-response-header {
   position: relative;
-  /* Change from absolute to relative for flexbox flow */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 15px 8px 15px;
-  /* background-color: rgba(40, 50, 80, 0.95); /* REMOVED - Use parent background */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  /* Keep border for separation */
   z-index: 10;
   min-height: 40px;
   box-sizing: border-box;
   flex-shrink: 0;
-  /* Header should not shrink */
 }
 
 #checkra-feedback-content-wrapper {
   flex-grow: 1;
-  /* Content wrapper takes available vertical space */
   overflow-y: auto;
-  /* Content scrolls */
-  padding: 15px 20px 20px 20px;
   box-sizing: border-box;
   width: 100%;
-  /* padding-top is handled by responseHeader height, no JS needed if header is static */
-  /* If header height can change, JS might be needed or more complex CSS */
+  position: relative; /* ADDED: For positioning the ::after pseudo-element */
 }
+
 
 /* --- Buttons & Inputs --- */
 #checkra-feedback-viewer button:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
-  background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
+/* --- MODIFIED Submit Button Styles (similar to mini-select) --- */
 #checkra-feedback-viewer #checkra-feedback-submit-button {
-  padding: 5px 8px;
-  height: 32px;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  background: #2563eb;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   color: white;
-  order: 1;
-  border-radius: 6px;
-  display: flex;
+  display: inline-flex; /* Changed from flex */
   align-items: center;
-  gap: 6px;
-  text-align: center;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border: none;
+  justify-content: center;
+  cursor: pointer;
+  background-color: #2563eb; /* Blue background */
+  user-select: none;
+  padding: 0; /* Remove padding */
+  box-sizing: border-box;
+  order: 2; /* Submit button comes after select button */
+  flex-shrink: 0;
+  border: none; /* Remove border */
+  /* REMOVED text/gap related styles */
+  /* padding: 5px 8px; */
+  /* gap: 6px; */
+  /* text-align: center; */
+  /* font-size: 0.875rem; */
+  /* font-weight: 500; */
 }
 
-#checkra-feedback-viewer #checkra-feedback-submit-button {
-  cursor: pointer;
+#checkra-feedback-viewer #checkra-feedback-submit-button svg {
+  width: 18px; /* Match mini-select */
+  height: 18px; /* Match mini-select */
 }
+
+#checkra-feedback-viewer #checkra-feedback-submit-button:hover:not(:disabled) {
+  background-color: #1d4ed8; /* Darker blue on hover */
+  opacity: 1;
+}
+
+/* REMOVED: Shortcut hint style */
+/* #checkra-feedback-viewer #checkra-feedback-submit-button span:last-child { ... } */
 
 #checkra-feedback-viewer #checkra-prompt-textarea {
   width: 100%;
@@ -291,36 +319,32 @@
   color: #333;
   border: 1px solid #ccc;
   border-radius: 4px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-  font-size: 14px;
+  font-family: var(--checkra-base-font-stack);
+  font-size: var(--checkra-base-font-size);
   resize: none;
   box-sizing: border-box;
   min-height: 80px;
   margin-bottom: 0;
+  flex-shrink: 0;
+  position: relative;
 }
 
 #checkra-feedback-viewer #checkra-textarea-container {
-  /* background-color: rgba(35, 45, 75, 0.95); /* REMOVED - Use parent background */
-  padding: 10px 15px 10px 15px;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
-  /* Keep border for separation */
   box-sizing: border-box;
   width: 100%;
   flex-shrink: 0;
   position: relative;
 }
 
-/* ADDED: New styles for the button row container */
 #checkra-button-row {
     display: flex;
-    justify-content: flex-end; /* Align buttons to the end (right) */
+    justify-content: flex-end;
     align-items: center;
     gap: 8px;
-    padding: 8px 10px; 
-    margin: 0 5px 5px 5px; 
     position: absolute;
-    bottom: 10px;
-    right: 10px;
+    bottom: 20px;
+    right: 20px;
 }
 
 #checkra-mini-select-btn {
@@ -400,7 +424,7 @@
 
 #checkra-feedback-action-buttons button {
   padding: 4px 10px;
-  font-size: 0.8rem;
+  font-size: 0.9em;
   border-radius: 0.3rem;
   cursor: pointer;
   color: white;
@@ -550,7 +574,7 @@
 /* ADDED: Base style for response content area */
 #checkra-feedback-response-content {
   word-wrap: break-word;
-  font-size: 14px;
+  font-size: var(--checkra-base-font-size);
   display: none;
   /* Initially hidden */
 }
@@ -569,7 +593,7 @@
 /* ADDED: Style for response title */
 #checkra-feedback-response-header h4 {
   color: #a0c8ff;
-  font-size: 14px;
+  font-size: var(--checkra-base-font-size);
   font-weight: 600;
   margin: 0;
 }
@@ -579,7 +603,7 @@
   color: #a0c8ff;
   margin-bottom: 8px;
   margin-top: 0;
-  font-size: 14px;
+  font-size: var(--checkra-base-font-size);
   font-weight: 600;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -616,7 +640,7 @@
   background: none;
   border: none;
   color: #aab8d4;
-  font-size: 24px;
+  font-size: calc(var(--checkra-base-font-size) * 1.71);
   font-weight: bold;
   cursor: pointer;
   padding: 0 5px;
@@ -735,8 +759,8 @@
   background-color: transparent;
   padding: 0;
   border-radius: 0;
-  font-size: 14px;
-  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+  font-size: var(--checkra-base-font-size);
+  font-family: var(--checkra-base-font-stack);
 }
 
 /* MODIFIED: Target elements within AI message bubbles */
@@ -811,14 +835,65 @@
   height: 14px;
 }
 
-/* Ensure shortcut hint style is maintained */
-#checkra-feedback-viewer #checkra-feedback-submit-button span:last-child {
-  margin-left: 0;
-  color: #e5e7eb;
-  font-size: 10px;
+/* --- ADDED: Onboarding Styles --- */
+.onboarding-button-representation {
+    display: inline-flex; /* Use inline-flex for alignment */
+    align-items: center;
+    justify-content: center;
+    width: 24px; /* Slightly smaller than real button */
+    height: 24px;
+    border-radius: 50%;
+    background-color: rgb(28 112 230); /* Match select button color */
+    color: white;
+    margin: 0 6px 0 0; /* Adjust spacing */
+    vertical-align: middle; /* Align with text */
+    pointer-events: none; /* Not clickable */
+    padding: 0; /* Ensure no extra padding */
+    box-sizing: border-box;
 }
 
-/* --- ADDED: Fade-in animation for applied fixes --- */
+.onboarding-button-representation svg {
+    width: 14px; /* Smaller icon */
+    height: 14px;
+    stroke: currentColor;
+}
+
+/* Style for the submit button representation */
+.onboarding-button-representation.submit-representation {
+    background-color: #2563eb; /* Match submit button color */
+}
+
+/* Style for onboarding buttons */
+.onboarding-button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 500;
+    transition: background-color 0.2s, opacity 0.2s;
+    background-color: #2563eb;
+    color: white;
+}
+
+.onboarding-button:hover {
+    opacity: 0.9;
+    background-color: #1d4ed8;
+}
+
+/* ADDED: Style for the link-like audit button in onboarding */
+.onboarding-link-button {
+  color: #a0c8ff;
+  margin-top: 8px;
+  display: block;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.onboarding-link-button:hover {
+  color: #cce0ff; /* Lighter blue on hover */
+}
+
 @keyframes checkraFadeIn {
   from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -826,4 +901,36 @@
 
 .checkra-fix-fade-in {
   animation: checkraFadeIn 0.5s ease-out forwards;
+}
+
+#checkra-availability-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #333;
+  color: #eee; /* Light text */
+  padding: 10px 20px;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  z-index: 2000; /* Ensure it's above most page content */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+  white-space: nowrap;
+}
+
+#checkra-availability-toast.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#checkra-availability-toast.hiding {
+  opacity: 0;
+  visibility: hidden;
+}
+
+#checkra-feedback-submit-button:disabled {
+  cursor: not-allowed;
 }

@@ -1,4 +1,5 @@
 import { initCheckra } from './core/index';
+import './core/shortcut-handler';
 import { CheckraOptions } from './types';
 
 // Re-export core functions and types
@@ -61,6 +62,3 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     initialize();
   }
 }
-
-// Initialize the core functionality
-initCheckra();

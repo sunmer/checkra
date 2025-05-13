@@ -2,7 +2,6 @@ import { CheckraOptions } from '../types';
 import { AiSettings as CoreAiSettings } from '../ui/settings-modal';
 import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
-import '../ui/shortcut-handler';
 import { EventEmitter } from './event-emitter';
 
 // --- Module-level instance variable ---
