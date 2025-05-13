@@ -810,60 +810,69 @@
     });
   </script>
 
-  <!-- ADDED: Script to attach click listener to the button -->
-  <script type="module"> // Changed to module to ensure it runs after other module scripts if any race conditions
-    function setupButton() {
-        const feedbackButton = document.getElementById('get-instant-feedback-btn');
-        if (feedbackButton) {
-            feedbackButton.addEventListener('click', () => {
-                if (window.checkraApiInstance && typeof window.checkraApiInstance.showFeedback === 'function') {
-                    window.checkraApiInstance.showFeedback();
-                } else {
-                    console.error('Checkra API not ready or showFeedback method not available when button clicked.');
-                }
-            });
-            console.log('[Demo Page] Button listener setup complete.');
+  <!-- REVISED: Script to attach click listener to the "Get instant feedback" button -->
+  <script type="module">
+    function setupGetInstantFeedbackButton() {
+      const button = document.getElementById('get-instant-feedback-btn');
+      if (!button) {
+        console.warn('[Demo Page] #get-instant-feedback-btn not found during setup.');
+        return;
+      }
+
+      // Prevent multiple listeners
+      if (button.hasAttribute('data-checkra-listener-attached')) {
+        return;
+      }
+
+      button.addEventListener('click', () => {
+        if (window.checkraApiInstance && typeof window.checkraApiInstance.showFeedback === 'function') {
+          window.checkraApiInstance.showFeedback();
         } else {
-            console.warn('[Demo Page] get-instant-feedback-btn not found for setup.');
+          console.error('Checkra API not available when "Get instant feedback" button clicked. API Instance:', window.checkraApiInstance);
+          // Attempt to initialize and call again IF UMD global is present but API instance is not
+          if (window.checkra && typeof window.checkra.initCheckra === 'function' && !window.checkraApiInstance) {
+            console.log('[Demo Page] Attempting late Checkra initialization from button click...');
+            window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false });
+            if (window.checkraApiInstance && typeof window.checkraApiInstance.showFeedback === 'function') {
+              console.log('[Demo Page] Late init successful, calling showFeedback.');
+              window.checkraApiInstance.showFeedback();
+            } else {
+              console.error('[Demo Page] Late init failed or showFeedback still not available.');
+            }
+          }
         }
+      });
+      button.setAttribute('data-checkra-listener-attached', 'true');
+      console.log('[Demo Page] Listener for #get-instant-feedback-btn attached.');
     }
 
-    if (import.meta.env.DEV) {
-        // For DEV, API instance is set in its own module script. We need to ensure this runs after.
-        // A simple timeout or observing window.checkraApiInstance might be needed if race conditions persist.
-        // Or better, the dev script should call a setup function like this once API is ready.
-        // For now, let's assume DOMContentLoaded on the *other* script is enough, or a slight delay.
+    if (window.checkraApiInstance) {
+      setupGetInstantFeedbackButton();
+    } else {
+      document.addEventListener('checkraApiReady', setupGetInstantFeedbackButton, { once: true });
+      if (import.meta.env.DEV) {
         document.addEventListener('DOMContentLoaded', () => {
-            // Attempt to set up, relying on the other dev script to have populated window.checkraApiInstance
-            if (window.checkraApiInstance) {
-                 setupButton();
+          if (window.checkraApiInstance) {
+            setupGetInstantFeedbackButton();
+          } else {
+            console.warn('[Demo Page - Dev] API not ready on DOMContentLoaded for button setup. Dev init script might be slow or failing.');
+          }
+        });
+      }
+      // For non-DEV (UMD), if checkraApiReady hasn't fired by DOMContentLoaded, 
+      // it means the script is slow. The checkraApiReady listener is primary.
+      // A DOMContentLoaded fallback for UMD if API is somehow ready but event missed is implicitly handled by the first `if (window.checkraApiInstance)`
+      // No, let's add a DOMContentLoaded check for UMD too for robustness, as the event might be tricky.
+      else { // Non-DEV (UMD path)
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.checkraApiInstance) { // Check if UMD load completed before DOMContentLoaded fully processed this
+                setupGetInstantFeedbackButton();
             } else {
-                // Fallback if the main dev init script is slower
-                console.log('[Demo Page - Dev Button Setup] API not yet ready, will retry shortly or on API ready event.');
-                // Listen for the UMD ready event as a fallback here too, though ideally dev path handles it.
-                document.addEventListener('checkraApiReady', setupButton, { once: true });
-                 // Simple retry as a fallback for dev mode
-                setTimeout(() => {
-                    if (window.checkraApiInstance && !feedbackButton.hasAttribute('listener-attached')) {
-                        setupButton();
-                        feedbackButton.setAttribute('listener-attached', 'true');
-                    }
-                }, 500);
+                // If still not ready, the 'checkraApiReady' is the main hope.
+                console.log('[Demo Page - UMD] API not yet ready on DOMContentLoaded, relying on checkraApiReady event.');
             }
         });
-    } else {
-        // For UMD (preprod/prod), wait for our custom event or DOMContentLoaded
-        if (window.checkraApiInstance) {
-            setupButton(); // API ready before this script runs
-        } else {
-            document.addEventListener('checkraApiReady', setupButton, { once: true });
-            document.addEventListener('DOMContentLoaded', () => { // Fallback
-                if (window.checkraApiInstance && !document.getElementById('get-instant-feedback-btn').hasAttribute('listener-attached')) {
-                    setupButton();
-                    document.getElementById('get-instant-feedback-btn').setAttribute('listener-attached', 'true');
-                }
-            });
-        }
+      }
     }
   </script>
 </body>
