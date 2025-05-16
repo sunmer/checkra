@@ -6,6 +6,7 @@ import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
+// REMOVED: import { generateDalleImage } from '../services/ai-service'; 
 
 // ADDED: Conversation History Types and Constants
 interface ConversationItem {
@@ -29,6 +30,8 @@ const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/
 // ADDED: SVG Icon Constants
 const DISPLAY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const HIDE_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
+// REMOVED: const REGENERATE_SVG = \`...\`;
+// REMOVED: const BROKEN_IMAGE_SVG = \`...\`;
 
 // --- Interface for Applied Fix Data ---
 interface AppliedFixInfo {
@@ -99,8 +102,11 @@ export class FeedbackViewerImpl {
   private boundShowFromApi = this.showFromApi.bind(this); // ADDED: Bound method for API show
   private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
 
-  // ADDED: Conversation history state
+  // --- ADDED: Conversation history state
   private conversationHistory: ConversationItem[] = [];
+
+  // ADDED: Handler for image generation status
+  private boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
 
   // Need to add onboardingListeners property to the class
   private onboardingListeners: { runAudit: () => void; } | null = null;
@@ -151,6 +157,9 @@ export class FeedbackViewerImpl {
     eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
     eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
 
+    // ADDED: Subscribe to image generation start event
+    eventEmitter.on('aiImageGenerationStart', this.boundHandleImageGenerationStart);
+
     console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
   }
@@ -197,6 +206,9 @@ export class FeedbackViewerImpl {
     eventEmitter.off('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
+
+    // ADDED: Unsubscribe from image generation start event
+    eventEmitter.off('aiImageGenerationStart', this.boundHandleImageGenerationStart);
 
     this.domElements = null;
     this.domManager = null;
@@ -292,7 +304,13 @@ export class FeedbackViewerImpl {
       // Update DOM for the streaming content by calling the new DOM method
       this.domManager.updateLastAIMessage(lastItem.content, true);
 
+      // --- ADDED: Process DALL-E images in the streamed content ---
+      // REMOVED: if (this.domElements.contentWrapper) { ... }
+      // --- END ADDED ---
+
       const hasHtmlCode = GENERIC_HTML_REGEX.test(lastItem.content);
+      // Hide image generation status if general content starts streaming
+      this.domManager.showImageGenerationStatus(false);
       this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Getting feedback...');
       this.saveHistory();
     } else {
@@ -307,7 +325,7 @@ export class FeedbackViewerImpl {
     const lastItem = this.conversationHistory[this.conversationHistory.length - 1];
     if (lastItem && lastItem.type === 'ai' && lastItem.isStreaming) {
       lastItem.isStreaming = false;
-      this.extractAndStoreFixHtml();
+      this.extractAndStoreFixHtml(); // This might modify the content
       if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
         lastItem.fix = {
           originalHtml: this.originalOuterHTMLForCurrentCycle,
@@ -317,7 +335,13 @@ export class FeedbackViewerImpl {
       }
       this.saveHistory();
       // Update the DOM for the finalized message (no longer streaming)
+      // This call should ensure the final HTML (potentially with new image placeholders) is in the DOM
       this.domManager.updateLastAIMessage(lastItem.content, false);
+
+      // --- ADDED: Process DALL-E images in the final content ---
+      // REMOVED: if (this.domElements.contentWrapper) { ... }
+      // --- END ADDED ---
+
     } else {
       console.warn('[FeedbackViewerImpl] finalizeResponse called but no AI message was streaming or found.');
     }
@@ -325,6 +349,8 @@ export class FeedbackViewerImpl {
     this.domManager.updateLoaderVisibility(false);
     this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true);
+    // ADDED: Hide image generation status when response is finalized
+    this.domManager.showImageGenerationStatus(false);
 
     if (this.isQuickAuditRun) {
       this.showFooterCTALogic();
@@ -768,6 +794,10 @@ export class FeedbackViewerImpl {
       wrapper.appendChild(closeBtn);
       wrapper.appendChild(copyBtn);
       wrapper.appendChild(toggleBtn);
+
+      // --- ADDED: Process DALL-E images within the applied fix content ---
+      // REMOVED: this.detectAndProcessImagePlaceholders(contentContainer);
+      // --- END ADDED ---
 
       insertionParent.insertBefore(wrapper, insertionBeforeNode);
       console.log(`[FeedbackViewerLogic] Inserted permanent wrapper for ${fixId}.`);
@@ -1215,5 +1245,15 @@ ${aboveFoldHtml}
       this.currentlyHighlightedElement = null;
       console.log('[FeedbackViewerLogic] Removed selection highlight.');
     }
+  }
+
+  // ADDED: Handler for aiImageGenerationStart event
+  private handleImageGenerationStart(data: { prompt?: string }): void {
+    if (!this.domManager) return;
+    console.log('[FeedbackViewerImpl] AI Image Generation Started. Prompt:', data.prompt);
+    // Hide general loading indicator if it's showing
+    this.domManager.updateLoaderVisibility(false);
+    // Show image generation specific status
+    this.domManager.showImageGenerationStatus(true, data.prompt);
   }
 }

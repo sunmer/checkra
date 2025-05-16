@@ -287,13 +287,7 @@
   box-sizing: border-box;
   order: 2; /* Submit button comes after select button */
   flex-shrink: 0;
-  border: none; /* Remove border */
-  /* REMOVED text/gap related styles */
-  /* padding: 5px 8px; */
-  /* gap: 6px; */
-  /* text-align: center; */
-  /* font-size: 0.875rem; */
-  /* font-weight: 500; */
+  border: none; 
 }
 
 #checkra-feedback-viewer #checkra-feedback-submit-button svg {
@@ -305,9 +299,6 @@
   background-color: #1d4ed8; /* Darker blue on hover */
   opacity: 1;
 }
-
-/* REMOVED: Shortcut hint style */
-/* #checkra-feedback-viewer #checkra-feedback-submit-button span:last-child { ... } */
 
 #checkra-feedback-viewer #checkra-prompt-textarea {
   width: 100%;
@@ -662,7 +653,7 @@
 
 /* --- ADDED: Conversation History Bubble Styles --- */
 .checkra-message-bubble {
-  padding: 10px 15px;
+  padding: 10px 0;
   border-radius: 12px;
   margin-bottom: 10px;
   max-width: 90%;
@@ -676,16 +667,9 @@
   color: white;
   margin-left: auto;
   border-bottom-right-radius: 2px;
+  padding: 10px;
+  max-width: 80%;
 }
-
-.message-ai {
-  background-color: #374151;
-  color: #e5e7eb;
-  margin-right: auto;
-  border-bottom-left-radius: 2px;
-}
-
-.message-ai.streaming {}
 
 .message-error {
   background-color: #4d1b1b;
@@ -693,6 +677,7 @@
   border: 1px solid #8f2d2d;
   margin-right: auto;
   border-radius: 4px;
+  padding: 10px;
 }
 
 .message-usermessage {
@@ -766,13 +751,12 @@
 /* MODIFIED: Target elements within AI message bubbles */
 .checkra-message-bubble.message-ai ul,
 .checkra-message-bubble.message-ai ol {
-  padding-left: 20px;
   margin-bottom: 1em;
 }
 
 /* MODIFIED: Target elements within AI message bubbles */
 .checkra-message-bubble.message-ai li {
-  margin-bottom: 0.4em;
+  margin-bottom: 15px;
 }
 
 /* ADDED: Styles for the code block copy button - MODIFIED selectors */
