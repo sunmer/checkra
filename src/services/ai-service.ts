@@ -203,6 +203,7 @@ const fetchFeedbackBase = async (
   try {
     const metadata = await getPageMetadata();
     const currentAiSettings = getCurrentAiSettings();
+    console.log('[AI Service] Using AiSettings for request (fetchFeedbackBase):', currentAiSettings); // DEBUG LOG
 
     const requestBody: {
       // No image field needed here as it's handled by the caller if necessary
@@ -219,6 +220,7 @@ const fetchFeedbackBase = async (
     if (selectedHtml) {
       requestBody.html = selectedHtml;
     }
+    console.log('[AI Service] Full request body (fetchFeedbackBase):', requestBody); // DEBUG LOG
 
     const currentApiKey = getEffectiveApiKey();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -400,6 +402,7 @@ export const generateDalleImage = async (
 
   try {
     const currentAiSettings = getCurrentAiSettings(); 
+    console.log('[AI Service] Using AiSettings for request (generateDalleImage):', currentAiSettings); // DEBUG LOG
     const metadata = await getPageMetadata(); 
 
     const requestBody: DalleImageRequest & { aiSettings?: AiSettings; metadata?: PageMetadata } = { 
@@ -411,6 +414,7 @@ export const generateDalleImage = async (
     if (size) {
       requestBody.size = size;
     }
+    console.log('[AI Service] Full request body (generateDalleImage):', requestBody); // DEBUG LOG
 
     const currentApiKey = getEffectiveApiKey();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };

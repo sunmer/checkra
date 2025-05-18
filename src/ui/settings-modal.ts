@@ -160,7 +160,7 @@ export class SettingsModal {
 
     if (this.modelSelect) {
       this.modelSelect.innerHTML = '';
-      const modelOptions = ['gpt-4o', 'gpt-4o-mini'];
+      const modelOptions = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'];
       modelOptions.forEach(optionText => {
         const option = document.createElement('option');
         option.value = optionText.toLowerCase().replace(/ /g, '-');
@@ -218,6 +218,7 @@ export class SettingsModal {
     this.boundModelChangeHandler = (event: Event) => {
       const selectedModel = (event.target as HTMLSelectElement).value;
       this.currentSettings.model = selectedModel;
+      console.log('[SettingsModal] Model changed to:', this.currentSettings.model); // DEBUG LOG
     };
     this.boundTempSliderHandler = (event: Event) => {
       const slider = event.target as HTMLInputElement;
@@ -300,6 +301,7 @@ export class SettingsModal {
     if (!this.currentSettings.model) {
       this.currentSettings.model = 'gpt-4o';
     }
+    console.log('[SettingsModal] getCurrentSettings returning:', this.currentSettings); // DEBUG LOG
     return { ...this.currentSettings };
   }
 

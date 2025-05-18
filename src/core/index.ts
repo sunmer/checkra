@@ -38,7 +38,9 @@ export function getEffectiveApiKey(): string | null {
  */
 export function getCurrentAiSettings(): CoreAiSettings {
   if (settingsModalInstance) {
-    return settingsModalInstance.getCurrentSettings();
+    const settings = settingsModalInstance.getCurrentSettings();
+    console.log('[Core] getCurrentAiSettings fetched from modal:', settings); // DEBUG LOG
+    return settings;
   } else {
     // Return default settings if the instance isn't available
     console.warn('[Checkra Core] SettingsModal instance not available, returning default AI settings.');

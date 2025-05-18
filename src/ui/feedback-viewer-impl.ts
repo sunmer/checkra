@@ -6,6 +6,9 @@ import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
+import { generateStableSelector } from '../utils/selector-utils'; // ADDED
+import { API_BASE } from '../config'; // ADDED: For /publish
+import { getSiteId } from '../utils/id'; // ADDED: For /publish
 // REMOVED: import { generateDalleImage } from '../services/ai-service'; 
 
 // ADDED: Conversation History Types and Constants
@@ -35,11 +38,12 @@ const HIDE_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height=
 
 // --- Interface for Applied Fix Data ---
 interface AppliedFixInfo {
-  originalElementId: string; // Unique ID assigned to the element
+  originalElementId: string; // Unique ID assigned to the element (session-specific data-checkra-fix-id)
   originalOuterHTML: string; // Store the full outerHTML (might represent multiple siblings)
   fixedOuterHTML: string; // Store the full outerHTML suggested by AI (might represent multiple siblings)
   appliedWrapperElement: HTMLDivElement | null; // Reference to the '.checkra-feedback-applied-fix' wrapper
   isCurrentlyFixed: boolean; // Tracks if the displayed version in the wrapper is the fix
+  stableTargetSelector: string; // ADDED: A stable selector for the original element
 }
 
 // Helper function to get head metadata (can be moved to a utils file)
@@ -76,6 +80,7 @@ export class FeedbackViewerImpl {
   private originalOuterHTMLForCurrentCycle: string | null = null; // Store the initial HTML of the selected element
   private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
   private currentFixId: string | null = null; // Unique ID for the element being worked on
+  private stableSelectorForCurrentCycle: string | null = null; // ADDED: Stable selector for the current cycle
   private fixIdCounter: number = 0; // Counter for generating unique IDs
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
@@ -250,6 +255,16 @@ export class FeedbackViewerImpl {
     this.currentImageDataUrl = imageDataUrl;
     this.initialSelectedElement = targetElement || document.body; // Fallback to body
 
+    // ADDED: Generate and store stable selector for the initial element
+    if (this.initialSelectedElement) {
+      this.stableSelectorForCurrentCycle = generateStableSelector(this.initialSelectedElement);
+      console.log(`[Impl.prepareForInput] Generated stable selector for ${this.initialSelectedElement.tagName}: ${this.stableSelectorForCurrentCycle}`);
+    } else {
+      this.stableSelectorForCurrentCycle = 'body'; // Fallback for body or null element
+      console.log(`[Impl.prepareForInput] Using default stable selector: body`);
+    }
+    // END ADDED
+
     if (selectedHtml && targetElement) {
       this.originalOuterHTMLForCurrentCycle = selectedHtml;
       console.log(`[Impl.prepareForInput] USING specific selectedHtml for ${targetElement.tagName}, length: ${selectedHtml.length}`);
@@ -366,11 +381,16 @@ export class FeedbackViewerImpl {
     if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
       const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
       if (lastAiItem && lastAiItem.fix) { // Ensure fix data is stored with AI message
-        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml);
+        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, this.stableSelectorForCurrentCycle || undefined);
       } else {
         // Fallback or log error if fix data not found with AI message
         console.warn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
-        this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle);
+        // Ensure stableSelectorForCurrentCycle is available if applying directly from current cycle state
+        if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle) {
+            this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, this.stableSelectorForCurrentCycle || undefined);
+        } else {
+            console.error('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
+        }
       }
     }
   }
@@ -457,6 +477,15 @@ export class FeedbackViewerImpl {
     if (!promptText) {
       this.showError('Please enter a description or question.');
       return;
+    }
+
+    const trimmedLowerCasePrompt = promptText.toLowerCase();
+    if (trimmedLowerCasePrompt === '/publish') {
+      console.log("[FeedbackViewerLogic] /publish command detected. Calling publishSnapshot().");
+      this.publishSnapshot(); // Call the new publish method
+      this.domManager.setPromptState(true, ''); 
+      this.domManager.updateSubmitButtonState(true);
+      return; 
     }
 
     console.log(`[FeedbackViewerLogic] Submitting feedback for Fix ID: ${this.currentFixId}...`);
@@ -743,8 +772,8 @@ export class FeedbackViewerImpl {
   }
 
   // --- ADDED: New method to directly apply the fix to the page --- 
-  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string): void {
-    console.log(`[FeedbackViewerLogic] Applying fix directly to page for Fix ID: ${fixId}`);
+  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, stableSelector?: string): void {
+    console.log(`[FeedbackViewerLogic] Applying fix directly to page for Fix ID: ${fixId}. Stable Selector: ${stableSelector || 'Not Provided (will use current cycle)'}`);
     if (!this.domManager || !this.domElements) {
       console.warn('[FeedbackViewerLogic] Cannot apply fix: Missing DOM Manager or elements.');
       return;
@@ -802,15 +831,23 @@ export class FeedbackViewerImpl {
       insertionParent.insertBefore(wrapper, insertionBeforeNode);
       console.log(`[FeedbackViewerLogic] Inserted permanent wrapper for ${fixId}.`);
 
+      const finalStableSelector = stableSelector || this.stableSelectorForCurrentCycle;
+      if (!finalStableSelector) {
+        console.error(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}. Cannot reliably apply or store fix.`);
+        this.showError(`Failed to apply fix: Stable target selector missing for fix ${fixId}.`);
+        return;
+      }
+
       const fixInfo: AppliedFixInfo = {
-        originalElementId: fixId,
+        originalElementId: fixId, // Session-specific ID
         originalOuterHTML: originalHtml,
         fixedOuterHTML: fixedHtml,
         appliedWrapperElement: wrapper,
-        isCurrentlyFixed: true
+        isCurrentlyFixed: true,
+        stableTargetSelector: finalStableSelector // Use the determined stable selector
       };
       this.appliedFixes.set(fixId, fixInfo);
-      console.log(`[FeedbackViewerLogic] Stored applied fix info for ${fixId}`);
+      console.log(`[FeedbackViewerLogic] Stored applied fix info for ${fixId} with stable selector: ${finalStableSelector}`);
 
       const listeners = {
         close: (e: Event) => this.handleAppliedFixClose(fixId, e),
@@ -826,6 +863,7 @@ export class FeedbackViewerImpl {
       // to prevent re-application on next finalizeResponse without new AI feedback.
       this.fixedOuterHTMLForCurrentCycle = null;
       // The currentFixId and originalOuterHTMLForCurrentCycle remain as they define the *current context*.
+      // ADDED: The stableSelectorForCurrentCycle also remains as part of the current context.
 
       // Optionally, clear the main prompt and AI response area in the panel after successful application.
       // this.domManager?.setPromptState(true, '');
@@ -1255,5 +1293,84 @@ ${aboveFoldHtml}
     this.domManager.updateLoaderVisibility(false);
     // Show image generation specific status
     this.domManager.showImageGenerationStatus(true, data.prompt);
+  }
+
+  // RENAMED and REIMPLEMENTED: from exportSnapshot and sendSnapshotToBackend
+  public async publishSnapshot(): Promise<void> {
+    if (this.appliedFixes.size === 0) {
+      console.warn("[FeedbackViewerImpl] No fixes applied. Nothing to publish.");
+      this.renderUserMessage("No changes have been applied to publish.");
+      return;
+    }
+
+    const changes = Array.from(this.appliedFixes.values()).map(fixInfo => {
+      return {
+        targetSelector: fixInfo.stableTargetSelector,
+        appliedHtml: fixInfo.fixedOuterHTML,
+        sessionFixId: fixInfo.originalElementId 
+      };
+    });
+
+    const siteId = getSiteId();
+    const snapshotId = crypto.randomUUID();
+
+    const snapshotData = {
+      siteId:      siteId,
+      snapshotId:  snapshotId, 
+      timestamp:   new Date().toISOString(),
+      pageUrl:     window.location.href,
+      changes:     changes,
+    };
+
+    console.log("[FeedbackViewerImpl] Snapshot data for /publish prepared:", snapshotData);
+    
+    const publishUrl = `${API_BASE}/sites/${siteId}/snapshots`;
+    console.log(`[FeedbackViewerImpl] Publishing snapshot to: ${publishUrl}`);
+
+    try {
+      this.renderUserMessage("Publishing snapshot..."); // Inform user
+      const response = await fetch(publishUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add any necessary Authorization headers if your API requires them
+          // 'Authorization': `Bearer ${getEffectiveApiKey()}` 
+        },
+        body: JSON.stringify(snapshotData),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        let specificErrorMessage = `Publishing failed: ${response.status} ${response.statusText}`;
+        try {
+            const errorJson = JSON.parse(errorBody);
+            if (errorJson && errorJson.message) { // Or errorJson.error, depending on your API
+                specificErrorMessage += ` - ${errorJson.message}`;
+            }
+        } catch (parseErr) {
+            specificErrorMessage += ` - ${errorBody}`;
+        }
+        throw new Error(specificErrorMessage);
+      }
+
+      const result = await response.json(); // Expected: { variantId, cdnUrl }
+      console.log("[FeedbackViewerImpl] Snapshot successfully published:", result);
+      
+      if (result.variantId) {
+        const shareUrl = `${window.location.origin}${window.location.pathname}?v=${result.variantId}`;
+        console.log("[FeedbackViewerImpl] Share URL:", shareUrl);
+        this.renderUserMessage(`Snapshot published! Share URL (also in console): <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
+      } else {
+        console.warn("[FeedbackViewerImpl] Publish successful, but variantId missing in response:", result);
+        this.renderUserMessage("Snapshot published, but could not generate share link (variantId missing).");
+      }
+
+    } catch (error) {
+      console.error("[FeedbackViewerImpl] Error publishing snapshot:", error);
+      // Optionally, inform the user of the error via UI
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during publishing.";
+      this.showError(`Failed to publish snapshot: ${errorMessage}`);
+      this.renderUserMessage(`Error: ${errorMessage}`); // Also show in chat
+    }
   }
 }
