@@ -1,5 +1,4 @@
 import { fetchFeedback, fetchAudit } from '../services/ai-service';
-// import { marked } from 'marked'; // REMOVED - Not used here
 import { copyViewportToClipboard } from '../utils/clipboard-utils';
 import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
