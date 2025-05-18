@@ -64,8 +64,6 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
   }
 };
 // --- END MOVED ---
-
-// --- ADDED: DALL-E Image Generation Types ---
 interface DalleImageRequest {
   prompt: string;
   size?: string;
@@ -74,7 +72,6 @@ interface DalleImageRequest {
 interface DalleImageResponse {
   url: string;
 }
-// --- END ADDED ---
 
 interface PageMetadata {
   title: string | null;
@@ -87,12 +84,10 @@ interface PageMetadata {
     width: number;
     height: number;
   };
-  // --- ADDED: Brand color information ---
   brand?: {
     primary?: string | null;
     accent?: string | null;
   };
-  // --- END ADDED ---
 }
 
 /**
@@ -117,8 +112,6 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
     width: window.innerWidth,
     height: window.innerHeight,
   };
-
-  // --- Added Metadata ---
   metadata.url = window.location.href;
   metadata.language = document.documentElement.lang || null;
   const h1Tag = document.querySelector('h1');
@@ -170,8 +163,6 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   } catch (e) {
     console.warn('[Checkra Service] Could not retrieve brand colors:', e);
   }
-
-  // --- ADDED: Screenshot-based color extraction if other methods incomplete ---
   if (!metadata.brand?.primary || !metadata.brand?.accent) {
     console.log('[Checkra Service] Attempting screenshot-based color extraction...');
     const screenshotColors = await extractColorsFromElement(document.body);
@@ -187,7 +178,6 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
       }
     }
   }
-  // --- END ADDED ---
 
   return metadata as PageMetadata;
 };
@@ -366,26 +356,6 @@ export const fetchFeedback = async (
   const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/feedback`;
   return fetchFeedbackBase(apiUrl, promptText, selectedHtml);
 };
-
-/**
- * Sends a quick audit request to the /audit endpoint.
- */
-export const fetchAudit = async (
-  promptText: string,
-  html: string | null // Audit specifically needs HTML
-): Promise<void> => {
-  const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/audit`;
-  // Ensure HTML is provided for audit
-  if (!html) {
-      const errorMsg = 'Cannot run audit: Missing required HTML content.';
-      console.error('[fetchAudit] HTML content is required for audit requests.');
-      eventEmitter.emit('aiError', errorMsg);
-      return;
-  }
-  return fetchFeedbackBase(apiUrl, promptText, html);
-};
-
-// --- ADDED: Function to generate DALL-E images ---
 /**
  * Calls the backend to generate an image using DALL-E.
  * @param prompt The text prompt for image generation.
@@ -468,4 +438,3 @@ export const generateDalleImage = async (
     throw error; 
   }
 };
-// --- END ADDED ---

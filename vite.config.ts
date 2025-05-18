@@ -60,7 +60,13 @@ export default defineConfig(({ command, mode }) => {
             }
           },
           emptyOutDir: true, // Clean the dist directory before building
-          minify: true, // Minify library build
+          minify: 'terser', // Explicitly use terser, can also be true by default
+          terserOptions: {
+            compress: {
+              drop_console: true,
+              drop_debugger: true
+            }
+          }
         },
         plugins: [
           dts({

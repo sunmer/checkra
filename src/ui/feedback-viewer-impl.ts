@@ -1,4 +1,4 @@
-import { fetchFeedback, fetchAudit } from '../services/ai-service';
+import { fetchFeedback } from '../services/ai-service';
 import { copyViewportToClipboard } from '../utils/clipboard-utils';
 import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
@@ -8,9 +8,6 @@ import { eventEmitter } from '../core/index';
 import { generateStableSelector } from '../utils/selector-utils'; // ADDED
 import { API_BASE } from '../config'; // ADDED: For /publish
 import { getSiteId } from '../utils/id'; // ADDED: For /publish
-// REMOVED: import { generateDalleImage } from '../services/ai-service'; 
-
-// ADDED: Conversation History Types and Constants
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
   content: string;
@@ -28,12 +25,8 @@ const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s
 const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
 // Regex for finding SVG placeholders during restoration - UPDATED
 const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/svg>/g;
-
-// ADDED: SVG Icon Constants
 const DISPLAY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const HIDE_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
-// REMOVED: const REGENERATE_SVG = \`...\`;
-// REMOVED: const BROKEN_IMAGE_SVG = \`...\`;
 
 // --- Interface for Applied Fix Data ---
 interface AppliedFixInfo {
@@ -90,9 +83,7 @@ export class FeedbackViewerImpl {
   private appliedFixListeners: Map<string, { close: EventListener; copy: EventListener; toggle: EventListener }> = new Map();
 
   // --- Listeners ---
-  // REMOVED: private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
-  private isQuickAuditRun: boolean = false;
   private footerSelectListener: (() => void) | null = null; // Listener for footer button
 
   private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
@@ -105,15 +96,8 @@ export class FeedbackViewerImpl {
   private boundToggle = this.toggle.bind(this); // ADDED: Bound toggle method
   private boundShowFromApi = this.showFromApi.bind(this); // ADDED: Bound method for API show
   private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
-
-  // --- ADDED: Conversation history state
   private conversationHistory: ConversationItem[] = [];
-
-  // ADDED: Handler for image generation status
   private boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
-
-  // Need to add onboardingListeners property to the class
-  private onboardingListeners: { runAudit: () => void; } | null = null;
 
   constructor(private onToggleCallback: (isVisible: boolean) => void) {
     console.log('[FeedbackViewerImpl] Constructor called.');
@@ -136,8 +120,6 @@ export class FeedbackViewerImpl {
     this.domElements = domManager.create(handleClose);
     this.domManager = domManager; // Store reference to DOM manager
     this.settingsModal = settingsModal;
-
-    // ADDED: Load conversation history
     this.loadHistory();
     if (this.domManager && this.conversationHistory.length > 0) {
       this.domManager.renderFullHistory(this.conversationHistory);
@@ -152,16 +134,12 @@ export class FeedbackViewerImpl {
 
     // Add listener for settings button
     this.domElements.settingsButton?.addEventListener('click', this.handleSettingsClick);
-
-    // ADDED: Subscribe to AI service events using BOUND methods
     eventEmitter.on('aiResponseChunk', this.boundUpdateResponse);
     eventEmitter.on('aiUserMessage', this.boundRenderUserMessage);
     eventEmitter.on('aiError', this.boundShowError);
     eventEmitter.on('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
     eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
-
-    // ADDED: Subscribe to image generation start event
     eventEmitter.on('aiImageGenerationStart', this.boundHandleImageGenerationStart);
 
     console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
@@ -169,7 +147,7 @@ export class FeedbackViewerImpl {
   }
 
   public cleanup(): void {
-    if (!this.domElements /* REMOVED: || !this.outsideClickHandler */) return;
+    if (!this.domElements) return;
 
     // Remove general listeners
     this.domElements.promptTextarea.removeEventListener('keydown', this.handleTextareaKeydown);
@@ -197,32 +175,22 @@ export class FeedbackViewerImpl {
       this.footerSelectListener = null;
     }
 
-    this.cleanupOnboardingListeners();
-    this.isQuickAuditRun = false; // Reset flag on cleanup
-
     // Remove mini select listener
     this.domElements.miniSelectButton?.removeEventListener('click', this.handleMiniSelectClick);
-
-    // ADDED: Unsubscribe from AI service events using BOUND methods
     eventEmitter.off('aiResponseChunk', this.boundUpdateResponse);
     eventEmitter.off('aiUserMessage', this.boundRenderUserMessage);
     eventEmitter.off('aiError', this.boundShowError);
     eventEmitter.off('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
-
-    // ADDED: Unsubscribe from image generation start event
     eventEmitter.off('aiImageGenerationStart', this.boundHandleImageGenerationStart);
 
     this.domElements = null;
     this.domManager = null;
-    // REMOVED: this.outsideClickHandler = null;
     this.removeGlobalListeners();
 
     // Optional: Clear history state if needed on full cleanup?
     // this.conversationHistory = []; 
-
-    // ADDED: Remove highlight on cleanup
     this.removeSelectionHighlight();
 
     console.log('[FeedbackViewerLogic] Cleaned up listeners and unsubscribed from AI events.');
@@ -253,8 +221,6 @@ export class FeedbackViewerImpl {
     // Store data for the NEW selection context
     this.currentImageDataUrl = imageDataUrl;
     this.initialSelectedElement = targetElement || document.body; // Fallback to body
-
-    // ADDED: Generate and store stable selector for the initial element
     if (this.initialSelectedElement) {
       this.stableSelectorForCurrentCycle = generateStableSelector(this.initialSelectedElement);
       console.log(`[Impl.prepareForInput] Generated stable selector for ${this.initialSelectedElement.tagName}: ${this.stableSelectorForCurrentCycle}`);
@@ -274,8 +240,6 @@ export class FeedbackViewerImpl {
 
     // Generate a NEW fixId for this NEW interaction cycle
     this.currentFixId = `checkra-fix-${this.fixIdCounter++}`;
-
-    // --- ADDED: Manage Highlight --- 
     this.removeSelectionHighlight(); // Remove from previous element
     if (this.initialSelectedElement && this.initialSelectedElement !== document.body) {
       this.initialSelectedElement.classList.add('checkra-selected-element-outline');
@@ -285,7 +249,6 @@ export class FeedbackViewerImpl {
     } else {
       this.currentlyHighlightedElement = null; // No highlight on body
     }
-    // --- END ADDED --- 
 
     console.log(`[FeedbackViewerLogic] Preparing for new input cycle. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement?.tagName ?? 'null'}`); // Handle null element
 
@@ -301,8 +264,6 @@ export class FeedbackViewerImpl {
     this.domManager.showFooterCTA(false);
 
     if (this.domElements) {
-      // REMOVED: this.domManager.updatePreviewApplyButtonContent('Preview Fix', EYE_ICON_SVG);
-      // REMOVED: if (this.domElements.cancelButton) { this.domElements.cancelButton.style.display = 'none'; }
     }
 
     this.domElements?.promptTextarea.focus();
@@ -317,10 +278,6 @@ export class FeedbackViewerImpl {
       lastItem.content += chunk;
       // Update DOM for the streaming content by calling the new DOM method
       this.domManager.updateLastAIMessage(lastItem.content, true);
-
-      // --- ADDED: Process DALL-E images in the streamed content ---
-      // REMOVED: if (this.domElements.contentWrapper) { ... }
-      // --- END ADDED ---
 
       const hasHtmlCode = GENERIC_HTML_REGEX.test(lastItem.content);
       // Hide image generation status if general content starts streaming
@@ -352,10 +309,6 @@ export class FeedbackViewerImpl {
       // This call should ensure the final HTML (potentially with new image placeholders) is in the DOM
       this.domManager.updateLastAIMessage(lastItem.content, false);
 
-      // --- ADDED: Process DALL-E images in the final content ---
-      // REMOVED: if (this.domElements.contentWrapper) { ... }
-      // --- END ADDED ---
-
     } else {
       console.warn('[FeedbackViewerImpl] finalizeResponse called but no AI message was streaming or found.');
     }
@@ -363,16 +316,8 @@ export class FeedbackViewerImpl {
     this.domManager.updateLoaderVisibility(false);
     this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true);
-    // ADDED: Hide image generation status when response is finalized
     this.domManager.showImageGenerationStatus(false);
 
-    if (this.isQuickAuditRun) {
-      this.showFooterCTALogic();
-      this.isQuickAuditRun = false; // Reset flag for next interaction
-    }
-
-    // Scroll to bottom if applicable (e.g., if footer was added)
-    // Optional: You might only want to scroll if the footer was *just* added
     const contentWrapper = this.domElements.contentWrapper;
     contentWrapper.scrollTop = contentWrapper.scrollHeight;
 
@@ -427,9 +372,7 @@ export class FeedbackViewerImpl {
     this.currentFixId = null;
 
     this.domManager?.showFooterCTA(false); // Add this line
-    this.isQuickAuditRun = false; // Reset flag on hide
 
-    // ADDED: Remove highlight when hiding
     this.removeSelectionHighlight();
 
     if (initiatedByUser && fromCloseButton) {
@@ -512,13 +455,10 @@ export class FeedbackViewerImpl {
     this.domManager.showPromptInputArea(false, promptText);
 
     this.saveHistory({ type: 'user', content: promptText });
-    // ADDED: Immediately add a placeholder for AI response
     this.saveHistory({ type: 'ai', content: '' });
 
     // --- Call API ---
     fetchFeedback(this.currentImageDataUrl, promptText, processedHtmlForAI);
-
-    // ADDED: Mark onboarding as complete after first user submission, if not already done
     try {
         if (!localStorage.getItem('checkra_onboarded')) {
             localStorage.setItem('checkra_onboarded', '1');
@@ -767,10 +707,7 @@ export class FeedbackViewerImpl {
       // Ensure fixed HTML is null if no match
       this.fixedOuterHTMLForCurrentCycle = null;
     }
-    // REMOVED: this.updateActionButtonsVisibility(); // Let finalizeResponse handle this
   }
-
-  // --- ADDED: New method to directly apply the fix to the page --- 
   private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, stableSelector?: string): void {
     console.log(`[FeedbackViewerLogic] Applying fix directly to page for Fix ID: ${fixId}. Stable Selector: ${stableSelector || 'Not Provided (will use current cycle)'}`);
     if (!this.domManager || !this.domElements) {
@@ -823,10 +760,6 @@ export class FeedbackViewerImpl {
       wrapper.appendChild(copyBtn);
       wrapper.appendChild(toggleBtn);
 
-      // --- ADDED: Process DALL-E images within the applied fix content ---
-      // REMOVED: this.detectAndProcessImagePlaceholders(contentContainer);
-      // --- END ADDED ---
-
       insertionParent.insertBefore(wrapper, insertionBeforeNode);
       console.log(`[FeedbackViewerLogic] Inserted permanent wrapper for ${fixId}.`);
 
@@ -862,7 +795,6 @@ export class FeedbackViewerImpl {
       // to prevent re-application on next finalizeResponse without new AI feedback.
       this.fixedOuterHTMLForCurrentCycle = null;
       // The currentFixId and originalOuterHTMLForCurrentCycle remain as they define the *current context*.
-      // ADDED: The stableSelectorForCurrentCycle also remains as part of the current context.
 
       // Optionally, clear the main prompt and AI response area in the panel after successful application.
       // this.domManager?.setPromptState(true, '');
@@ -926,7 +858,6 @@ export class FeedbackViewerImpl {
     if (this.isVisible) { // Use the private property
       this.hide(true, false); // User initiated hide via toggle (not from close button)
     } else {
-      // ADDED: If toggling to visible, it's an explicit user action.
       // Clear the PANEL_CLOSED_BY_USER_KEY flag here.
       try {
         localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
@@ -956,155 +887,8 @@ export class FeedbackViewerImpl {
     this.onToggleCallback(true); // Notify coordinator/external
     console.log('[FeedbackViewerLogic] Showing onboarding.');
 
-    const runAuditBtn = this.domElements.viewer.querySelector('#checkra-btn-run-audit');
-    // REMOVED: const selectSectionBtn = this.domElements.viewer.querySelector('#checkra-btn-select-section');
-
-    // Add listeners only if buttons exist
-    if (runAuditBtn) {
-        runAuditBtn.addEventListener('click', this.handleOnboardingRunAudit);
-        // selectSectionBtn.addEventListener('click', this.handleOnboardingSelectSection); // REMOVED
-
-        // MODIFIED: Removed selectSection listener
-        this.onboardingListeners = {
-            runAudit: this.handleOnboardingRunAudit,
-            // selectSection: this.handleOnboardingSelectSection // REMOVED
-        };
-
-        // REMOVED: localStorage.setItem('checkra_onboarded', '1'); 
-        // Onboarding completion is now handled by handleOnboardingRunAudit or handleSubmit
-    } else {
-        console.error('[FeedbackViewerLogic] Could not find onboarding buttons to attach listeners.');
-    }
-  }
-
-  private handleOnboardingRunAudit = (): void => {
-    console.log('[FeedbackViewerLogic] Onboarding: Run Audit clicked.');
-    this.cleanupOnboardingListeners();
-    if (this.domManager) {
-        this.domManager.showOnboardingView(false);
-    }
-    this.quickAudit();
-    // ADDED: Mark onboarding as complete after audit is run
-    try {
-        localStorage.setItem('checkra_onboarded', '1');
-        console.log('[FeedbackViewerImpl] Onboarding marked complete via Run Audit.');
-    } catch (e) {
-        console.warn('[FeedbackViewerImpl] Failed to set checkra_onboarded after audit:', e);
-    }
-  }
-
-  // Helper to remove onboarding listeners
-  private cleanupOnboardingListeners(): void {
-    if (this.domElements && this.onboardingListeners) {
-        const runAuditBtn = this.domElements.viewer.querySelector('#checkra-btn-run-audit');
-        // REMOVED: const selectSectionBtn = this.domElements.viewer.querySelector('#checkra-btn-select-section');
-        runAuditBtn?.removeEventListener('click', this.onboardingListeners.runAudit);
-        // selectSectionBtn?.removeEventListener('click', this.onboardingListeners.selectSection); // REMOVED
-        this.onboardingListeners = null; // Clear stored listeners
-    }
-  }
-
-  // Add a placeholder for the quickAudit function
-  private quickAudit(): void {
-    console.log('[FeedbackViewerLogic] Starting Quick Audit...');
-    if (!this.domManager) {
-      this.showError('Cannot run quick audit: DOM Manager not available.');
-      return;
-    }
-
-    try {
-      // 1. Collect head data
-      const headData = getHeadMetadata();
-      const headHtml = `<head>
-  <title>${headData.title || ''}</title>
-  <meta name="description" content="${headData.description || ''}">
-  <meta property="og:title" content="${headData.ogTitle || ''}">
-  <meta property="og:description" content="${headData.ogDescription || ''}">
-  <meta name="viewport" content="${headData.viewport || ''}">
-  <link rel="canonical" href="${headData.canonical || ''}">
-</head>`;
-
-      // 2. Collect above-the-fold HTML
-      const fold = window.innerHeight;
-      const bodyChildren = Array.from(document.body.children);
-      const topLevelElementsInFold = bodyChildren.filter(el => {
-        if (!(el instanceof HTMLElement)) return false;
-        try {
-          const rect = el.getBoundingClientRect();
-          // Include elements starting above the fold or partially visible
-          return rect.top < fold && rect.bottom > 0;
-        } catch (e) {
-          console.warn('[QuickAudit] Error getting bounding rect for element:', el, e);
-          return false;
-        }
-      });
-
-      // Include first H1 and first interactive element if possible and not already included
-      let firstH1: Element | null = document.querySelector('h1');
-      let firstCTA: Element | null = document.querySelector('button, a[role="button"], input[type="submit"]');
-
-      const elementsToInclude = [...topLevelElementsInFold];
-      if (firstH1 && !elementsToInclude.some(el => el.contains(firstH1))) {
-        elementsToInclude.push(firstH1);
-      }
-      if (firstCTA && !elementsToInclude.some(el => el.contains(firstCTA))) {
-        elementsToInclude.push(firstCTA);
-      }
-
-      let aboveFoldHtml = elementsToInclude
-        .map(el => el.outerHTML)
-        .join('\n<!-- Checkra Element Separator -->\n');
-
-      // Limit size (e.g., 8KB)
-      const MAX_HTML_LENGTH = 8 * 1024;
-      if (aboveFoldHtml.length > MAX_HTML_LENGTH) {
-        console.warn(`[QuickAudit] Above-fold HTML truncated from ${aboveFoldHtml.length} to ${MAX_HTML_LENGTH} bytes.`);
-        aboveFoldHtml = aboveFoldHtml.substring(0, MAX_HTML_LENGTH);
-        // Try to avoid cutting mid-tag
-        const lastTagClose = aboveFoldHtml.lastIndexOf('>');
-        if (lastTagClose > 0) {
-          aboveFoldHtml = aboveFoldHtml.substring(0, lastTagClose + 1);
-        }
-      }
-
-      // Combine head and body snippets
-      const combinedHtml = `${headHtml}
-
-<body>
-${aboveFoldHtml}
-</body>`;
-
-      // 3. Compose prompt
-      const prompt = "Quick audit of head tags and above-the-fold section. Provide SEO/CRO recommendations for <head> as a bullet list (no previews). Provide at least two previewable HTML fixes for the <body> content if issues are found.";
-
-      // --- Update UI for Loading --- 
-      this.domManager.setPromptState(false); // Disable prompt area during audit
-      this.domManager.updateSubmitButtonState(false);
-      this.domManager.updateLoaderVisibility(true, 'Running quick audit...'); // This will show the header
-      this.domManager.clearUserMessage();
-      this.domManager.showPromptInputArea(false, 'Running Quick Audit...'); // Show title
-
-      // Set flag right before fetch
-      this.isQuickAuditRun = true;
-
-      // ADDED: Create placeholder for the AI response in history BEFORE fetch
-      this.saveHistory({ type: 'ai', content: '' });
-
-      // 4. Call fetchAudit
-      console.log('[QuickAudit] Sending request...');
-      fetchAudit(prompt, combinedHtml);
-
-    } catch (error) {
-      console.error('[QuickAudit] Error preparing or running audit:', error);
-      this.isQuickAuditRun = false; // Reset flag on error
-      this.showError(`Failed to run quick audit: ${error instanceof Error ? error.message : String(error)}`);
-      // Reset UI state on error
-      if (this.domManager) {
-        this.domManager.setPromptState(true);
-        this.domManager.updateSubmitButtonState(true);
-        this.domManager.updateLoaderVisibility(false);
-      }
-    }
+    // No specific listeners to add to onboarding buttons anymore as audit is removed.
+    // The onboarding view itself is handled by FeedbackViewerDOM.
   }
 
   private showFooterCTALogic(): void {
@@ -1152,7 +936,7 @@ ${aboveFoldHtml}
   private handleMiniSelectClick(e: MouseEvent): void {
     e.stopPropagation(); // Prevent triggering other clicks
     console.log('[FeedbackViewerLogic] Mini select (crosshair) button clicked.');
-    this.isQuickAuditRun = false; // Ensure not in audit mode
+    // this.isQuickAuditRun = false; // REMOVED: Audit feature removed
 
     // Trigger screen capture, passing the main viewer element to be ignored
     if (this.domElements?.viewer) {
@@ -1187,7 +971,6 @@ ${aboveFoldHtml}
       console.log('[FeedbackViewerImpl] Added escape keydown listener.');
     }
     // Add outside click listener here if not added elsewhere
-    // REMOVED: if (this.outsideClickHandler) { ... }
   }
 
   private removeGlobalListeners(): void {
@@ -1196,10 +979,7 @@ ${aboveFoldHtml}
       console.log('[FeedbackViewerImpl] Removed escape keydown listener.');
     }
     // Remove outside click listener here
-    // REMOVED: if (this.outsideClickHandler) { ... }
   }
-
-  // ADDED: New method to handle showing the panel, clearing the flag
   private showFromApi(): void {
     if (this.isVisible) return; // Already visible
 
@@ -1223,8 +1003,6 @@ ${aboveFoldHtml}
       this.prepareForInput(null, null, null, document.body); // Pass body explicitly
     }
   }
-
-  // ADDED: Methods for loading and saving history
   private loadHistory(): void {
     try {
       const storedHistory = localStorage.getItem(CONVERSATION_HISTORY_KEY);
@@ -1274,8 +1052,6 @@ ${aboveFoldHtml}
       // So, no DOM update needed here when newItem is null.
     }
   }
-
-  // --- ADDED: Helper to remove highlight --- 
   private removeSelectionHighlight(): void {
     if (this.currentlyHighlightedElement) {
       this.currentlyHighlightedElement.classList.remove('checkra-selected-element-outline');
@@ -1283,8 +1059,6 @@ ${aboveFoldHtml}
       console.log('[FeedbackViewerLogic] Removed selection highlight.');
     }
   }
-
-  // ADDED: Handler for aiImageGenerationStart event
   private handleImageGenerationStart(data: { prompt?: string }): void {
     if (!this.domManager) return;
     console.log('[FeedbackViewerImpl] AI Image Generation Started. Prompt:', data.prompt);

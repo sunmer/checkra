@@ -1,20 +1,19 @@
-import { type AiSettings as CoreAiSettings } from '../ui/settings-modal'; // ADDED: Import for CoreAiSettings
+import { type AiSettings as CoreAiSettings } from '../ui/settings-modal';
 
 type Listener = (...args: any[]) => void;
 
 export interface EventTypes {
   'settingsChanged': CoreAiSettings;
-  'toggleViewerShortcut': void; // ADDED: For global shortcut toggle
-  'showViewerApi': void; // ADDED: For programmatic show from API
-  'viewerDidShow': void; // ADDED: Emitted after viewer becomes visible
-  'viewerDidHide': void; // ADDED: Emitted after viewer becomes hidden
+  'toggleViewerShortcut': void; // For global shortcut toggle
+  'showViewerApi': void; // For programmatic show from API
+  'viewerDidShow': void; // Emitted after viewer becomes visible
+  'viewerDidHide': void; // Emitted after viewer becomes hidden
 
-  // --- ADDED: DALL-E Image Events ---
+  // DALL-E Image Events
   'dalleImageLoading': { placeholderId: string; prompt: string; size?: string };
   'dalleImageLoaded': { placeholderId: string; prompt: string; size?: string; url: string };
   'dalleImageError': { placeholderId: string; prompt: string; size?: string; error: string };
   'dalleImageRegenerate': { placeholderId: string; prompt: string; size?: string };
-  // --- END ADDED ---
 }
 
 export class EventEmitter {

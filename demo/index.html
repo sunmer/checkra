@@ -99,7 +99,6 @@
     // Assume anything else is production (e.g., deployed demo) or needs CDN
     const isProductionLike = !isDev && !isPreprod;
 
-    // ADDED: Store the API instance globally
     window.checkraApiInstance = null;
 
     function loadScript(src, type) {

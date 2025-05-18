@@ -4,14 +4,13 @@ import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
 import { EventEmitter } from './event-emitter';
 
-// --- Module-level instance variable ---
+// Module-level instance variable
 let settingsModalInstance: SettingsModal | null = null;
 
-// --- Key Management ---
+// Key Management
 let effectiveApiKey: string | null = null;
 const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
 
-// ADDED: Instantiate and export EventEmitter
 export const eventEmitter = new EventEmitter();
 
 function generateUUID(): string {
@@ -83,7 +82,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     // isVisible option is deprecated
   };
 
-  // --- Determine Effective API Key ---
+  // Determine Effective API Key
   if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.trim() !== '') {
     effectiveApiKey = config.apiKey.trim();
   } else {
@@ -101,7 +100,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     }
   }
 
-  // --- Create instances and assign to module-level variables ---
+  // Create instances and assign to module-level variables
   // let feedbackMenuInstance: FloatingMenu | null = null;
 
   try {
@@ -125,7 +124,6 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
         if (settingsModalInstance) {
           settingsModalInstance.showModal();
         }
-        // Removed isVisible check - settings always available via header button now
         else {
             console.warn('[Checkra API] Settings modal instance not found.');
         }

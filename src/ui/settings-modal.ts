@@ -233,8 +233,6 @@ export class SettingsModal {
           console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
       }
     };
-
-    // ADDED: Handler for clicking outside the modal content to close it
     const boundOverlayClickHandler = (event: MouseEvent) => {
       if (this.modalContainer && event.target === this.modalContainer) {
         event.stopPropagation(); // Prevent click from reaching document listener
@@ -245,7 +243,6 @@ export class SettingsModal {
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
     this.temperatureSlider.addEventListener('input', this.boundTempSliderHandler);
-    // ADDED: Listener for overlay clicks
     this.modalContainer?.addEventListener('click', boundOverlayClickHandler);
   }
 

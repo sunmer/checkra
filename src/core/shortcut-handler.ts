@@ -1,15 +1,22 @@
 import { eventEmitter } from './index';
 
-document.addEventListener('keydown', (event: KeyboardEvent) => {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const shortcutPressed = 
-        (isMac ? event.metaKey : event.ctrlKey) && 
-        !event.altKey &&
-        !event.shiftKey &&
-        event.key === 'l';
+let lastShiftPressTime = 0;
+const DOUBLE_PRESS_THRESHOLD = 300; // Milliseconds, adjust as needed
 
-    if (shortcutPressed) {
-        event.preventDefault();
-        eventEmitter.emit('toggleViewerShortcut');
+document.addEventListener('keydown', (event: KeyboardEvent) => {
+    if (event.key === 'Shift') {
+        const currentTime = Date.now();
+        if (currentTime - lastShiftPressTime < DOUBLE_PRESS_THRESHOLD) {
+            // Double press detected
+            event.preventDefault();
+            eventEmitter.emit('toggleViewerShortcut');
+            lastShiftPressTime = 0; // Reset to prevent immediate re-trigger on a third press
+        } else {
+            // First press or too slow for a double press
+            lastShiftPressTime = currentTime;
+        }
+    } else {
+        // If any other key is pressed, reset the sequence
+        lastShiftPressTime = 0;
     }
 }); 

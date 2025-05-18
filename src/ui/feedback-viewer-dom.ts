@@ -9,7 +9,6 @@ const LOCALSTORAGE_PANEL_WIDTH_KEY = 'checkra_panel_width';
 // Define the settings SVG icon as a constant
 const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
-// ADDED: SVG Loader for Image Generation
 const IMAGE_GENERATION_LOADER_SVG = `
 <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
   <circle cx="4" cy="12" r="3" fill="currentColor">
@@ -95,7 +94,6 @@ export class FeedbackViewerDOM {
     // viewer.style.width = '450px'; // Default handled by CSS now
     // viewer.style.height = '100vh'; // Default handled by CSS
 
-    // ADDED: Restore width from localStorage
     try {
       const storedWidth = localStorage.getItem(LOCALSTORAGE_PANEL_WIDTH_KEY);
       if (storedWidth) {
@@ -126,7 +124,6 @@ export class FeedbackViewerDOM {
     const loadingIndicatorText = loadingIndicator.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text')!;
     responseHeader.appendChild(loadingIndicator);
 
-    // ADDED: Image Generation Status Element
     const imageGenerationStatusElement = document.createElement('div');
     imageGenerationStatusElement.id = 'checkra-image-generation-status';
     imageGenerationStatusElement.classList.add('hidden'); // Hidden by default
@@ -194,7 +191,6 @@ export class FeedbackViewerDOM {
     buttonRow.appendChild(submitButton);
     textareaContainer.appendChild(promptTextarea);
     textareaContainer.appendChild(buttonRow);
-    // REMOVED: contentWrapper.appendChild(textareaContainer);
 
     // --- User Message & Response Area (Children of contentWrapper) ---
     const userMessageContainer = document.createElement('div');
@@ -303,8 +299,6 @@ export class FeedbackViewerDOM {
     document.removeEventListener('mouseup', this.handleResizeEnd);
     this.elements.contentWrapper.style.pointerEvents = '';
     this.elements.viewer.classList.remove('resizing');
-
-    // ADDED: Save new width to localStorage
     try {
       const currentWidth = this.elements.viewer.offsetWidth;
       localStorage.setItem(LOCALSTORAGE_PANEL_WIDTH_KEY, String(currentWidth));
@@ -336,7 +330,6 @@ export class FeedbackViewerDOM {
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
     if (!this.elements) return;
-    // REMOVED contentWrapper from destructuring
     const { loadingIndicator, loadingIndicatorText, responseHeader } = this.elements;
 
     responseHeader.classList.remove('hidden');
@@ -446,28 +439,20 @@ export class FeedbackViewerDOM {
   private createOnboardingView(): string {
     const selectButtonRepresentation =
       `<span class="onboarding-button-representation" title="Select Element">${SELECT_SVG_ICON}</span>`;
-    const submitButtonRepresentation =
-      `<span class="onboarding-button-representation submit-representation" title="Submit Question">${SUBMIT_SVG_ICON}</span>`;
-
-    // ADDED: Dynamically determine shortcut text based on OS
-    const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-    const shortcutKeyGlyph = isMac ? '⌘' : 'Ctrl';
-    const shortcutText = `<kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">${shortcutKeyGlyph} L</kbd>`;
 
     const markdownContent = `
-### Welcome to Checkra
-Use this chat to ask for UX, growth and conversion improvements for this website.
+### Welcome to Checkra!
+Use this panel to edit your website with AI, ship variations, and learn what works.
 
-**How to use:**
-* ${selectButtonRepresentation} Select a part of this page to ask questions about (better responses)
-* ${submitButtonRepresentation} Ask a question about the entire page
+**How to get started:**
+* ${selectButtonRepresentation} Select any element on your page
+* Then, type what you want to change or improve, such as:
 
-**Pro tips:**
-* Toggle this panel anytime with ${shortcutText}.
+* <span class="onboarding-suggestion">Change this headline to be more exciting</span>
+* <span class="onboarding-suggestion">Add an abstract background image</span>
+* <span class="onboarding-suggestion">Rewrite this hero section</span>
 
----
-
-<a href="#" id="checkra-btn-run-audit" class="onboarding-link-button">Would you like to run a quick audit?</a>
+* Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> for all commands.
     `;
 
     return `
@@ -492,8 +477,6 @@ Use this chat to ask for UX, growth and conversion improvements for this website
       this.elements.footerCTAContainer.innerHTML = ''; // Clear content
     }
   }
-
-  // --- ADDED: History Rendering Methods ---
   private createMessageElement(item: ConversationItem): HTMLDivElement {
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
@@ -558,7 +541,6 @@ Use this chat to ask for UX, growth and conversion improvements for this website
 
   public updateLastAIMessage(newContent: string, isStreaming: boolean): void {
     if (!this.elements) return;
-    // REMOVED: contentWrapper from destructuring
     const { responseContent } = this.elements;
     const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
 
@@ -621,14 +603,10 @@ Use this chat to ask for UX, growth and conversion improvements for this website
     button.id = 'checkra-feedback-submit-button';
     button.title = 'Submit Feedback (Ctrl/Cmd + Enter)';
     button.type = 'button'; // Prevent form submission if nested
-
-    // ADDED: SVG Icon
     button.innerHTML = SUBMIT_SVG_ICON;
 
     return button;
   }
-
-  // ADDED: Method to show/hide image generation status
   public showImageGenerationStatus(isGenerating: boolean, promptText?: string | null): void {
     if (!this.elements?.imageGenerationStatusElement) return;
 

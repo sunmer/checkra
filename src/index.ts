@@ -39,13 +39,8 @@ function getGlobalConfig(): CheckraOptions | undefined {
 
 // Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  // ADDED: Call to check for published version before regular initialization
   checkForPublishedVersion();
-  // END ADDED
-
-  // ADDED: Initialize analytics
   initAnalytics();
-  // END ADDED
 
   const initialize = () => {
     // Check if already initialized
@@ -73,7 +68,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   }
 }
 
-// --- ADDED: Boot-loader logic for ?v= parameter ---
+// Boot-loader logic for ?v= parameter
 async function applyPublishedSnapshot(variantId: string): Promise<void> {
   const snapshotUrl = `https://${CDN_DOMAIN}/variants/${variantId}.json`;
   console.log(`[Checkra Bootloader] Detected variantId: ${variantId}. Fetching snapshot from: ${snapshotUrl}`);
@@ -133,4 +128,3 @@ function checkForPublishedVersion(): void {
     }
   }
 }
-// --- END ADDED ---
