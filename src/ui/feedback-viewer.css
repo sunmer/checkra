@@ -89,7 +89,7 @@
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
 .checkra-feedback-applied-fix .feedback-fix-toggle {
   position: absolute;
-  top: 3px;
+  top: -20px;
   /* Adjust positioning */
   width: 20px;
   /* Adjust size */
@@ -133,7 +133,7 @@
 }
 
 .checkra-feedback-applied-fix .feedback-fix-toggle {
-  right: 53px;
+  right: 25px;
   /* Next to copy */
 }
 
@@ -298,6 +298,12 @@
 #checkra-feedback-viewer #checkra-feedback-submit-button:hover:not(:disabled) {
   background-color: #1d4ed8; /* Darker blue on hover */
   opacity: 1;
+}
+
+#checkra-feedback-viewer #checkra-feedback-submit-button:disabled {
+  background-color: #60a5fa; /* Lighter blue (Tailwind blue-400) */
+  opacity: 0.6; /* Adjust opacity for disabled state */
+  cursor: not-allowed;
 }
 
 #checkra-feedback-viewer #checkra-prompt-textarea {

@@ -3,7 +3,7 @@ import { getEffectiveApiKey, getCurrentAiSettings, eventEmitter } from '../core/
 import { AiSettings } from '../ui/settings-modal';
 import html2canvas from 'html2canvas';
 
-// --- MOVED: Helper function to extract dominant colors from an HTML element ---
+
 const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary?: string; accent?: string } | null> => {
   try {
     const canvas = await html2canvas(element, {
@@ -188,7 +188,8 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
 const fetchFeedbackBase = async (
   apiUrl: string,
   promptText: string,
-  selectedHtml: string | null
+  selectedHtml: string | null,
+  imageDataUrl?: string | null
 ): Promise<void> => {
   try {
     const metadata = await getPageMetadata();
@@ -196,11 +197,11 @@ const fetchFeedbackBase = async (
     console.log('[AI Service] Using AiSettings for request (fetchFeedbackBase):', currentAiSettings); // DEBUG LOG
 
     const requestBody: {
-      // No image field needed here as it's handled by the caller if necessary
       prompt: string;
       html?: string | null;
       metadata: PageMetadata;
       aiSettings: AiSettings;
+      image?: string | null;
     } = {
       prompt: promptText,
       metadata: metadata,
@@ -209,6 +210,9 @@ const fetchFeedbackBase = async (
 
     if (selectedHtml) {
       requestBody.html = selectedHtml;
+    }
+    if (imageDataUrl) {
+      requestBody.image = imageDataUrl;
     }
     console.log('[AI Service] Full request body (fetchFeedbackBase):', requestBody); // DEBUG LOG
 
@@ -347,14 +351,14 @@ const fetchFeedbackBase = async (
  * Sends regular feedback (specific section or general prompt) to the /feedback endpoint.
  */
 export const fetchFeedback = async (
-  _imageDataUrl: string | null, // Kept for signature compatibility, but not used in base
+  imageDataUrl: string | null,
   promptText: string,
   selectedHtml: string | null
 ): Promise<void> => {
   // NOTE: _imageDataUrl is ignored here as the base function doesn't handle it.
   // If image sending is needed for this specific endpoint later, logic must be added here.
   const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/feedback`;
-  return fetchFeedbackBase(apiUrl, promptText, selectedHtml);
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, imageDataUrl);
 };
 /**
  * Calls the backend to generate an image using DALL-E.

@@ -1,13 +1,13 @@
 import { fetchFeedback } from '../services/ai-service';
-import { copyViewportToClipboard } from '../utils/clipboard-utils';
 import type { FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
-import { generateStableSelector } from '../utils/selector-utils'; // ADDED
-import { API_BASE } from '../config'; // ADDED: For /publish
-import { getSiteId } from '../utils/id'; // ADDED: For /publish
+import { generateStableSelector } from '../utils/selector-utils';
+import { API_BASE } from '../config'; 
+import { getSiteId } from '../utils/id'; 
+
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
   content: string;
@@ -38,24 +38,6 @@ interface AppliedFixInfo {
   stableTargetSelector: string; // ADDED: A stable selector for the original element
 }
 
-// Helper function to get head metadata (can be moved to a utils file)
-const getHeadMetadata = (): Record<string, string | null> => {
-  const data: Record<string, string | null> = {};
-  data.title = document.title || null;
-  const descriptionTag = document.querySelector('meta[name="description"]');
-  data.description = descriptionTag ? descriptionTag.getAttribute('content') : null;
-  const ogTitleTag = document.querySelector('meta[property="og:title"]');
-  data.ogTitle = ogTitleTag ? ogTitleTag.getAttribute('content') : null;
-  const ogDescTag = document.querySelector('meta[property="og:description"]');
-  data.ogDescription = ogDescTag ? ogDescTag.getAttribute('content') : null;
-  const viewportTag = document.querySelector('meta[name="viewport"]');
-  data.viewport = viewportTag ? viewportTag.getAttribute('content') : null;
-  const canonicalTag = document.querySelector('link[rel="canonical"]');
-  data.canonical = canonicalTag ? canonicalTag.getAttribute('href') : null;
-  // Add more tags as needed (e.g., robots, keywords)
-  return data;
-};
-
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
  */
@@ -76,11 +58,12 @@ export class FeedbackViewerImpl {
   private fixIdCounter: number = 0; // Counter for generating unique IDs
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
+  private activeStreamingAiItem: ConversationItem | null = null; // ADDED: To track the current AI message being streamed
 
   // --- Global Tracking for Applied Fixes ---
   private appliedFixes: Map<string, AppliedFixInfo> = new Map();
   // Store listeners for applied fixes to clean them up later
-  private appliedFixListeners: Map<string, { close: EventListener; copy: EventListener; toggle: EventListener }> = new Map();
+  private appliedFixListeners: Map<string, { close: EventListener; toggle: EventListener }> = new Map();
 
   // --- Listeners ---
 
@@ -104,7 +87,6 @@ export class FeedbackViewerImpl {
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleAppliedFixClose = this.handleAppliedFixClose.bind(this);
-    this.handleAppliedFixCopy = this.handleAppliedFixCopy.bind(this);
     this.handleAppliedFixToggle = this.handleAppliedFixToggle.bind(this);
     this.handleMiniSelectClick = this.handleMiniSelectClick.bind(this);
     this.handleSettingsClick = this.handleSettingsClick.bind(this);
@@ -144,6 +126,17 @@ export class FeedbackViewerImpl {
 
     console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
+
+    // Show availability toast if panel is not visible after initial setup
+    if (this.domManager) {
+      setTimeout(() => {
+        // Check if the panel is still not visible after initial setup and potential show calls from coordinator
+        if (!this.isVisible && !sessionStorage.getItem('checkra_toast_shown_session')) {
+          this.domManager?.showAvailabilityToast(); // Use optional chaining as domManager might be null in theory, though unlikely here
+          sessionStorage.setItem('checkra_toast_shown_session', 'true'); // Mark toast as shown for this session
+        }
+      }, 0); // Use a microtask to check visibility after the current execution cycle
+    }
   }
 
   public cleanup(): void {
@@ -158,10 +151,8 @@ export class FeedbackViewerImpl {
       const fixInfo = this.appliedFixes.get(fixId);
       if (fixInfo?.appliedWrapperElement) {
         const closeBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-close-btn');
-        const copyBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-copy-btn');
         const toggleBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-toggle');
         closeBtn?.removeEventListener('click', listeners.close);
-        copyBtn?.removeEventListener('click', listeners.copy);
         toggleBtn?.removeEventListener('click', listeners.toggle);
       }
     });
@@ -218,53 +209,58 @@ export class FeedbackViewerImpl {
       return;
     }
 
-    // Store data for the NEW selection context
     this.currentImageDataUrl = imageDataUrl;
-    this.initialSelectedElement = targetElement || document.body; // Fallback to body
-    if (this.initialSelectedElement) {
-      this.stableSelectorForCurrentCycle = generateStableSelector(this.initialSelectedElement);
-      console.log(`[Impl.prepareForInput] Generated stable selector for ${this.initialSelectedElement.tagName}: ${this.stableSelectorForCurrentCycle}`);
-    } else {
-      this.stableSelectorForCurrentCycle = 'body'; // Fallback for body or null element
-      console.log(`[Impl.prepareForInput] Using default stable selector: body`);
-    }
-    // END ADDED
+    this.initialSelectedElement = targetElement; 
 
-    if (selectedHtml && targetElement) {
-      this.originalOuterHTMLForCurrentCycle = selectedHtml;
-      console.log(`[Impl.prepareForInput] USING specific selectedHtml for ${targetElement.tagName}, length: ${selectedHtml.length}`);
+    const isElementSelected = !!(targetElement && targetElement !== document.body); // Ensure boolean
+
+    if (isElementSelected && targetElement) { // Added targetElement check for type safety
+      this.stableSelectorForCurrentCycle = generateStableSelector(targetElement);
+      console.log(`[Impl.prepareForInput] Generated stable selector for ${targetElement.tagName}: ${this.stableSelectorForCurrentCycle}`);
+      this.originalOuterHTMLForCurrentCycle = selectedHtml; // Should only be set if an element is truly selected
+      console.log(`[Impl.prepareForInput] USING specific selectedHtml for ${targetElement.tagName}, length: ${selectedHtml?.length}`);
     } else {
-      this.originalOuterHTMLForCurrentCycle = document.body.outerHTML;
-      console.log(`[Impl.prepareForInput] FALLBACK to document.body.outerHTML, length: ${this.originalOuterHTMLForCurrentCycle.length}`);
+      // Handles null targetElement or document.body selection
+      this.stableSelectorForCurrentCycle = 'body';
+      this.originalOuterHTMLForCurrentCycle = document.body.outerHTML; // Fallback or default context
+      console.log(`[Impl.prepareForInput] No specific element selected or body selected. Defaulting context. Target: ${targetElement?.tagName}`);
+      if (targetElement === document.body) {
+        this.initialSelectedElement = document.body; // Explicitly set for clarity if it was body
+      }
     }
 
     // Generate a NEW fixId for this NEW interaction cycle
     this.currentFixId = `checkra-fix-${this.fixIdCounter++}`;
     this.removeSelectionHighlight(); // Remove from previous element
-    if (this.initialSelectedElement && this.initialSelectedElement !== document.body) {
-      this.initialSelectedElement.classList.add('checkra-selected-element-outline');
-      this.currentlyHighlightedElement = this.initialSelectedElement;
-      // Add data-checkra-fix-id *after* potentially removing highlight from the previous element
-      this.initialSelectedElement?.setAttribute('data-checkra-fix-id', this.currentFixId);
+
+    if (isElementSelected && targetElement) { // Ensure targetElement is not null here
+      targetElement.classList.add('checkra-selected-element-outline');
+      this.currentlyHighlightedElement = targetElement;
+      targetElement.setAttribute('data-checkra-fix-id', this.currentFixId);
     } else {
-      this.currentlyHighlightedElement = null; // No highlight on body
+      this.currentlyHighlightedElement = null; // No highlight on body or if no selection
     }
 
-    console.log(`[FeedbackViewerLogic] Preparing for new input cycle. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement?.tagName ?? 'null'}`); // Handle null element
+    console.log(`[FeedbackViewerLogic] Preparing for new input cycle. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement?.tagName ?? 'null'}`);
 
-    // Reset fix-specific state for this NEW cycle, but keep conversation history
+    // Reset fix-specific state for this NEW cycle
     this.fixedOuterHTMLForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
 
-    // --- Update UI elements (assuming panel is already visible) ---
-    this.domManager.setPromptState(true, ''); // Clear textarea for new context
-    this.domManager.updateSubmitButtonState(true);
+    // --- Update UI elements --- 
+    this.domManager.setPromptState(true, '');
+    this.domManager.updateSubmitButtonState(isElementSelected);
+    if (!isElementSelected) {
+      if (this.domElements) this.domElements.promptTextarea.placeholder = 'Please select an element on the page to provide feedback.';
+    } else {
+      if (this.domElements) this.domElements.promptTextarea.placeholder = 'e.g., "How can I improve the UX or conversion of this section?"';
+    }
+
     this.domManager.updateLoaderVisibility(false);
     this.domManager.showFooterCTA(false);
 
-    if (this.domElements) {
-    }
+    if (this.domElements) { }
 
     this.domElements?.promptTextarea.focus();
     console.log('[Impl.prepareForInput] UI reset for new input context.');
@@ -273,19 +269,26 @@ export class FeedbackViewerImpl {
   public updateResponse(chunk: string): void {
     if (!this.domManager || !this.domElements) return;
 
-    const lastItem = this.conversationHistory[this.conversationHistory.length - 1];
-    if (lastItem && lastItem.type === 'ai' && lastItem.isStreaming) {
-      lastItem.content += chunk;
-      // Update DOM for the streaming content by calling the new DOM method
-      this.domManager.updateLastAIMessage(lastItem.content, true);
+    const currentStreamItem = this.activeStreamingAiItem;
 
-      const hasHtmlCode = GENERIC_HTML_REGEX.test(lastItem.content);
-      // Hide image generation status if general content starts streaming
-      this.domManager.showImageGenerationStatus(false);
-      this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Getting feedback...');
-      this.saveHistory();
+    if (currentStreamItem) {
+      console.log(`[FeedbackViewerImpl DEBUG] updateResponse: Checking currentStreamItem. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}, ContentLen: ${currentStreamItem.content?.length}`);
     } else {
-      console.warn('[FeedbackViewerImpl] updateResponse called but no AI message is streaming.');
+      console.log('[FeedbackViewerImpl DEBUG] updateResponse: activeStreamingAiItem is null.');
+      const lastItemInHistory = this.conversationHistory.length > 0 ? this.conversationHistory[this.conversationHistory.length - 1] : null;
+      console.warn(`[FeedbackViewerImpl] updateResponse: activeStreamingAiItem is null. Last item in history: ${lastItemInHistory?.type}, streaming: ${lastItemInHistory?.isStreaming}`);
+      return;
+    }
+
+    if (currentStreamItem.type === 'ai' && currentStreamItem.isStreaming) {
+      currentStreamItem.content += chunk;
+      this.domManager.updateLastAIMessage(currentStreamItem.content, true);
+
+      const hasHtmlCode = GENERIC_HTML_REGEX.test(currentStreamItem.content);
+      this.domManager.showImageGenerationStatus(false);
+      this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Loading...');
+    } else {
+      console.warn(`[FeedbackViewerImpl] updateResponse called but currentStreamItem (activeStreamingAiItem) is not an AI message or not streaming. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}`);
     }
   }
 
@@ -293,24 +296,37 @@ export class FeedbackViewerImpl {
     console.log("[FeedbackViewerLogic] Feedback stream finalized.");
     if (!this.domManager || !this.domElements) return;
 
-    const lastItem = this.conversationHistory[this.conversationHistory.length - 1];
-    if (lastItem && lastItem.type === 'ai' && lastItem.isStreaming) {
-      lastItem.isStreaming = false;
-      this.extractAndStoreFixHtml(); // This might modify the content
+    const streamToFinalize = this.activeStreamingAiItem;
+
+    if (streamToFinalize && streamToFinalize.type === 'ai' && streamToFinalize.isStreaming) {
+      console.log("[FeedbackViewerImpl DEBUG] finalizeResponse: Finalizing activeStreamingAiItem.");
+      streamToFinalize.isStreaming = false;
+      this.extractAndStoreFixHtml();
+      
       if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
-        lastItem.fix = {
+        streamToFinalize.fix = {
           originalHtml: this.originalOuterHTMLForCurrentCycle,
           fixedHtml: this.fixedOuterHTMLForCurrentCycle,
           fixId: this.currentFixId
         };
       }
       this.saveHistory();
-      // Update the DOM for the finalized message (no longer streaming)
-      // This call should ensure the final HTML (potentially with new image placeholders) is in the DOM
-      this.domManager.updateLastAIMessage(lastItem.content, false);
-
+      this.domManager.updateLastAIMessage(streamToFinalize.content, false);
+      this.activeStreamingAiItem = null;
+      console.log("[FeedbackViewerImpl DEBUG] finalizeResponse: Cleared activeStreamingAiItem.");
     } else {
-      console.warn('[FeedbackViewerImpl] finalizeResponse called but no AI message was streaming or found.');
+      console.warn(`[FeedbackViewerImpl] finalizeResponse called but no active AI message was streaming or found. Active item state: type=${streamToFinalize?.type}, streaming=${streamToFinalize?.isStreaming}`);
+      const lastHistoryAI = [...this.conversationHistory].reverse().find(item => item.type === 'ai' && item.isStreaming);
+      if (lastHistoryAI) {
+        console.warn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - found a different streaming AI item in history. Finalizing it.", lastHistoryAI);
+        lastHistoryAI.isStreaming = false;
+        this.extractAndStoreFixHtml();
+        this.saveHistory();
+        this.domManager.updateLastAIMessage(lastHistoryAI.content, false);
+      } else {
+         console.warn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - no streaming AI item found in history either.");
+      }
+      this.activeStreamingAiItem = null;
     }
 
     this.domManager.updateLoaderVisibility(false);
@@ -321,19 +337,16 @@ export class FeedbackViewerImpl {
     const contentWrapper = this.domElements.contentWrapper;
     contentWrapper.scrollTop = contentWrapper.scrollHeight;
 
-    // Apply fix if available
     if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
       const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
-      if (lastAiItem && lastAiItem.fix) { // Ensure fix data is stored with AI message
+      if (lastAiItem && lastAiItem.fix) {
         this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, this.stableSelectorForCurrentCycle || undefined);
       } else {
-        // Fallback or log error if fix data not found with AI message
         console.warn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
-        // Ensure stableSelectorForCurrentCycle is available if applying directly from current cycle state
         if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle) {
-            this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, this.stableSelectorForCurrentCycle || undefined);
+          this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, this.stableSelectorForCurrentCycle || undefined);
         } else {
-            console.error('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
+          console.error('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
         }
       }
     }
@@ -349,7 +362,7 @@ export class FeedbackViewerImpl {
     this.domManager.updateSubmitButtonState(true);
     this.domManager.showPromptInputArea(true);
 
-    this.saveHistory({ type: 'error', content: errorMessage }); // ADDED: Save error to history
+    this.saveHistory({ type: 'error', content: errorMessage });
   }
 
   public hide(initiatedByUser: boolean = true, fromCloseButton: boolean = false): void {
@@ -396,7 +409,7 @@ export class FeedbackViewerImpl {
   public renderUserMessage(html: string): void {
     if (!this.domManager) return;
     console.log("[FeedbackViewerLogic] Rendering prepended user message.");
-    this.saveHistory({ type: 'usermessage', content: html }); // ADDED: Save user message to history
+    this.saveHistory({ type: 'usermessage', content: html });
   }
 
   // --- Event Handlers ---
@@ -410,30 +423,73 @@ export class FeedbackViewerImpl {
   }
 
   private handleSubmit(): void {
+    const promptText = this.domElements?.promptTextarea.value.trim(); // Safely access promptTextarea
+
+    // Allow /publish even if other conditions aren't met
+    if (promptText?.toLowerCase() === '/publish') {
+      console.log("[FeedbackViewerLogic] /publish command detected. Calling publishSnapshot().");
+      this.publishSnapshot();
+      this.domManager?.setPromptState(true, ''); 
+      this.domManager?.updateSubmitButtonState(true); 
+      return; 
+    }
+
+    // ADDED: Handle /help command
+    if (promptText?.toLowerCase() === '/help') {
+      console.log("[FeedbackViewerLogic] /help command detected. Calling showOnboarding().");
+      this.showOnboarding();
+      this.domManager?.setPromptState(true, ''); // Clear the /help command
+      this.domManager?.updateSubmitButtonState(true); // Re-enable submit if it was disabled
+      return;
+    }
+
+    // Existing guards for regular feedback submission
     if (!this.domManager || !this.domElements || !this.originalOuterHTMLForCurrentCycle || !this.currentFixId) {
       this.showError('Missing context for submission (original HTML or Fix ID). Please select an element again.');
       return;
     }
 
-    const promptText = this.domElements.promptTextarea.value.trim();
     if (!promptText) {
       this.showError('Please enter a description or question.');
       return;
     }
 
-    const trimmedLowerCasePrompt = promptText.toLowerCase();
-    if (trimmedLowerCasePrompt === '/publish') {
-      console.log("[FeedbackViewerLogic] /publish command detected. Calling publishSnapshot().");
-      this.publishSnapshot(); // Call the new publish method
-      this.domManager.setPromptState(true, ''); 
-      this.domManager.updateSubmitButtonState(true);
-      return; 
-    }
-
+    // The /publish case is handled above, so no need for trimmedLowerCasePrompt here again for that.
     console.log(`[FeedbackViewerLogic] Submitting feedback for Fix ID: ${this.currentFixId}...`);
 
-    // --- Preprocess HTML ---
-    let processedHtmlForAI = this.originalOuterHTMLForCurrentCycle; // Start with the stored outerHTML
+    this.domManager.setPromptState(false);
+    this.domManager.updateSubmitButtonState(false);
+    this.domManager.updateLoaderVisibility(true, 'Loading...');
+    this.domManager.clearUserMessage();
+    this.domManager.showPromptInputArea(false, promptText);
+
+    const imageKeywords = ["image", "photo", "picture", "screenshot", "visual", "look", "style", "design", "appearance", "graphic", "illustration", "background", "banner", "logo"];
+    const promptHasImageKeyword = imageKeywords.some(keyword => promptText.includes(keyword));
+    let imageDataToSend: string | null = null;
+
+    if (promptHasImageKeyword && this.currentImageDataUrl) {
+      imageDataToSend = this.currentImageDataUrl;
+      console.log("[FeedbackViewerLogic] Image keyword found, using existing screenshot from current selection.");
+    } else if (promptHasImageKeyword) {
+      console.log("[FeedbackViewerLogic] Image keyword found, but no existing screenshot from selection. Proceeding without image.");
+    } else {
+      console.log("[FeedbackViewerLogic] No image-related keyword in prompt. Not sending image.");
+    }
+
+    this.saveHistory({ type: 'user', content: promptText });
+    
+    const newAiPlaceholder: ConversationItem = { type: 'ai', content: '', isStreaming: true };
+    this.saveHistory(newAiPlaceholder);
+    if (this.conversationHistory.length > 0 && 
+        this.conversationHistory[this.conversationHistory.length - 1].type === 'ai') {
+      this.activeStreamingAiItem = this.conversationHistory[this.conversationHistory.length - 1];
+      console.log("[FeedbackViewerLogic DEBUG] handleSubmit: Set activeStreamingAiItem.");
+    } else {
+      console.error("[FeedbackViewerLogic ERROR] handleSubmit: Failed to set activeStreamingAiItem after adding AI placeholder.");
+      this.activeStreamingAiItem = null;
+    }
+
+    let processedHtmlForAI = this.originalOuterHTMLForCurrentCycle; 
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
     try {
@@ -445,27 +501,15 @@ export class FeedbackViewerImpl {
       this.showError('Failed to process HTML before sending.');
       return;
     }
-    // --- End Preprocessing ---
 
-    // --- Update UI ---
-    this.domManager.setPromptState(false);
-    this.domManager.updateSubmitButtonState(false);
-    this.domManager.updateLoaderVisibility(true, 'Getting feedback...');
-    this.domManager.clearUserMessage();
-    this.domManager.showPromptInputArea(false, promptText);
-
-    this.saveHistory({ type: 'user', content: promptText });
-    this.saveHistory({ type: 'ai', content: '' });
-
-    // --- Call API ---
-    fetchFeedback(this.currentImageDataUrl, promptText, processedHtmlForAI);
+    fetchFeedback(imageDataToSend, promptText, processedHtmlForAI);
     try {
-        if (!localStorage.getItem('checkra_onboarded')) {
-            localStorage.setItem('checkra_onboarded', '1');
-            console.log('[FeedbackViewerImpl] Onboarding marked complete via first submission.');
-        }
+      if (!localStorage.getItem('checkra_onboarded')) {
+        localStorage.setItem('checkra_onboarded', '1');
+        console.log('[FeedbackViewerImpl] Onboarding marked complete via first submission.');
+      }
     } catch (e) {
-        console.warn('[FeedbackViewerImpl] Failed to set checkra_onboarded after submission:', e);
+      console.warn('[FeedbackViewerImpl] Failed to set checkra_onboarded after submission:', e);
     }
   }
 
@@ -513,21 +557,6 @@ export class FeedbackViewerImpl {
       if (wrapperElement) wrapperElement.remove();
       if (this.appliedFixes.has(fixId)) this.appliedFixes.delete(fixId);
       if (this.appliedFixListeners.has(fixId)) this.appliedFixListeners.delete(fixId);
-    }
-  }
-
-  private async handleAppliedFixCopy(fixId: string, event: Event): Promise<void> {
-    event.stopPropagation();
-    console.log(`[FeedbackViewerLogic] Copy button clicked for applied Fix ID: ${fixId}`);
-    const wrapperElement = document.querySelector(`.checkra-feedback-applied-fix[data-checkra-fix-id="${fixId}"]`);
-    if (wrapperElement) {
-      try {
-        await copyViewportToClipboard();
-      } catch (err) {
-        console.error(`Error copying viewport for fix ${fixId}:`, err);
-      }
-    } else {
-      console.warn(`[FeedbackViewerLogic] Wrapper element not found for copy: ${fixId}`);
     }
   }
 
@@ -662,80 +691,80 @@ export class FeedbackViewerImpl {
    * and stores it in `fixedOuterHTMLForCurrentCycle`.
    */
   private extractAndStoreFixHtml(): void {
-    // Get the content from the latest AI message
-    const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
+    const aiItems = this.conversationHistory.filter(item => item.type === 'ai');
+    const lastAiItem = aiItems.length > 0 ? aiItems[aiItems.length - 1] : null;
+
     if (!lastAiItem || !lastAiItem.content) {
-      console.log('[FeedbackViewerLogic] extractAndStoreFixHtml: No AI message content found in history to extract from.');
-      this.fixedOuterHTMLForCurrentCycle = null; // Ensure reset if no content
-      // No need to call updateActionButtonsVisibility here, finalizeResponse will handle it
+      console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: No AI message content found in history to extract from.');
+      this.fixedOuterHTMLForCurrentCycle = null;
       return;
     }
     const responseText = lastAiItem.content;
+    console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Full AI responseText for HTML extraction: ', responseText);
 
     let match = responseText.match(SPECIFIC_HTML_REGEX);
+    console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: SPECIFIC_HTML_REGEX match result:', match);
     if (!match) {
       match = responseText.match(GENERIC_HTML_REGEX);
+      console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: GENERIC_HTML_REGEX match result:', match);
     }
 
     if (match && match[1]) {
       let extractedHtml = match[1].trim();
-      console.log('[FeedbackViewerLogic] Regex matched HTML from AI response history.');
+      console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Initial extractedHtml (trimmed):', extractedHtml);
 
       try {
         extractedHtml = this.postprocessHtmlFromAI(extractedHtml);
+        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: extractedHtml after postprocessHtmlFromAI() (changed: ${beforePostProcess !== extractedHtml}):', extractedHtml);
+        
         const tempFragment = this.createFragmentFromHTML(extractedHtml);
+        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: createFragmentFromHTML result:', tempFragment ? 'Fragment created' : 'Fragment FAILED');
+
         if (tempFragment && tempFragment.childNodes.length > 0) {
-          // Store the latest fix details. These are used when clicking preview/apply.
           this.fixedOuterHTMLForCurrentCycle = extractedHtml;
-          // We also need the original HTML and the ID that this fix corresponds to.
-          // This should ideally be stored with the AI message itself if possible,
-          // or we assume it relates to the last `prepareForInput` context.
-          console.log(`[FeedbackViewerLogic] Stored latest fixed HTML proposal.`);
+          console.log(`[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Successfully STORED fixedOuterHTMLForCurrentCycle (length: ${extractedHtml.length}).`);
         } else {
-          console.warn('[FeedbackViewerLogic] Failed to parse extracted HTML into a valid, non-empty fragment. Fix may not be applicable.');
+          console.warn('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Failed to parse extracted HTML into a valid, non-empty fragment. Fix may not be applicable.');
           this.fixedOuterHTMLForCurrentCycle = null;
         }
       } catch (e) {
-        console.error('[FeedbackViewerLogic] Error postprocessing/validating HTML from AI:', e);
+        console.error('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Error during postprocessing/validation:', e);
         this.fixedOuterHTMLForCurrentCycle = null;
       }
     } else {
-      // Check if the message stream has finished (isStreaming is false)
       if (!lastAiItem.isStreaming && !GENERIC_HTML_REGEX.test(responseText)) {
-        console.log('[FeedbackViewerLogic] No HTML block found in the final AI response history item.');
+        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: No HTML block found in the final AI response history item (isStreaming: false, regex test failed).');
+      } else {
+        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: No regex match for HTML block (isStreaming: ${lastAiItem.isStreaming}, regex test result for GENERIC_HTML_REGEX on full response: ${GENERIC_HTML_REGEX.test(responseText)}).');
       }
-      // Ensure fixed HTML is null if no match
       this.fixedOuterHTMLForCurrentCycle = null;
     }
   }
   private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, stableSelector?: string): void {
-    console.log(`[FeedbackViewerLogic] Applying fix directly to page for Fix ID: ${fixId}. Stable Selector: ${stableSelector || 'Not Provided (will use current cycle)'}`);
+    console.log(`[FeedbackViewerLogic DEBUG] applyFixToPage: Attempting to apply fix. Fix ID: ${fixId}, Stable Selector: ${stableSelector || 'Not Provided (will use current cycle)'}`);
     if (!this.domManager || !this.domElements) {
-      console.warn('[FeedbackViewerLogic] Cannot apply fix: Missing DOM Manager or elements.');
+      console.warn('[FeedbackViewerLogic DEBUG] applyFixToPage: Cannot apply fix: Missing DOM Manager or elements.');
       return;
     }
 
     try {
-      // Find the original element. It should still have the data-checkra-fix-id attribute
-      // if this is the first time applying this specific fix, or we need a way to re-target it.
-      // For simplicity, assume the ID is still on the original element if it hasn't been wrapped yet.
       let elementToReplace = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
+      console.log('[FeedbackViewerLogic DEBUG] applyFixToPage: Result of querySelector(`[data-checkra-fix-id="${fixId}"]`):', elementToReplace);
+
       let insertionParent: Node | null = null;
       let insertionBeforeNode: Node | null = null;
 
       if (elementToReplace) {
         if (!elementToReplace.parentNode) {
+          console.error(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} has no parent node.`);
           throw new Error(`Original element with ID ${fixId} has no parent node.`);
         }
         insertionParent = elementToReplace.parentNode;
+        console.log('[FeedbackViewerLogic DEBUG] applyFixToPage: Determined insertionParent:', insertionParent);
         insertionBeforeNode = elementToReplace.nextSibling;
-        elementToReplace.remove(); // Remove the original element before inserting wrapper
+        elementToReplace.remove(); 
       } else {
-        // This case is problematic. If the original element is gone (e.g. due to previous UI updates, or if this is a re-apply)
-        // we need a robust way to find where to insert it. This was handled by previewInsertionParent before.
-        // For now, if elementToReplace is not found, we cannot proceed reliably. This needs more thought for re-application scenarios.
-        console.error(`[FeedbackViewerLogic] Original element with ID ${fixId} not found. Cannot apply fix.`);
-        // Attempt to show an error to the user, perhaps in the panel?
+        console.error(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} not found. Cannot apply fix.`);
         this.showError(`Failed to apply fix: Original target element for fix ${fixId} not found.`);
         return;
       }
@@ -754,10 +783,8 @@ export class FeedbackViewerImpl {
       wrapper.appendChild(contentContainer);
 
       const closeBtn = this.createAppliedFixButton('close', fixId);
-      const copyBtn = this.createAppliedFixButton('copy', fixId);
       const toggleBtn = this.createAppliedFixButton('toggle', fixId);
       wrapper.appendChild(closeBtn);
-      wrapper.appendChild(copyBtn);
       wrapper.appendChild(toggleBtn);
 
       insertionParent.insertBefore(wrapper, insertionBeforeNode);
@@ -783,12 +810,10 @@ export class FeedbackViewerImpl {
 
       const listeners = {
         close: (e: Event) => this.handleAppliedFixClose(fixId, e),
-        copy: (e: Event) => this.handleAppliedFixCopy(fixId, e),
         toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e)
       };
       this.appliedFixListeners.set(fixId, listeners);
       closeBtn.addEventListener('click', listeners.close);
-      copyBtn.addEventListener('click', listeners.copy);
       toggleBtn.addEventListener('click', listeners.toggle);
 
       // After successful application, clear the current cycle's fix proposal
@@ -826,7 +851,7 @@ export class FeedbackViewerImpl {
   }
 
   /** Creates a button for the applied fix wrapper */
-  private createAppliedFixButton(type: 'close' | 'copy' | 'toggle', fixId: string): HTMLButtonElement {
+  private createAppliedFixButton(type: 'close' | 'toggle', fixId: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.setAttribute('data-fix-id', fixId);
 
@@ -835,11 +860,6 @@ export class FeedbackViewerImpl {
         button.className = 'feedback-fix-close-btn';
         button.innerHTML = '&times;';
         button.title = 'Discard Fix (Revert to Original)';
-        break;
-      case 'copy':
-        button.className = 'feedback-fix-copy-btn';
-        button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-        button.title = 'Copy Screenshot';
         break;
       case 'toggle':
         button.className = 'feedback-fix-toggle';
@@ -890,48 +910,7 @@ export class FeedbackViewerImpl {
     // No specific listeners to add to onboarding buttons anymore as audit is removed.
     // The onboarding view itself is handled by FeedbackViewerDOM.
   }
-
-  private showFooterCTALogic(): void {
-    if (!this.domManager || !this.domElements?.footerCTAContainer) return;
-
-    this.domManager.showFooterCTA(true);
-
-    const footerSelectBtn = this.domElements.viewer.querySelector('#checkra-btn-footer-select-section');
-
-    // Remove any previous listener first
-    if (this.footerSelectListener && footerSelectBtn) {
-      footerSelectBtn.removeEventListener('click', this.footerSelectListener);
-    }
-
-    // Define the new listener
-    this.footerSelectListener = () => {
-      console.log('[FeedbackViewerLogic] Footer Select Section clicked.');
-      this.domManager?.showFooterCTA(false); // Hide footer
-      this.hide(); // Hide panel temporarily
-      if (this.domElements?.viewer) {
-        screenCapture.startCapture(
-          (imageDataUrl: string | null, selectedHtml: string | null, bounds: DOMRect | null, targetElement: Element | null) => {
-            if (targetElement) {
-              console.log('[FeedbackViewerLogic] Section selected via footer CTA.');
-              this.prepareForInput(imageDataUrl, selectedHtml, bounds, targetElement);
-            } else {
-              console.log('[FeedbackViewerLogic] Section selection cancelled after footer CTA.');
-              this.domManager?.showFooterCTA(true);
-            }
-          },
-          this.domElements.viewer // Pass the panel element to ignore
-        );
-      } else {
-        console.error('[FeedbackViewerImpl] Cannot start screen capture from footer: domElements.viewer is not available.');
-      }
-    };
-
-    // Add the new listener
-    if (footerSelectBtn) {
-      footerSelectBtn.addEventListener('click', this.footerSelectListener);
-    }
-  }
-
+  
   // Handler for the mini select button click
   private handleMiniSelectClick(e: MouseEvent): void {
     e.stopPropagation(); // Prevent triggering other clicks
@@ -1080,44 +1059,43 @@ export class FeedbackViewerImpl {
       return {
         targetSelector: fixInfo.stableTargetSelector,
         appliedHtml: fixInfo.fixedOuterHTML,
-        sessionFixId: fixInfo.originalElementId 
+        sessionFixId: fixInfo.originalElementId
       };
     });
 
     const siteId = getSiteId();
-    const snapshotId = crypto.randomUUID();
+    const clientGeneratedSnapshotId = crypto.randomUUID(); // Frontend still generates a UUID for the snapshot content
+    console.log("[FeedbackViewerImpl DEBUG] Generated clientSnapshotId for this publish attempt:", clientGeneratedSnapshotId);
 
     const snapshotData = {
       siteId:      siteId,
-      snapshotId:  snapshotId, 
+      snapshotId:  clientGeneratedSnapshotId, // This UUID is sent to the backend
       timestamp:   new Date().toISOString(),
       pageUrl:     window.location.href,
       changes:     changes,
     };
 
-    console.log("[FeedbackViewerImpl] Snapshot data for /publish prepared:", snapshotData);
+    console.log("[FeedbackViewerImpl] Snapshot data for POST /snapshots prepared:", snapshotData);
     
-    const publishUrl = `${API_BASE}/sites/${siteId}/snapshots`;
-    console.log(`[FeedbackViewerImpl] Publishing snapshot to: ${publishUrl}`);
+    const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
+    console.log(`[FeedbackViewerImpl] Saving snapshot to: ${postSnapshotUrl}`);
 
     try {
-      this.renderUserMessage("Publishing snapshot..."); // Inform user
-      const response = await fetch(publishUrl, {
+      this.renderUserMessage("Publishing changes..."); 
+      const postResponse = await fetch(postSnapshotUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Add any necessary Authorization headers if your API requires them
-          // 'Authorization': `Bearer ${getEffectiveApiKey()}` 
         },
         body: JSON.stringify(snapshotData),
       });
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        let specificErrorMessage = `Publishing failed: ${response.status} ${response.statusText}`;
+      if (!postResponse.ok) {
+        const errorBody = await postResponse.text();
+        let specificErrorMessage = `Saving snapshot failed: ${postResponse.status} ${postResponse.statusText}`;
         try {
             const errorJson = JSON.parse(errorBody);
-            if (errorJson && errorJson.message) { // Or errorJson.error, depending on your API
+            if (errorJson && errorJson.message) { 
                 specificErrorMessage += ` - ${errorJson.message}`;
             }
         } catch (parseErr) {
@@ -1126,24 +1104,82 @@ export class FeedbackViewerImpl {
         throw new Error(specificErrorMessage);
       }
 
-      const result = await response.json(); // Expected: { variantId, cdnUrl }
-      console.log("[FeedbackViewerImpl] Snapshot successfully published:", result);
+      // Backend now returns { publishedVariantId (short), snapshotId (UUID from payload), publicCdnUrl, newVariantRecordCreated }
+      const postResult = await postResponse.json(); 
+      console.log("[FeedbackViewerImpl] Snapshot successfully saved (POST response):", postResult);
       
-      if (result.variantId) {
-        const shareUrl = `${window.location.origin}${window.location.pathname}?v=${result.variantId}`;
-        console.log("[FeedbackViewerImpl] Share URL:", shareUrl);
-        this.renderUserMessage(`Snapshot published! Share URL (also in console): <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
+      if (postResult.publishedVariantId && postResult.snapshotId) {
+        const shortPublishedId = postResult.publishedVariantId; // Short ID for URLs and promote path
+        const fullSnapshotIdUUID = postResult.snapshotId; // UUID for promotion body, should match clientGeneratedSnapshotId
+
+        // Verify backend returned the same snapshotId we sent
+        if (fullSnapshotIdUUID !== clientGeneratedSnapshotId) {
+            console.warn(`[FeedbackViewerImpl] Mismatch between client-generated snapshotId (${clientGeneratedSnapshotId}) and backend-returned snapshotId (${fullSnapshotIdUUID}). Using backend's.`);
+            // Potentially use clientGeneratedSnapshotId if strict control is needed, or trust backend's echo.
+            // For now, we'll use what the backend confirmed (fullSnapshotIdUUID) for the promotion body.
+        }
+
+        this.renderUserMessage(`Published ID: ${shortPublishedId}`);
+        
+        // Promote using the SHORT publishedVariantId in the path
+        const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${shortPublishedId}`;
+        console.log(`[FeedbackViewerImpl] Promoting variant. URL: ${promoteUrl}`);
+
+        try {
+          const promoteResponse = await fetch(promoteUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            // Body MUST contain the full UUID snapshotId
+            body: JSON.stringify({ snapshotIdToPromote: fullSnapshotIdUUID }), 
+          });
+
+          if (!promoteResponse.ok) {
+            const promoteErrorBody = await promoteResponse.text();
+            let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
+            try {
+                const errorJson = JSON.parse(promoteErrorBody);
+                if (errorJson && errorJson.message) { 
+                    specificPromoteErrorMessage += ` - ${errorJson.message}`;
+                }
+            } catch (parseErr) {
+                specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
+            }
+            console.error("[FeedbackViewerImpl] Error promoting snapshot:", specificPromoteErrorMessage, promoteErrorBody);
+            this.showError(`Failed to promote snapshot: ${specificPromoteErrorMessage}`);
+            this.renderUserMessage(`Error promoting: ${specificPromoteErrorMessage}. Snapshot saved (ID: ${shortPublishedId.substring(0,8)}...) but not live.`);
+            return; 
+          }
+
+          // Promotion response: { variantId (short, same as publishedVariantId), cdnUrl, snapshotId (UUID) }
+          const promoteResult = await promoteResponse.json(); 
+          console.log("[FeedbackViewerImpl] Snapshot successfully promoted (PUT response):", promoteResult);
+          
+          // Use the cdnUrl from the promotion response, or fallback to publicCdnUrl from POST response
+          const liveCdnUrl = promoteResult.cdnUrl || postResult.publicCdnUrl;
+          // Share URL uses the SHORT publishedVariantId and the new query parameter
+          const shareUrl = `${window.location.origin}${window.location.pathname}?checkra-variant-id=${shortPublishedId}`;
+
+          this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
+          console.log("[FeedbackViewerImpl] Share URL:", shareUrl, "Live CDN URL:", liveCdnUrl);
+
+        } catch (promoteError) {
+          console.error("[FeedbackViewerImpl] Network or other error promoting snapshot:", promoteError);
+          const errorMessage = promoteError instanceof Error ? promoteError.message : "An unknown error occurred during promotion.";
+          this.showError(`Failed to promote snapshot: ${errorMessage}`);
+          this.renderUserMessage(`Error promoting: ${errorMessage}. Snapshot saved (ID: ${shortPublishedId.substring(0,8)}...) but not live.`);
+        }
       } else {
-        console.warn("[FeedbackViewerImpl] Publish successful, but variantId missing in response:", result);
-        this.renderUserMessage("Snapshot published, but could not generate share link (variantId missing).");
+        console.warn("[FeedbackViewerImpl] Snapshot POST successful, but publishedVariantId or snapshotId missing in response:", postResult);
+        this.renderUserMessage("Snapshot saved, but could not get necessary IDs for promotion.");
       }
 
-    } catch (error) {
-      console.error("[FeedbackViewerImpl] Error publishing snapshot:", error);
-      // Optionally, inform the user of the error via UI
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during publishing.";
-      this.showError(`Failed to publish snapshot: ${errorMessage}`);
-      this.renderUserMessage(`Error: ${errorMessage}`); // Also show in chat
+    } catch (error) { // Error from initial POST
+      console.error("[FeedbackViewerImpl] Error saving snapshot:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during saving.";
+      this.showError(`Failed to save snapshot: ${errorMessage}`);
+      this.renderUserMessage(`Error saving snapshot: ${errorMessage}`);
     }
   }
 }

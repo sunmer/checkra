@@ -48,6 +48,7 @@ export interface FeedbackViewerElements {
   miniSelectButton?: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
   imageGenerationStatusElement?: HTMLDivElement;
+  availabilityToast?: HTMLDivElement;
 }
 
 const SUBMIT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -2 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
@@ -119,7 +120,7 @@ export class FeedbackViewerDOM {
     loadingIndicator.id = 'checkra-feedback-loading-indicator';
     loadingIndicator.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="loading-spinner"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-          <span id="feedback-loading-indicator-text">Getting feedback...</span>
+          <span id="feedback-loading-indicator-text">Loading...</span>
         `;
     const loadingIndicatorText = loadingIndicator.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text')!;
     responseHeader.appendChild(loadingIndicator);
@@ -232,7 +233,8 @@ export class FeedbackViewerDOM {
       footerCTAContainer,
       miniSelectButton,
       settingsButton,
-      imageGenerationStatusElement
+      imageGenerationStatusElement,
+      availabilityToast: this.createAvailabilityToast()
     };
 
     // Use the bound method for the listener
@@ -452,6 +454,7 @@ Use this panel to edit your website with AI, ship variations, and learn what wor
 * <span class="onboarding-suggestion">Add an abstract background image</span>
 * <span class="onboarding-suggestion">Rewrite this hero section</span>
 
+* You can type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/publish</kbd> to get a shareable url for your changes
 * Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> for all commands.
     `;
 
@@ -625,4 +628,27 @@ Use this panel to edit your website with AI, ship variations, and learn what wor
     }
   }
   // END ADDED
+
+  private createAvailabilityToast(): HTMLDivElement {
+    const toast = document.createElement('div');
+    toast.id = 'checkra-availability-toast';
+    toast.textContent = 'Checkra is active! Press Shift twice to open.';
+    // CSS handles initial hidden state
+    document.body.appendChild(toast);
+    return toast;
+  }
+
+  public showAvailabilityToast(): void {
+    if (!this.elements?.availabilityToast) return;
+    const toast = this.elements.availabilityToast;
+    toast.classList.add('visible');
+    toast.classList.remove('hiding');
+
+    // Automatically hide after a few seconds
+    setTimeout(() => {
+      toast.classList.add('hiding');
+      // Optional: Remove from DOM after transition if not reused often
+      // setTimeout(() => toast.classList.remove('visible', 'hiding'), 500); 
+    }, 4000); // Show for 4 seconds
+  }
 }
