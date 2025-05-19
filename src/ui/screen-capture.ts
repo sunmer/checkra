@@ -186,8 +186,6 @@ class ScreenCapture {
       // Set up mousemove handler to highlight elements under cursor
       this.mouseMoveListener = (event: MouseEvent) => {
         const elementAtPoint = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
-
-        // ADDED: Check if the element under the mouse is part of the ignored element
         if (this.ignoreElement && elementAtPoint && this.ignoreElement.contains(elementAtPoint)) {
           // If currently highlighting something else (outside the panel), remove that highlight
           if (this.currentHighlight && !this.ignoreElement.contains(this.currentHighlight)) {
@@ -234,8 +232,6 @@ class ScreenCapture {
 
         // --- Explicitly restore styles BEFORE cleanup and outerHTML ---
         if (selectedElement) {
-          // REMOVED: const targetId = selectedElement.id || selectedElement.tagName;
-          // Removed check related to floating menu container restoration.
 
           selectedElement.style.removeProperty('outline');
 

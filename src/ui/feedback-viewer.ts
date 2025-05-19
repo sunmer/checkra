@@ -19,7 +19,7 @@ export default class FeedbackViewer {
     this.feedbackViewerImpl = new FeedbackViewerImpl(this.handleToggle.bind(this));
     this.feedbackViewerImpl.initialize(this.feedbackViewerDOM, this.settingsModal);
 
-    // --- Toast Logic --- 
+    // Toast Logic
     try {
       const panelWasClosed = localStorage.getItem(PANEL_CLOSED_BY_USER_KEY);
       console.log(`[FeedbackViewer] Checked PANEL_CLOSED_BY_USER_KEY: ${panelWasClosed}`);
@@ -30,7 +30,6 @@ export default class FeedbackViewer {
     } catch (e) {
       console.warn('[FeedbackViewer] Failed to check localStorage for panel state:', e);
     }
-    // --- End Toast Logic ---
 
     console.log('[FeedbackViewer] Initialized.');
   }
@@ -56,16 +55,17 @@ export default class FeedbackViewer {
     }
   }
 
-  // --- ADDED: Toast Method ---
+  // Toast Method
   private showAvailabilityToast(): void {
     const toastId = 'checkra-availability-toast';
     if (document.getElementById(toastId)) return; // Prevent multiple toasts
 
     const toast = document.createElement('div');
     toast.id = toastId;
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const shortcutText = isMac ? '⌘ L' : 'Ctrl L';
-    toast.textContent = `Checkra is available. Use ${shortcutText} to open.`;
+    // const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0; // No longer needed for specific OS keys
+    // const shortcutText = isMac ? '⌘ L' : 'Ctrl L'; // Old shortcut
+    const shortcutText = 'Shift twice quickly'; // New shortcut text
+    toast.textContent = `Checkra is available. Press ${shortcutText} to open.`; // Updated phrasing
 
     document.body.appendChild(toast);
 

@@ -99,7 +99,6 @@
     // Assume anything else is production (e.g., deployed demo) or needs CDN
     const isProductionLike = !isDev && !isPreprod;
 
-    // ADDED: Store the API instance globally
     window.checkraApiInstance = null;
 
     function loadScript(src, type) {
@@ -124,20 +123,24 @@
       // Standard UMD initialization (for preprod/production-like)
       if (window.CheckraInitialized && window.checkraApiInstance) { // Check if API also set
         console.log('[Checkra Loader] UMD path: Already initialized and API instance exists.');
+        // If already initialized, ensure button setup is attempted
+        setupGetInstantFeedbackButton(); // MODIFIED: Call directly
         return;
       }
       if (window.checkra && typeof window.checkra.initCheckra === 'function') {
         if (!window.checkraApiInstance) { // Initialize only if API not set
-            window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false }); 
-            console.log('[Checkra Loader] UMD path: API instance set.');
-            // Dispatch a custom event indicating the API is ready
-            document.dispatchEvent(new CustomEvent('checkraApiReady'));
+          window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false });
+          console.log('[Checkra Loader] UMD path: API instance set.');
+          document.dispatchEvent(new CustomEvent('checkraApiReady'));
         } else {
-            console.log('[Checkra Loader] UMD path: API instance was already set (e.g. by dev script). Ensuring event is dispatched.');
-            // If API is already set but event might have been missed by early DOMContentLoaded for button listener
+          console.log('[Checkra Loader] UMD path: API instance was already set. Ensuring event.');
+          if (!document.querySelector('#get-instant-feedback-btn[data-checkra-listener-attached]')) {
+            // If API was set but event might have been missed by early DOMContentLoaded for button listener
             document.dispatchEvent(new CustomEvent('checkraApiReady'));
+          }
         }
-        // window.CheckraInitialized = true; // Consider if this flag is still needed or managed by core lib
+        // window.CheckraInitialized = true; // This flag seems redundant if we rely on checkraApiInstance
+        setupGetInstantFeedbackButton(); // MODIFIED: Call directly after init attempt
       } else {
         console.error('[Checkra Loader] Checkra UMD global not found for initialization.');
       }
@@ -146,7 +149,7 @@
     if (isDev) {
       // DEV MODE: Load directly from source using module script below.
       // The <script type="module"> at the bottom handles this.
-
+      // Button setup will be handled by the dev-specific script block.
     } else if (isPreprod) {
       // PREPROD MODE: Load built UMD files from local build output
 
@@ -218,26 +221,26 @@
     <main id="content" role="main" class="relative z-10 flex-grow">
 
       <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 my-24 flex flex-col items-center text-center">
-        <div class="mt-5 max-w-2xl">
+        <div class="mt-5 max-w-3xl">
           <h1 class="block font-bold text-gray-800 text-4xl md:text-5xl lg:text-6xl">
-            Debug your funnel<br />
+            Edit, ship & learn<br />
             <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-500">
               without leaving your website
             </span>
           </h1>
         </div>
-        <div class="mt-5 max-w-3xl">
+        <div class="mt-5 max-w-2xl">
           <p class="text-lg text-gray-600 mb-4">
-            Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed
-            live on your site. 
+            Ship growth & UI experiments without a CMS or pull requests. Our open-source AI editor lets you ship variations of your website using natural language.
           </p>
 
           <button type="button" id="get-instant-feedback-btn"
             class="mt-4 py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-hidden focus:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none">
-            Get instant feedback
+            Try it live
           </button>
 
-          <div class="mt-8 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-center sm:gap-6 auto-cols-max md:gap-6">
+          <div
+            class="mt-8 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-center sm:gap-6 auto-cols-max md:gap-6">
             <span class="block text-xs text-gray-600 font-semibold uppercase sm:mb-0">
               Compatible with:
             </span>
@@ -347,6 +350,9 @@
                 class="mt-2 py-2 px-3 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-blue-600 text-white hover:bg-blue-700 focus:outline-hidden focus:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none">
                 Copy the tag
               </button>
+              <a href="https://www.npmjs.com/package/checkra" class="py-3 px-4 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent text-blue-600 hover:text-blue-800 focus:outline-hidden focus:text-blue-800 disabled:opacity-50 disabled:pointer-events-none dark:text-blue-500 dark:hover:text-blue-400 dark:focus:text-blue-400">
+                Install with NPM
+              </a>
             </div>
           </div>
           <!-- End Icon Block -->
@@ -388,7 +394,7 @@
               </svg>
             </div>
             <div>
-              <p class="mt-1 text-gray-600">You can now ask Checkra for UX & conversion feedback right on your website
+              <p class="mt-1 text-gray-600">You can now edit your site, ship variations, and measure the impact all in one place.
               </p>
             </div>
           </div>
@@ -421,12 +427,9 @@
 
               <div class="mt-5">
                 <p class="font-semibold text-5xl text-white">Solo Developers</p>
-                <h3 class="mt-5 font-medium text-lg text-white">Improve UX & Conversion</h3>
+                <h3 class="mt-5 font-medium text-lg text-white">Ship Faster, Learn Quicker</h3>
                 <p class="mt-1 text-neutral-400">
-                  Building alone is hard. Checkra's AI reveals blind spots such as unclear UI, missing instructions, or
-                  confusing
-                  features – without leaving your website. Don't let your side project fail because of simple
-                  oversights.
+                  Building alone is hard. Checkra's inline AI editor helps you quickly prototype UI changes, test growth ideas, and ship variations directly on your site. Iterate faster without complex dev cycles.
                 </p>
               </div>
             </div>
@@ -447,11 +450,10 @@
               </svg>
 
               <div class="mt-5">
-                <p class="font-semibold text-5xl text-white">Designers & PM's</p>
-                <h3 class="mt-5 font-medium text-lg text-white">Streamline Development</h3>
+                <p class="font-semibold text-5xl text-white">Marketers & Designers</p>
+                <h3 class="mt-5 font-medium text-lg text-white">Launch Experiments Easily</h3>
                 <p class="mt-1 text-neutral-400">
-                  Ask Checkra for insights on UX, accessibility, and conversion issues directly on your website. Get
-                  previews for fixes and easily share them with engineers, giving clear and actionable feedback.
+                  Use Checkra to create and preview UI variations for growth experiments directly on your website. Get AI assistance for copy and design, then publish changes or share variants with your team for review.
                 </p>
               </div>
             </div>
@@ -627,131 +629,29 @@
     // In DEV mode, we need to explicitly import the entry point
     // for its auto-initialization logic to run.
     if (import.meta.env.DEV) {
-      import('../src/index.ts') 
+      import('../src/index.ts')
         .then(coreModule => {
-          // The imported module (src/index.ts) likely exports initCheckra.
-          // The auto-init logic within src/index.ts itself also calls initCheckra,
-          // but we need to capture the API instance here for the button.
           if (coreModule && typeof coreModule.initCheckra === 'function') {
-            // If checkraApiInstance is already set by the auto-init from src/index.ts, 
-            // this might re-initialize, which could be an issue if initCheckra isn't idempotent
-            // or doesn't return the existing API on subsequent calls.
-            // For now, let's assume we want to ensure it IS set here if this path runs.
-            if (!window.checkraApiInstance) { // Only initialize if not already done by UMD path or another script
-                window.checkraApiInstance = coreModule.initCheckra({ isVisible: false });
-                console.log('[Checkra Loader] DEV mode: API instance explicitly set.');
+            if (!window.checkraApiInstance) {
+              window.checkraApiInstance = coreModule.initCheckra({ isVisible: false });
+              console.log('[Checkra Loader] DEV mode: API instance explicitly set.');
             } else {
-                console.log('[Checkra Loader] DEV mode: API instance was already set.');
+              console.log('[Checkra Loader] DEV mode: API instance was already set.');
+            }
+            // Dispatch event and setup button for DEV mode
+            document.dispatchEvent(new CustomEvent('checkraApiReady'));
+            // Call setupGetInstantFeedbackButton here, it's defined in the next script block
+            // but will be in scope due to how browsers process scripts.
+            if (typeof setupGetInstantFeedbackButton === 'function') {
+              setupGetInstantFeedbackButton();
             }
           } else {
-             console.error('[Checkra Loader] DEV mode: initCheckra not found on imported module or module not loaded correctly.', coreModule);
+            console.error('[Checkra Loader] DEV mode: initCheckra not found or module not loaded correctly.', coreModule);
           }
         })
         .catch(err => {
           console.error('[Checkra Loader] Failed to dynamically load dev module entry point:', err);
         });
-    }
-    // NOTE: No explicit initCheckra call here - the imported module handles it.
-  </script>
-
-  <!-- Prompt for the Checkra button -->
-  <div id="checkra-prompt"
-    style="position: fixed; max-width: 310px; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; display: flex; align-items: center;">
-    👇&nbsp;&nbsp;Test live, click the button below, then select any part of the website
-  </div>
-
-  <script>
-    // Combined script for dynamic text, fade-in, and removal when viewer appears
-    document.addEventListener('DOMContentLoaded', () => {
-      const promptElement = document.getElementById('checkra-prompt');
-      if (!promptElement) {
-        console.error('[Checkra Prompt] Could not find #checkra-prompt element.');
-        return;
-      }
-
-      // 1. Set dynamic text with spans for alignment
-      const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-      const actionWord = isMobile ? 'tap' : 'click';
-      const emojiSpan = '<span style="margin-right: 0.5em;">👇</span>';
-      const textSpan = `<span>Test live, ${actionWord} the button below, then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
-
-      // Set the innerHTML
-      promptElement.innerHTML = emojiSpan + textSpan;
-
-      // 2. Set up fade-in timeout
-      let fadeInTimeout = setTimeout(() => {
-        // Check element still exists (might have been removed by observer first)
-        const currentPrompt = document.getElementById('checkra-prompt');
-        if (currentPrompt) {
-          currentPrompt.style.opacity = '1';
-        }
-        fadeInTimeout = null; // Clear timeout variable once done or cleared
-      }, 1500);
-
-      // 3. Set up MutationObserver to remove prompt when viewer appears
-      let observer = null;
-      const observerCallback = (mutationsList, obs) => {
-        // Check if prompt still exists before trying to remove
-        const currentPrompt = document.getElementById('checkra-prompt');
-        if (!currentPrompt) {
-          // Prompt already removed, disconnect observer if not already done
-          if (obs) obs.disconnect();
-          observer = null;
-          return;
-        }
-
-        for (const mutation of mutationsList) {
-          if (mutation.type === 'childList') {
-            for (const node of mutation.addedNodes) {
-              // Check if the added node *is* #feedback-viewer or *contains* it
-              if (node.nodeType === 1 && (node.id === 'checkra-feedback-viewer' || node.querySelector('#checkra-feedback-viewer'))) {
-                if (fadeInTimeout) {
-                  clearTimeout(fadeInTimeout); // Prevent fade-in if viewer appears first
-                  fadeInTimeout = null;
-                }
-                currentPrompt.remove(); // Remove the prompt element permanently
-                obs.disconnect(); // Stop observing once found
-                observer = null;
-                return; // Exit after finding
-              }
-            }
-          }
-        }
-      };
-
-      // Create and start the observer
-      observer = new MutationObserver(observerCallback);
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      // Clean up observer and timeout on page unload
-      window.addEventListener('unload', () => {
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
-        if (fadeInTimeout) {
-          clearTimeout(fadeInTimeout);
-          fadeInTimeout = null;
-        }
-      });
-    });
-
-    // Find the element
-    const feedbackButton = document.getElementById('checkra-show-feedback-viewer');
-
-    if (feedbackButton) {
-      feedbackButton.addEventListener('click', () => {
-        if (typeof gtag === 'function') {
-          gtag('event', 'feedback_viewer_opened', {
-            'event_category': 'engagement',
-            'event_label': 'Feedback Viewer Opened'
-          });
-        } else {
-          console.warn('gtag function not found. GA event not sent.');
-        }
-      });
-    } else {
-      console.warn('Element #checkra-show-feedback-viewer not found for GA tracking.');
     }
   </script>
 
@@ -783,97 +683,49 @@
     });
   </script>
 
-  <!-- Script to forward click from inline trigger to main Checkra button -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const triggerButton = document.getElementById('trigger-checkra-show-feedback-viewer');
-
-      if (triggerButton) {
-        triggerButton.addEventListener('click', (event) => {
-          // Prevent default if it's somehow an anchor or similar
-          event.preventDefault();
-
-          // Find the target button *inside* the event handler
-          // as it might be added dynamically after DOMContentLoaded.
-          const targetButton = document.getElementById('checkra-show-feedback-viewer');
-          if (targetButton) {
-            targetButton.click();
-          } else {
-            console.warn('Checkra target button (#checkra-show-feedback-viewer) not found.');
-            // Optional: alert the user if the main button isn't ready
-            // alert('Checkra button not ready yet. Please try again in a moment.');
-          }
-        });
-      } else {
-        console.warn('Checkra trigger button (#trigger-checkra-show-feedback-viewer) not found.');
-      }
-    });
-  </script>
-
   <!-- REVISED: Script to attach click listener to the "Get instant feedback" button -->
   <script type="module">
-    function setupGetInstantFeedbackButton() {
+    // Make setupGetInstantFeedbackButton a global function or ensure it's hoisted/available
+    window.setupGetInstantFeedbackButton = function () {
       const button = document.getElementById('get-instant-feedback-btn');
       if (!button) {
-        console.warn('[Demo Page] #get-instant-feedback-btn not found during setup.');
         return;
       }
-
-      // Prevent multiple listeners
       if (button.hasAttribute('data-checkra-listener-attached')) {
         return;
       }
-
       button.addEventListener('click', () => {
+        console.log('[Demo Page] #get-instant-feedback-btn clicked. API Instance:', window.checkraApiInstance);
         if (window.checkraApiInstance && typeof window.checkraApiInstance.showFeedback === 'function') {
           window.checkraApiInstance.showFeedback();
         } else {
-          console.error('Checkra API not available when "Get instant feedback" button clicked. API Instance:', window.checkraApiInstance);
-          // Attempt to initialize and call again IF UMD global is present but API instance is not
-          if (window.checkra && typeof window.checkra.initCheckra === 'function' && !window.checkraApiInstance) {
-            console.log('[Demo Page] Attempting late Checkra initialization from button click...');
-            window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false });
-            if (window.checkraApiInstance && typeof window.checkraApiInstance.showFeedback === 'function') {
-              console.log('[Demo Page] Late init successful, calling showFeedback.');
-              window.checkraApiInstance.showFeedback();
-            } else {
-              console.error('[Demo Page] Late init failed or showFeedback still not available.');
-            }
-          }
+          console.error('[Demo Page] Checkra API not available or showFeedback is not a function.');
         }
       });
       button.setAttribute('data-checkra-listener-attached', 'true');
-      console.log('[Demo Page] Listener for #get-instant-feedback-btn attached.');
     }
 
     if (window.checkraApiInstance) {
-      setupGetInstantFeedbackButton();
+      window.setupGetInstantFeedbackButton();
     } else {
-      document.addEventListener('checkraApiReady', setupGetInstantFeedbackButton, { once: true });
-      if (import.meta.env.DEV) {
-        document.addEventListener('DOMContentLoaded', () => {
-          if (window.checkraApiInstance) {
-            setupGetInstantFeedbackButton();
-          } else {
-            console.warn('[Demo Page - Dev] API not ready on DOMContentLoaded for button setup. Dev init script might be slow or failing.');
-          }
-        });
-      }
-      // For non-DEV (UMD), if checkraApiReady hasn't fired by DOMContentLoaded, 
-      // it means the script is slow. The checkraApiReady listener is primary.
-      // A DOMContentLoaded fallback for UMD if API is somehow ready but event missed is implicitly handled by the first `if (window.checkraApiInstance)`
-      // No, let's add a DOMContentLoaded check for UMD too for robustness, as the event might be tricky.
-      else { // Non-DEV (UMD path)
-        document.addEventListener('DOMContentLoaded', () => {
-            if (window.checkraApiInstance) { // Check if UMD load completed before DOMContentLoaded fully processed this
-                setupGetInstantFeedbackButton();
-            } else {
-                // If still not ready, the 'checkraApiReady' is the main hope.
-                console.log('[Demo Page - UMD] API not yet ready on DOMContentLoaded, relying on checkraApiReady event.');
-            }
-        });
-      }
+      document.addEventListener('checkraApiReady', () => {
+        window.setupGetInstantFeedbackButton();
+      }, { once: true });
     }
+
+    // Fallback for DEV mode DOMContentLoaded, in case the async import is slow
+    if (import.meta.env.DEV && !window.checkraApiInstance) {
+      document.addEventListener('DOMContentLoaded', () => {
+        if (window.checkraApiInstance && typeof window.setupGetInstantFeedbackButton === 'function' && !document.getElementById('get-instant-feedback-btn').hasAttribute('data-checkra-listener-attached')) {
+          console.log('[Demo Page] DEV DOMContentLoaded: API instance now available, setting up button.');
+          window.setupGetInstantFeedbackButton();
+        } else if (!window.checkraApiInstance && typeof window.setupGetInstantFeedbackButton === 'function') {
+          // If button setup function is available but API isn't, it means core init failed or is very slow.
+          console.warn('[Demo Page] DEV DOMContentLoaded: API instance still not available for button setup.');
+        }
+      });
+    }
+
   </script>
 </body>
 

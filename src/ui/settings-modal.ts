@@ -1,4 +1,5 @@
 import './settings-modal.css';
+import { eventEmitter } from '../core/index';
 
 /**
  * Interface for AI model settings.
@@ -160,7 +161,7 @@ export class SettingsModal {
 
     if (this.modelSelect) {
       this.modelSelect.innerHTML = '';
-      const modelOptions = ['gpt-4o', 'gpt-4o-mini'];
+      const modelOptions = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'];
       modelOptions.forEach(optionText => {
         const option = document.createElement('option');
         option.value = optionText.toLowerCase().replace(/ /g, '-');
@@ -218,6 +219,8 @@ export class SettingsModal {
     this.boundModelChangeHandler = (event: Event) => {
       const selectedModel = (event.target as HTMLSelectElement).value;
       this.currentSettings.model = selectedModel;
+      console.log('[SettingsModal] Model changed to:', this.currentSettings.model); // DEBUG LOG
+      eventEmitter.emit('settingsChanged', { ...this.currentSettings });
     };
     this.boundTempSliderHandler = (event: Event) => {
       const slider = event.target as HTMLInputElement;
@@ -228,12 +231,11 @@ export class SettingsModal {
               this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(selectedTemp);
           }
           console.log(`[SettingsModal] Slider handler updated temperature to: ${this.currentSettings.temperature}`);
+          eventEmitter.emit('settingsChanged', { ...this.currentSettings });
       } else {
           console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
       }
     };
-
-    // ADDED: Handler for clicking outside the modal content to close it
     const boundOverlayClickHandler = (event: MouseEvent) => {
       if (this.modalContainer && event.target === this.modalContainer) {
         event.stopPropagation(); // Prevent click from reaching document listener
@@ -244,7 +246,6 @@ export class SettingsModal {
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
     this.temperatureSlider.addEventListener('input', this.boundTempSliderHandler);
-    // ADDED: Listener for overlay clicks
     this.modalContainer?.addEventListener('click', boundOverlayClickHandler);
   }
 
@@ -300,6 +301,7 @@ export class SettingsModal {
     if (!this.currentSettings.model) {
       this.currentSettings.model = 'gpt-4o';
     }
+    console.log('[SettingsModal] getCurrentSettings returning:', this.currentSettings); // DEBUG LOG
     return { ...this.currentSettings };
   }
 

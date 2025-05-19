@@ -89,7 +89,7 @@
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
 .checkra-feedback-applied-fix .feedback-fix-toggle {
   position: absolute;
-  top: 3px;
+  top: -20px;
   /* Adjust positioning */
   width: 20px;
   /* Adjust size */
@@ -133,7 +133,7 @@
 }
 
 .checkra-feedback-applied-fix .feedback-fix-toggle {
-  right: 53px;
+  right: 25px;
   /* Next to copy */
 }
 
@@ -287,13 +287,7 @@
   box-sizing: border-box;
   order: 2; /* Submit button comes after select button */
   flex-shrink: 0;
-  border: none; /* Remove border */
-  /* REMOVED text/gap related styles */
-  /* padding: 5px 8px; */
-  /* gap: 6px; */
-  /* text-align: center; */
-  /* font-size: 0.875rem; */
-  /* font-weight: 500; */
+  border: none; 
 }
 
 #checkra-feedback-viewer #checkra-feedback-submit-button svg {
@@ -306,8 +300,11 @@
   opacity: 1;
 }
 
-/* REMOVED: Shortcut hint style */
-/* #checkra-feedback-viewer #checkra-feedback-submit-button span:last-child { ... } */
+#checkra-feedback-viewer #checkra-feedback-submit-button:disabled {
+  background-color: #60a5fa; /* Lighter blue (Tailwind blue-400) */
+  opacity: 0.6; /* Adjust opacity for disabled state */
+  cursor: not-allowed;
+}
 
 #checkra-feedback-viewer #checkra-prompt-textarea {
   width: 100%;
@@ -662,7 +659,7 @@
 
 /* --- ADDED: Conversation History Bubble Styles --- */
 .checkra-message-bubble {
-  padding: 10px 15px;
+  padding: 10px 0;
   border-radius: 12px;
   margin-bottom: 10px;
   max-width: 90%;
@@ -676,16 +673,9 @@
   color: white;
   margin-left: auto;
   border-bottom-right-radius: 2px;
+  padding: 10px;
+  max-width: 80%;
 }
-
-.message-ai {
-  background-color: #374151;
-  color: #e5e7eb;
-  margin-right: auto;
-  border-bottom-left-radius: 2px;
-}
-
-.message-ai.streaming {}
 
 .message-error {
   background-color: #4d1b1b;
@@ -693,6 +683,7 @@
   border: 1px solid #8f2d2d;
   margin-right: auto;
   border-radius: 4px;
+  padding: 10px;
 }
 
 .message-usermessage {
@@ -766,13 +757,12 @@
 /* MODIFIED: Target elements within AI message bubbles */
 .checkra-message-bubble.message-ai ul,
 .checkra-message-bubble.message-ai ol {
-  padding-left: 20px;
   margin-bottom: 1em;
 }
 
 /* MODIFIED: Target elements within AI message bubbles */
 .checkra-message-bubble.message-ai li {
-  margin-bottom: 0.4em;
+  margin-bottom: 15px;
 }
 
 /* ADDED: Styles for the code block copy button - MODIFIED selectors */
@@ -845,7 +835,7 @@
     border-radius: 50%;
     background-color: rgb(28 112 230); /* Match select button color */
     color: white;
-    margin: 0 6px 0 0; /* Adjust spacing */
+    margin: 0 0 2px 0; /* Adjust spacing */
     vertical-align: middle; /* Align with text */
     pointer-events: none; /* Not clickable */
     padding: 0; /* Ensure no extra padding */
@@ -933,4 +923,21 @@
 
 #checkra-feedback-submit-button:disabled {
   cursor: not-allowed;
+}
+
+#checkra-onboarding-container ul li > .onboarding-button-representation {
+  margin-top: 0.1em; /* Minor adjustment if icons are slightly misaligned with text baseline */
+}
+
+/* Style for suggestion examples in onboarding */
+#checkra-onboarding-container .checkra-message-bubble.message-ai ul li .onboarding-suggestion {
+  background-color: rgba(255, 255, 255, 0.08); /* Subtle background */
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: var(--checkra-base-font-stack);
+  font-size: 0.9em;
+  color: #c8d3f5;
+  display: inline-block;
+  line-height: 1.4;
 }

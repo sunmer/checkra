@@ -4,15 +4,23 @@ import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
 import { EventEmitter } from './event-emitter';
 
-// --- Module-level instance variable ---
+// Module-level instance variable
 let settingsModalInstance: SettingsModal | null = null;
 
-// --- Key Management ---
+// Key Management
 let effectiveApiKey: string | null = null;
 const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
 
-// ADDED: Instantiate and export EventEmitter
+// Cache latest settings to avoid instance mismatch issues
+let latestAiSettings: CoreAiSettings = { model: 'gpt-4o', temperature: 0.7 };
+
 export const eventEmitter = new EventEmitter();
+
+// Listen for settingsChanged event to keep cache updated
+eventEmitter.on('settingsChanged', (settings: CoreAiSettings) => {
+  latestAiSettings = { ...settings };
+  console.log('[Core] latestAiSettings updated via settingsChanged event:', latestAiSettings);
+});
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -38,14 +46,13 @@ export function getEffectiveApiKey(): string | null {
  */
 export function getCurrentAiSettings(): CoreAiSettings {
   if (settingsModalInstance) {
-    return settingsModalInstance.getCurrentSettings();
+    // Prefer cached settings if available
+    const settings = { ...latestAiSettings };
+    console.log('[Core] getCurrentAiSettings returning cached settings:', settings);
+    return settings;
   } else {
-    // Return default settings if the instance isn't available
-    console.warn('[Checkra Core] SettingsModal instance not available, returning default AI settings.');
-    return {
-      model: 'gpt-4o-mini', // Default model
-      temperature: 0.7     // Default temperature
-    };
+    console.warn('[Checkra Core] SettingsModal instance not available; returning cached or default settings.');
+    return { ...latestAiSettings };
   }
 }
 
@@ -81,7 +88,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     // isVisible option is deprecated
   };
 
-  // --- Determine Effective API Key ---
+  // Determine Effective API Key
   if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.trim() !== '') {
     effectiveApiKey = config.apiKey.trim();
   } else {
@@ -99,7 +106,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     }
   }
 
-  // --- Create instances and assign to module-level variables ---
+  // Create instances and assign to module-level variables
   // let feedbackMenuInstance: FloatingMenu | null = null;
 
   try {
@@ -123,7 +130,6 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
         if (settingsModalInstance) {
           settingsModalInstance.showModal();
         }
-        // Removed isVisible check - settings always available via header button now
         else {
             console.warn('[Checkra API] Settings modal instance not found.');
         }
