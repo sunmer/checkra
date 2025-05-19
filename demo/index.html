@@ -450,7 +450,7 @@
               </svg>
 
               <div class="mt-5">
-                <p class="font-semibold text-5xl text-white">Designers & PM's</p>
+                <p class="font-semibold text-5xl text-white">Marketers & Designers</p>
                 <h3 class="mt-5 font-medium text-lg text-white">Launch Experiments Easily</h3>
                 <p class="mt-1 text-neutral-400">
                   Use Checkra to create and preview UI variations for growth experiments directly on your website. Get AI assistance for copy and design, then publish changes or share variants with your team for review.
@@ -655,107 +655,6 @@
     }
   </script>
 
-  <!-- Prompt for the Checkra button -->
-  <div id="checkra-prompt"
-    style="position: fixed; max-width: 310px; bottom: 55px; left: 10px; z-index: 998; background-color: #3B82F6; color: white; padding: 4px 12px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; display: flex; align-items: center;">
-    👇&nbsp;&nbsp;Test live, click the button below, then select any part of the website
-  </div>
-
-  <script>
-    // Combined script for dynamic text, fade-in, and removal when viewer appears
-    document.addEventListener('DOMContentLoaded', () => {
-      const promptElement = document.getElementById('checkra-prompt');
-      if (!promptElement) {
-        console.error('[Checkra Prompt] Could not find #checkra-prompt element.');
-        return;
-      }
-
-      // 1. Set dynamic text with spans for alignment
-      const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-      const actionWord = isMobile ? 'tap' : 'click';
-      const emojiSpan = '<span style="margin-right: 0.5em;">👇</span>';
-      const textSpan = `<span>Test live, ${actionWord} the button below, then ${isMobile ? 'tap' : 'select'} any part of the website</span>`;
-
-      // Set the innerHTML
-      promptElement.innerHTML = emojiSpan + textSpan;
-
-      // 2. Set up fade-in timeout
-      let fadeInTimeout = setTimeout(() => {
-        // Check element still exists (might have been removed by observer first)
-        const currentPrompt = document.getElementById('checkra-prompt');
-        if (currentPrompt) {
-          currentPrompt.style.opacity = '1';
-        }
-        fadeInTimeout = null; // Clear timeout variable once done or cleared
-      }, 1500);
-
-      // 3. Set up MutationObserver to remove prompt when viewer appears
-      let observer = null;
-      const observerCallback = (mutationsList, obs) => {
-        // Check if prompt still exists before trying to remove
-        const currentPrompt = document.getElementById('checkra-prompt');
-        if (!currentPrompt) {
-          // Prompt already removed, disconnect observer if not already done
-          if (obs) obs.disconnect();
-          observer = null;
-          return;
-        }
-
-        for (const mutation of mutationsList) {
-          if (mutation.type === 'childList') {
-            for (const node of mutation.addedNodes) {
-              // Check if the added node *is* #feedback-viewer or *contains* it
-              if (node.nodeType === 1 && (node.id === 'checkra-feedback-viewer' || node.querySelector('#checkra-feedback-viewer'))) {
-                if (fadeInTimeout) {
-                  clearTimeout(fadeInTimeout); // Prevent fade-in if viewer appears first
-                  fadeInTimeout = null;
-                }
-                currentPrompt.remove(); // Remove the prompt element permanently
-                obs.disconnect(); // Stop observing once found
-                observer = null;
-                return; // Exit after finding
-              }
-            }
-          }
-        }
-      };
-
-      // Create and start the observer
-      observer = new MutationObserver(observerCallback);
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      // Clean up observer and timeout on page unload
-      window.addEventListener('unload', () => {
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
-        if (fadeInTimeout) {
-          clearTimeout(fadeInTimeout);
-          fadeInTimeout = null;
-        }
-      });
-    });
-
-    // Find the element
-    const feedbackButton = document.getElementById('checkra-show-feedback-viewer');
-
-    if (feedbackButton) {
-      feedbackButton.addEventListener('click', () => {
-        if (typeof gtag === 'function') {
-          gtag('event', 'feedback_viewer_opened', {
-            'event_category': 'engagement',
-            'event_label': 'Feedback Viewer Opened'
-          });
-        } else {
-          console.warn('gtag function not found. GA event not sent.');
-        }
-      });
-    } else {
-      console.warn('Element #checkra-show-feedback-viewer not found for GA tracking.');
-    }
-  </script>
-
   <!-- Script for Copy Button -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -780,33 +679,6 @@
         });
       } else {
         console.warn('Copy button (#copy-script-button) not found.');
-      }
-    });
-  </script>
-
-  <!-- Script to forward click from inline trigger to main Checkra button -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const triggerButton = document.getElementById('trigger-checkra-show-feedback-viewer');
-
-      if (triggerButton) {
-        triggerButton.addEventListener('click', (event) => {
-          // Prevent default if it's somehow an anchor or similar
-          event.preventDefault();
-
-          // Find the target button *inside* the event handler
-          // as it might be added dynamically after DOMContentLoaded.
-          const targetButton = document.getElementById('checkra-show-feedback-viewer');
-          if (targetButton) {
-            targetButton.click();
-          } else {
-            console.warn('Checkra target button (#checkra-show-feedback-viewer) not found.');
-            // Optional: alert the user if the main button isn't ready
-            // alert('Checkra button not ready yet. Please try again in a moment.');
-          }
-        });
-      } else {
-        console.warn('Checkra trigger button (#trigger-checkra-show-feedback-viewer) not found.');
       }
     });
   </script>

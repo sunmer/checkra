@@ -11,7 +11,16 @@ let settingsModalInstance: SettingsModal | null = null;
 let effectiveApiKey: string | null = null;
 const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
 
+// Cache latest settings to avoid instance mismatch issues
+let latestAiSettings: CoreAiSettings = { model: 'gpt-4o', temperature: 0.7 };
+
 export const eventEmitter = new EventEmitter();
+
+// Listen for settingsChanged event to keep cache updated
+eventEmitter.on('settingsChanged', (settings: CoreAiSettings) => {
+  latestAiSettings = { ...settings };
+  console.log('[Core] latestAiSettings updated via settingsChanged event:', latestAiSettings);
+});
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -37,16 +46,13 @@ export function getEffectiveApiKey(): string | null {
  */
 export function getCurrentAiSettings(): CoreAiSettings {
   if (settingsModalInstance) {
-    const settings = settingsModalInstance.getCurrentSettings();
-    console.log('[Core] getCurrentAiSettings fetched from modal:', settings); // DEBUG LOG
+    // Prefer cached settings if available
+    const settings = { ...latestAiSettings };
+    console.log('[Core] getCurrentAiSettings returning cached settings:', settings);
     return settings;
   } else {
-    // Return default settings if the instance isn't available
-    console.warn('[Checkra Core] SettingsModal instance not available, returning default AI settings.');
-    return {
-      model: 'gpt-4o-mini', // Default model
-      temperature: 0.7     // Default temperature
-    };
+    console.warn('[Checkra Core] SettingsModal instance not available; returning cached or default settings.');
+    return { ...latestAiSettings };
   }
 }
 

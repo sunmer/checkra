@@ -1,4 +1,5 @@
 import './settings-modal.css';
+import { eventEmitter } from '../core/index';
 
 /**
  * Interface for AI model settings.
@@ -219,6 +220,7 @@ export class SettingsModal {
       const selectedModel = (event.target as HTMLSelectElement).value;
       this.currentSettings.model = selectedModel;
       console.log('[SettingsModal] Model changed to:', this.currentSettings.model); // DEBUG LOG
+      eventEmitter.emit('settingsChanged', { ...this.currentSettings });
     };
     this.boundTempSliderHandler = (event: Event) => {
       const slider = event.target as HTMLInputElement;
@@ -229,6 +231,7 @@ export class SettingsModal {
               this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(selectedTemp);
           }
           console.log(`[SettingsModal] Slider handler updated temperature to: ${this.currentSettings.temperature}`);
+          eventEmitter.emit('settingsChanged', { ...this.currentSettings });
       } else {
           console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
       }
