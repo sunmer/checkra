@@ -1,17 +1,14 @@
-# Checkra, get instant UX and conversion tips without leaving your website
+# Checkra: Ship growth & UI experiments without a CMS or pull requests
 
-Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed live on your site.
+Checkra empowers developers and teams to rapidly test and deploy UI/UX changes, growth experiments, and content variations directly on their live website, bypassing traditional CMS limitations and lengthy pull request cycles.
 
-=======
-Checkra helps solo developers and startups improve UX and conversion with inline AI suggestions, previewed live on your site..
+## Features
 
-
- ## Features
-
-- ✨ **Suggestions**: Get AI-powered improvement ideas for UI, UX, and content
-- 💬 **Conversion tips**: Get conversion tips on any part of your website
+- ✨ **AI-Powered Editing**: Use AI to suggest and implement UI/UX changes, content variations, and new elements.
+- 🧪 **Live Experimentation**: Test different headlines, CTAs, layouts, and user flows directly on your production site.
+- 🚀 **Instant Deployment**: Publish changes and experiments live to segments of your audience without code deploys or PRs.
 - ⚙️ **Simple Integration**: Add Checkra to your site with a single script tag or npm install.
-- 🎨 **Minimal UI**: Floating button and modal interface stay out of the way until needed.
+- 🎨 **Visual Inline Editing**: See and approve changes directly on your webpage.
 
 ## Installation
 
