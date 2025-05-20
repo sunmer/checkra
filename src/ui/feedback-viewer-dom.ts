@@ -444,7 +444,7 @@ export class FeedbackViewerDOM {
 
     const markdownContent = `
 ### Welcome to Checkra!
-Use this panel to edit your website with AI, ship variations, and learn what works.
+Use this panel to edit your website with AI, ship variations, and analyze what works.
 
 **How to get started:**
 * ${selectButtonRepresentation} Select any element on your page
@@ -454,7 +454,7 @@ Use this panel to edit your website with AI, ship variations, and learn what wor
 * <span class="onboarding-suggestion">Add an abstract background image</span>
 * <span class="onboarding-suggestion">Rewrite this hero section</span>
 
-* You can type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/publish</kbd> to get a shareable url for your changes
+* Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/publish</kbd> to get a shareable url for your changes
 * Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> for all commands.
     `;
 
