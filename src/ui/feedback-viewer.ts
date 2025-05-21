@@ -1,52 +1,53 @@
 import { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { FeedbackViewerImpl } from './feedback-viewer-impl';
 import { SettingsModal } from './settings-modal';
-import { eventEmitter } from '../core/index'; // Ensure this path is correct
+import { eventEmitter } from '../core/index'; // Corrected: eventEmitter is exported from core/index.ts
 
-const PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // Keep this key
 
 export default class FeedbackViewer {
   private feedbackViewerDOM: FeedbackViewerDOM;
   private feedbackViewerImpl: FeedbackViewerImpl;
   private settingsModal: SettingsModal;
   private static instance: FeedbackViewer | null = null;
+  private initialVisibility: boolean; // Store initial visibility
 
-  private constructor(settingsModal: SettingsModal) {
-    
-    console.log('[FeedbackViewer] Constructor called.');
-    this.feedbackViewerDOM = new FeedbackViewerDOM();
+  private constructor(settingsModal: SettingsModal, initialVisibility: boolean = false) {
+    console.log(`[FeedbackViewer] Constructor called with initialVisibility: ${initialVisibility}`);
     this.settingsModal = settingsModal;
-    this.feedbackViewerImpl = new FeedbackViewerImpl(this.handleToggle.bind(this));
-    this.feedbackViewerImpl.initialize(this.feedbackViewerDOM, this.settingsModal);
+    this.initialVisibility = initialVisibility;
+    this.feedbackViewerDOM = new FeedbackViewerDOM();
+    // Pass initialVisibility to FeedbackViewerImpl constructor
+    this.feedbackViewerImpl = new FeedbackViewerImpl(this.handleToggle.bind(this), this.initialVisibility);
+    
+    // Listen for core requests to show/hide
+    eventEmitter.on('showViewerRequest', this.boundShowRequested);
+    eventEmitter.on('hideViewerRequest', this.boundHideRequested);
 
-    // Toast Logic
-    try {
-      const panelWasClosed = localStorage.getItem(PANEL_CLOSED_BY_USER_KEY);
-      console.log(`[FeedbackViewer] Checked PANEL_CLOSED_BY_USER_KEY: ${panelWasClosed}`);
-      if (panelWasClosed === 'true') {
-        // Delay toast slightly to ensure page has settled
-        setTimeout(() => this.showAvailabilityToast(), 250);
-      }
-    } catch (e) {
-      console.warn('[FeedbackViewer] Failed to check localStorage for panel state:', e);
-    }
+    // Initialize FeedbackViewerImpl AFTER setting up the listener
+    // The Impl will decide based on its initialVisibility and localStorage if it should show itself.
+    this.feedbackViewerImpl.initialize(this.feedbackViewerDOM, this.settingsModal);
 
     console.log('[FeedbackViewer] Initialized.');
   }
 
-  public static getInstance(settingsModal: SettingsModal): FeedbackViewer {
+  // Bound methods for event listeners
+  private boundShowRequested = () => this.showPanel();
+  private boundHideRequested = () => this.hidePanel();
+
+  public static getInstance(settingsModal: SettingsModal, initialVisibility: boolean = false): FeedbackViewer {
     if (!FeedbackViewer.instance) {
       if (!settingsModal) {
           console.error('[FeedbackViewer] getInstance called without settingsModal for new instance creation!');
           throw new Error('SettingsModal instance is required to create a new FeedbackViewer instance.');
       }
-      FeedbackViewer.instance = new FeedbackViewer(settingsModal);
+      FeedbackViewer.instance = new FeedbackViewer(settingsModal, initialVisibility);
     }
+    // If instance exists, should we update its visibility or warn if initialVisibility differs?
+    // For now, it returns the existing instance. The initial visibility is set at creation.
     return FeedbackViewer.instance;
   }
 
   private handleToggle(isVisible: boolean): void {
-    // This callback can be used for other components to react to visibility changes
     console.log(`[FeedbackViewer] Panel visibility changed to: ${isVisible}`);
     if (isVisible) {
       eventEmitter.emit('viewerDidShow');
@@ -55,61 +56,27 @@ export default class FeedbackViewer {
     }
   }
 
-  // Toast Method
-  private showAvailabilityToast(): void {
-    const toastId = 'checkra-availability-toast';
-    if (document.getElementById(toastId)) return; // Prevent multiple toasts
-
-    const toast = document.createElement('div');
-    toast.id = toastId;
-    // const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0; // No longer needed for specific OS keys
-    // const shortcutText = isMac ? '⌘ L' : 'Ctrl L'; // Old shortcut
-    const shortcutText = 'Shift twice quickly'; // New shortcut text
-    toast.textContent = `Checkra is available. Press ${shortcutText} to open.`; // Updated phrasing
-
-    document.body.appendChild(toast);
-
-    // Force a reflow for the animation to apply correctly on add
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    toast.offsetHeight;
-
-    toast.classList.add('visible');
-
-    setTimeout(() => {
-      toast.classList.remove('visible');
-      toast.classList.add('hiding');
-      // Remove after fade out animation (e.g., 0.5s)
-      setTimeout(() => {
-        toast.remove();
-      }, 500); 
-    }, 2000); // Toast visible for 4.5s, then starts fading out
-  }
-
   /**
-   * Shows the feedback viewer panel.
-   * This method might be called externally if direct control is needed.
+   * Shows the feedback viewer panel by calling the implementation's method.
    */
   public showPanel(): void {
-    if (!this.feedbackViewerImpl.getIsVisible()) {
-        this.feedbackViewerImpl.toggle(); // This will call showFromApi internally
-    }
+    // this.feedbackViewerImpl.showFromApi(); // Let Impl decide if it was user initiated or not
+    this.feedbackViewerImpl.showFromApi(false); // false indicates not user-initiated (e.g. from shortcut or API)
   }
 
   /**
-   * Hides the feedback viewer panel.
-   * This method might be called externally if direct control is needed.
+   * Hides the feedback viewer panel by calling the implementation's method.
    */
   public hidePanel(): void {
-    if (this.feedbackViewerImpl.getIsVisible()) {
-        this.feedbackViewerImpl.hide(false); // Programmatic hide
-    }
+    this.feedbackViewerImpl.hide(false); // Programmatic hide, not initiated by user interaction on close button
   }
 
   /**
    * Destroys the feedback viewer instance, removing elements and listeners.
-   * Added to match the public API expected by src/core/index.ts
    */
   public destroy(): void {
+    eventEmitter.off('showViewerRequest', this.boundShowRequested);
+    eventEmitter.off('hideViewerRequest', this.boundHideRequested);
     this.feedbackViewerImpl.cleanup(); 
     this.feedbackViewerDOM.destroy();   
     FeedbackViewer.instance = null;

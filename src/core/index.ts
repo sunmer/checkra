@@ -4,8 +4,9 @@ import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
 import { EventEmitter } from './event-emitter';
 
-// Module-level instance variable
+// Module-level instance variables
 let settingsModalInstance: SettingsModal | null = null;
+let feedbackViewerInstance: FeedbackViewer | null = null; // Keep a ref to the viewer instance
 
 // Key Management
 let effectiveApiKey: string | null = null;
@@ -14,6 +15,7 @@ const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
 // Cache latest settings to avoid instance mismatch issues
 let latestAiSettings: CoreAiSettings = { model: 'gpt-4o', temperature: 0.7 };
 
+// Global event emitter instance
 export const eventEmitter = new EventEmitter();
 
 // Listen for settingsChanged event to keep cache updated
@@ -61,13 +63,15 @@ export function getCurrentAiSettings(): CoreAiSettings {
  */
 export interface CheckraAPI {
   /**
-   * Programmatically triggers the feedback capture UI flow.
-   * Does nothing if the UI was initialized with isVisible: false.
+   * Programmatically shows the Checkra feedback UI.
    */
-  showFeedback: () => void;
+  show: () => void;
+  /**
+   * Programmatically hides the Checkra feedback UI.
+   */
+  hide: () => void;
   /**
    * Programmatically shows the settings modal.
-   * Does nothing if the UI was initialized with isVisible: false.
    */
   showSettings: () => void;
   /**
@@ -76,6 +80,13 @@ export interface CheckraAPI {
   destroy: () => void;
 }
 
+// Default options specifically for the core initialization path
+// These might differ slightly from src/index.ts auto-init defaults if necessary,
+// but for isVisible, they should align.
+const coreDefaultOptions: Partial<CheckraOptions> = {
+  isVisible: false, // Default to hidden for programmatic init too
+};
+
 /**
  * Initializes the Checkra feedback UI components and returns an API object.
  *
@@ -83,14 +94,17 @@ export interface CheckraAPI {
  * @returns A CheckraAPI object to interact with the library, or null if initialization fails.
  */
 export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
-  const config = {
-    apiKey: options?.apiKey ?? undefined, // Keep undefined if not provided
-    // isVisible option is deprecated
+  // Merge provided options: incoming options take precedence over core defaults.
+  const finalOptions: CheckraOptions = {
+    ...coreDefaultOptions, // Start with core defaults
+    ...(options || {}),    // Override with explicitly passed options (which might include script/global config from src/index.ts)
   };
 
+  console.log('[Checkra Core] Initializing with final options:', finalOptions);
+
   // Determine Effective API Key
-  if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey.trim() !== '') {
-    effectiveApiKey = config.apiKey.trim();
+  if (finalOptions.apiKey && typeof finalOptions.apiKey === 'string' && finalOptions.apiKey.trim() !== '') {
+    effectiveApiKey = finalOptions.apiKey.trim();
   } else {
     try {
       let anonymousId = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -102,46 +116,57 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
         effectiveApiKey = anonymousId;
       }
     } catch (error) {
+      console.warn('[Checkra Core] localStorage access error for anonymous ID. Using session-only ID.');
       effectiveApiKey = generateUUID(); // Generate one for this session only
     }
   }
-
-  // Create instances and assign to module-level variables
-  // let feedbackMenuInstance: FloatingMenu | null = null;
+  console.log('[Checkra Core] Effective API Key set.');
 
   try {
-    // Instantiate SettingsModal regardless of old isVisible
-    settingsModalInstance = new SettingsModal();
+    if (!settingsModalInstance) {
+      settingsModalInstance = new SettingsModal();
+      console.log('[Checkra Core] SettingsModal instance created.');
+    }
 
-    // Get the FeedbackViewer singleton instance using the imported class
-    const feedbackViewerInstance = FeedbackViewer.getInstance(settingsModalInstance);
+    // Get/create the FeedbackViewer singleton instance, passing initial visibility
+    // The FeedbackViewer.getInstance method needs to be adapted to accept initialVisibility
+    if (!feedbackViewerInstance) {
+      feedbackViewerInstance = FeedbackViewer.getInstance(settingsModalInstance, finalOptions.isVisible);
+      console.log(`[Checkra Core] FeedbackViewer instance created with initial visibility: ${finalOptions.isVisible}.`);
+    }
 
-    // TODO: Add initial visibility logic based on localStorage here (Phase 1, Item 2)
-
-    console.log(`[Checkra] Initialized.`);
+    console.log(`[Checkra Core] UI components initialized.`);
 
     const api: CheckraAPI = {
-      showFeedback: () => {
-        console.log('[Checkra API] showFeedback called - emitting event.');
-        eventEmitter.emit('showViewerApi'); // Use event emitter
+      show: () => {
+        console.log('[Checkra API] show() called - emitting showViewerRequest event.');
+        eventEmitter.emit('showViewerRequest');
+      },
+      hide: () => {
+        console.log('[Checkra API] hide() called - emitting hideViewerRequest event.');
+        eventEmitter.emit('hideViewerRequest');
       },
       showSettings: () => {
-        // Use the module-level instance
         if (settingsModalInstance) {
+          console.log('[Checkra API] showSettings() called.');
           settingsModalInstance.showModal();
-        }
-        else {
-            console.warn('[Checkra API] Settings modal instance not found.');
+        } else {
+          console.warn('[Checkra API] Settings modal instance not found for showSettings().');
         }
       },
       destroy: () => {
-        console.log('[Checkra API] Destroy called.');
-        // Destroy and nullify the module-level settings instance
+        console.log('[Checkra API] destroy() called.');
+        if (feedbackViewerInstance) {
+          feedbackViewerInstance.destroy();
+          feedbackViewerInstance = null;
+          console.log('[Checkra Core] FeedbackViewer instance destroyed.');
+        }
         if (settingsModalInstance) {
           settingsModalInstance.destroy();
+          settingsModalInstance = null;
+          console.log('[Checkra Core] SettingsModal instance destroyed.');
         }
-        // Destroy the feedback viewer instance as well
-        feedbackViewerInstance.destroy();
+        // Potentially unsubscribe all eventEmitter listeners here if appropriate for full cleanup
         console.log('[Checkra API] Cleanup complete.');
       }
     };
@@ -149,13 +174,13 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     return api;
 
   } catch (error) {
-    console.error('[Checkra] Failed to initialize:', error);
-    effectiveApiKey = null;
+    console.error('[Checkra Core] Failed to initialize:', error);
     // Ensure cleanup on error
-    // if (feedbackMenuInstance) feedbackMenuInstance.destroy();
+    if (feedbackViewerInstance) feedbackViewerInstance.destroy();
     if (settingsModalInstance) settingsModalInstance.destroy();
-    settingsModalInstance = null; // Ensure module-level ref is cleared
-    // Potentially destroy feedback viewer instance here too on error?
+    feedbackViewerInstance = null;
+    settingsModalInstance = null;
+    effectiveApiKey = null;
     return null;
   }
 }

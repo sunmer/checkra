@@ -2,12 +2,54 @@ import { type AiSettings as CoreAiSettings } from '../ui/settings-modal';
 
 type Listener = (...args: any[]) => void;
 
-export interface EventTypes {
+export type EventName =
+  | 'settingsChanged'
+  | 'aiRequestSent'
+  | 'aiResponseChunk'
+  | 'aiFinalized'
+  | 'aiError'
+  | 'aiUserMessage'
+  | 'aiImageGenerationStart'
+  | 'toggleViewerShortcut'
+  | 'showViewerRequest'      // Programmatic request to show the viewer
+  | 'hideViewerRequest'      // Programmatic request to hide the viewer
+  | 'viewerWillShow'         // Emitted by UI just before showing
+  | 'viewerDidShow'          // Emitted by UI after it has become visible
+  | 'viewerWillHide'         // Emitted by UI just before hiding
+  | 'viewerDidHide'          // Emitted by UI after it has become hidden
+  | 'feedbackViewerImplReady'
+  | 'screenshotTaken'        // Added for screenshot data
+  | 'elementSelected'        // Added for element selection
+  | 'elementDeselected';     // Added for element deselection
+
+/**
+ * Defines the payload types for each event.
+ * Uses 'void' if an event does not carry a payload.
+ */
+export interface EventPayloads {
   'settingsChanged': CoreAiSettings;
-  'toggleViewerShortcut': void; // For global shortcut toggle
-  'showViewerApi': void; // For programmatic show from API
-  'viewerDidShow': void; // Emitted after viewer becomes visible
-  'viewerDidHide': void; // Emitted after viewer becomes hidden
+  'aiRequestSent': { prompt: string; imageDataUrl?: string | null; context?: string | null, selectedElementSelector?: string | null, originalHtml?: string | null, fixId?: string | null };
+  'aiResponseChunk': string;
+  'aiFinalized': void;
+  'aiError': Error | string;
+  'aiUserMessage': string;
+  'aiImageGenerationStart': { prompt?: string };
+  'toggleViewerShortcut': void;
+  'showViewerRequest': void;
+  'hideViewerRequest': void;
+  'viewerWillShow': void;
+  'viewerDidShow': void;
+  'viewerWillHide': void;
+  'viewerDidHide': void;
+  'feedbackViewerImplReady': void;
+  'screenshotTaken': { dataUrl: string; timestamp: number };
+  'elementSelected': {
+    element: Element;
+    html: string;
+    selector: string;
+    rect: DOMRect | null;
+  };
+  'elementDeselected': void;
 
   // DALL-E Image Events
   'dalleImageLoading': { placeholderId: string; prompt: string; size?: string };

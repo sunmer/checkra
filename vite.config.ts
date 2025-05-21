@@ -92,7 +92,8 @@ export default defineConfig(({ command, mode }) => {
             input: {
               main: resolve(__dirname, 'demo/index.html'),
               privacy: resolve(__dirname, 'demo/privacy.html'),
-              setup: resolve(__dirname, 'demo/setup.html') 
+              setup: resolve(__dirname, 'demo/setup.html'),
+              playground: resolve(__dirname, 'demo/playground.html')
             }
           }
         },

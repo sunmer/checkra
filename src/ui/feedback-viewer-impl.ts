@@ -45,6 +45,7 @@ export class FeedbackViewerImpl {
   private domElements: FeedbackViewerElements | null = null;
   private domManager: FeedbackViewerDOM | null = null;
   private settingsModal: SettingsModal | null = null;
+  private optionsInitialVisibility: boolean; // To store the initial visibility from options
 
   // --- State ---
   private isVisible: boolean = false;
@@ -82,8 +83,13 @@ export class FeedbackViewerImpl {
   private conversationHistory: ConversationItem[] = [];
   private boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
 
-  constructor(private onToggleCallback: (isVisible: boolean) => void) {
-    console.log('[FeedbackViewerImpl] Constructor called.');
+  constructor(
+    private onToggleCallback: (isVisible: boolean) => void,
+    initialVisibilityFromOptions: boolean = false // New parameter
+  ) {
+    console.log(`[FeedbackViewerImpl] Constructor called with initialVisibilityFromOptions: ${initialVisibilityFromOptions}`);
+    this.optionsInitialVisibility = initialVisibilityFromOptions;
+    // Bind methods
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleAppliedFixClose = this.handleAppliedFixClose.bind(this);
@@ -91,6 +97,11 @@ export class FeedbackViewerImpl {
     this.handleMiniSelectClick = this.handleMiniSelectClick.bind(this);
     this.handleSettingsClick = this.handleSettingsClick.bind(this);
     this.boundHandleEscapeKey = this.handleEscapeKey.bind(this);
+    this.boundUpdateResponse = this.updateResponse.bind(this);
+    this.boundRenderUserMessage = this.renderUserMessage.bind(this);
+    this.boundShowError = this.showError.bind(this);
+    this.boundFinalizeResponse = this.finalizeResponse.bind(this);
+    this.boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
   }
 
   public initialize(
@@ -135,16 +146,32 @@ export class FeedbackViewerImpl {
     console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
 
-    // Show availability toast if panel is not visible after initial setup
-    if (this.domManager) {
-      setTimeout(() => {
-        // Check if the panel is still not visible after initial setup and potential show calls from coordinator
-        if (!this.isVisible && !sessionStorage.getItem('checkra_toast_shown_session')) {
-          this.domManager?.showAvailabilityToast(); // Use optional chaining as domManager might be null in theory, though unlikely here
-          sessionStorage.setItem('checkra_toast_shown_session', 'true'); // Mark toast as shown for this session
-        }
-      }, 0); // Use a microtask to check visibility after the current execution cycle
+    // --- Initial Visibility Logic --- 
+    const panelWasClosedByUser = localStorage.getItem(this.PANEL_CLOSED_BY_USER_KEY) === 'true';
+    console.log(`[FeedbackViewerImpl] Initializing visibility. OptionsInitial: ${this.optionsInitialVisibility}, PanelClosedByUser: ${panelWasClosedByUser}`);
+
+    if (this.optionsInitialVisibility && !panelWasClosedByUser) {
+      console.log('[FeedbackViewerImpl] Initial visibility is true and panel was not closed by user. Showing panel.');
+      this.showFromApi(false); // Show programmatically, don't mark as user action for clearing flags
+    } else {
+      // Panel is intended to be hidden or was closed by user.
+      // Ensure it's hidden if not already (though DOM manager likely handles this by not calling .show())
+      if (this.isVisible) {
+        this.hide(false); // Programmatic hide if somehow visible
+      }
+      console.log(`[FeedbackViewerImpl] Initial visibility is false or panel was closed by user (${panelWasClosedByUser}). Panel remains hidden.`);
+      // Show availability toast if panel is hidden and toast not shown this session
+      // Ensure this.domManager is checked, and also this.isVisible before showing toast.
+      if (this.domManager && !this.isVisible && !sessionStorage.getItem('checkra_toast_shown_session')) {
+        setTimeout(() => { // setTimeout to allow other UI updates to settle
+          if (this.domManager && !this.isVisible) { // Double check, state might change rapidly
+             this.domManager.showAvailabilityToast();
+             sessionStorage.setItem('checkra_toast_shown_session', 'true');
+          }
+        }, 250); 
+      }
     }
+    eventEmitter.emit('feedbackViewerImplReady'); // Emit event after all initialization
   }
 
   public cleanup(): void {
@@ -361,66 +388,68 @@ export class FeedbackViewerImpl {
   }
 
   public showError(error: Error | string): void {
-    if (!this.domManager) return;
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[FeedbackViewerLogic] Error:", errorMessage);
-
-    this.domManager.updateLoaderVisibility(false);
+    if (!this.domManager || !this.domElements) return; // Guard
+    const errorMessage = error instanceof Error ? error.message : error;
+    const errorItem: ConversationItem = { type: 'error', content: errorMessage };
+    this.conversationHistory.push(errorItem);
+    this.domManager.appendHistoryItem(errorItem);
     this.domManager.setPromptState(true);
-    this.domManager.updateSubmitButtonState(true);
-    this.domManager.showPromptInputArea(true);
-
-    this.saveHistory({ type: 'error', content: errorMessage });
+    this.activeStreamingAiItem = null; // Reset active streaming item on error
   }
 
-  public hide(initiatedByUser: boolean = true, fromCloseButton: boolean = false): void {
-    if (!this.isVisible && !initiatedByUser) return; // Don't hide if already hidden, unless user forces it (e.g. from toggle)
-    if (!this.domManager || !this.domElements) {
-      this.isVisible = false; // Ensure state is false even if DOM elements are missing
+  public hide(initiatedByUser: boolean, fromCloseButton: boolean = false): void {
+    if (!this.isVisible) return;
+    if (!this.domManager) {
+      console.error('[FeedbackViewerLogic] Cannot hide: DOM manager not initialized.');
       return;
     }
 
-    // Hide the viewer UI
+    console.log(`[FeedbackViewerImpl] hide called. initiatedByUser: ${initiatedByUser}, fromCloseButton: ${fromCloseButton}`);
+    eventEmitter.emit('viewerWillHide'); // Emit before hiding
     this.domManager.hide();
-    this.isVisible = false; // << SET isVisible to false
-    this.onToggleCallback(false); // Notify coordinator/external
+    this.isVisible = false;
+    this.onToggleCallback(false); // Inform parent about visibility change
+    this.removeSelectionHighlight(); // Remove any active highlight
+    this.resetStateForNewSelection(); // Reset for next interaction cycle
+    
+    if (initiatedByUser && fromCloseButton) {
+      localStorage.setItem(this.PANEL_CLOSED_BY_USER_KEY, 'true');
+      console.log(`[FeedbackViewerImpl] Panel closed by user via close button. Set ${this.PANEL_CLOSED_BY_USER_KEY}.`);
+    }
+    eventEmitter.emit('viewerDidHide'); // Emit after hiding
+  }
 
-    // Reset transient state for the next cycle
+  private resetStateForNewSelection(): void {
+    console.log('[FeedbackViewerImpl] Resetting state for new selection/cycle.');
     this.currentImageDataUrl = null;
     this.initialSelectedElement = null;
     this.originalOuterHTMLForCurrentCycle = null;
     this.fixedOuterHTMLForCurrentCycle = null;
-    this.currentFixId = null;
+    // this.currentFixId = null; // currentFixId should persist until a new selection cycle starts in prepareForInput
+    this.stableSelectorForCurrentCycle = null;
+    this.originalSvgsMap.clear();
+    this.svgPlaceholderCounter = 0;
+    this.activeStreamingAiItem = null; // Also reset any active streaming item
 
-    this.domManager?.showFooterCTA(false); // Add this line
+    // Optionally, tell DOM to reset/clear certain parts if not handled by hide() or prepareForInput()
+    // For example, if there are specific UI elements tied to a fix proposal that aren't part of the general history.
+    // this.domManager?.clearCurrentFixProposalDisplay(); // Example if such a method existed
+  }
 
-    this.removeSelectionHighlight();
-
-    if (initiatedByUser && fromCloseButton) {
-      console.log('[FeedbackViewerImpl] Panel hidden by user close button action. Setting flag.');
-      try {
-        localStorage.setItem(this.PANEL_CLOSED_BY_USER_KEY, 'true');
-        console.log(`[FeedbackViewerImpl] localStorage ${this.PANEL_CLOSED_BY_USER_KEY} set to 'true'.`); // ADDED LOG
-      } catch (e) {
-        console.warn('[FeedbackViewerImpl] Failed to set localStorage item:', e);
-      }
-    } else if (initiatedByUser) {
-      console.log('[FeedbackViewerImpl] Panel hidden by user action (not close button).');
-    } else {
-      console.log('[FeedbackViewerImpl] Panel hidden programmatically.');
+  // --- Method to render user-facing messages (warnings, info) into history ---
+  private renderUserMessage(message: string): void {
+    if (!this.domManager) {
+      console.error("[FeedbackViewerImpl] Cannot render user message: DOM Manager not initialized.");
+      return;
     }
+    const userMessageItem: ConversationItem = { type: 'usermessage', content: message };
+    // We save it to history, and appendHistoryItem will also render it.
+    this.saveHistory(userMessageItem); 
+    // No direct call to domManager.appendHistoryItem here as saveHistory handles it.
+    console.log(`[FeedbackViewerImpl] Rendered user message: ${message}`);
   }
 
-  /**
-   * Renders a prepended user message (e.g., warning, info) before the AI response.
-   */
-  public renderUserMessage(html: string): void {
-    if (!this.domManager) return;
-    console.log("[FeedbackViewerLogic] Rendering prepended user message.");
-    this.saveHistory({ type: 'usermessage', content: html });
-  }
-
-  // --- Event Handlers ---
+  // --- UI Event Handlers ---
 
   private handleTextareaKeydown(e: KeyboardEvent): void {
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -892,17 +921,13 @@ export class FeedbackViewerImpl {
    * Assumes initialization is handled by the coordinator.
    */
   public toggle(): void {
-    if (this.isVisible) { // Use the private property
-      this.hide(true, false); // User initiated hide via toggle (not from close button)
+    console.log(`[FeedbackViewerImpl.toggle] Current visibility: ${this.isVisible}`);
+    if (this.isVisible) {
+      this.hide(true, false); // User initiated, not from close button
     } else {
-      // Clear the PANEL_CLOSED_BY_USER_KEY flag here.
-      try {
-        localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
-        console.log(`[FeedbackViewerImpl.toggle] Panel toggled to visible, removed ${this.PANEL_CLOSED_BY_USER_KEY}.`);
-      } catch (e) {
-        console.warn(`[FeedbackViewerImpl.toggle] Failed to remove ${this.PANEL_CLOSED_BY_USER_KEY}:`, e);
-      }
-      this.showFromApi(); // MODIFIED: Consolidate show logic, showFromApi no longer removes the item.
+      // This is a user action (shortcut or direct toggle call if exposed)
+      // So, we want to override PANEL_CLOSED_BY_USER_KEY
+      this.showFromApi(true); // Pass true for triggeredByUserAction
     }
   }
 
@@ -970,35 +995,55 @@ export class FeedbackViewerImpl {
   }
 
   private removeGlobalListeners(): void {
-    if (this.boundHandleEscapeKey) {
-      document.removeEventListener('keydown', this.boundHandleEscapeKey);
-      console.log('[FeedbackViewerImpl] Removed escape keydown listener.');
-    }
-    // Remove outside click listener here
+    document.removeEventListener('keydown', this.boundHandleEscapeKey!);
+    console.log('[FeedbackViewerLogic] Removed global keydown listener for Escape key.');
   }
-  private showFromApi(): void {
-    if (this.isVisible) return; // Already visible
 
-    // --- Show the panel FIRST ---
-    if (!this.domManager) {
-      console.error("[FeedbackViewerImpl] Cannot show panel: DOM Manager not initialized.");
+  public showFromApi(triggeredByUserAction: boolean = false): void {
+    if (this.isVisible) {
+      console.log('[FeedbackViewerImpl] showFromApi called, but panel is already visible.');
+      // If it's already visible, and this call was triggered by a user action (e.g. toggle)
+      // that intends to show it, ensure any "closed by user" flag is cleared.
+      if (triggeredByUserAction) {
+        localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
+        console.log(`[FeedbackViewerImpl] Panel already visible, user action to show, cleared ${this.PANEL_CLOSED_BY_USER_KEY}.`);
+      }
       return;
     }
-    this.domManager.show(); // Make the panel visible via DOM Manager
-    this.isVisible = true;    // Update internal state
-    this.onToggleCallback(true); // Notify coordinator
-    console.log('[FeedbackViewerImpl] Panel shown via showFromApi.');
-    // --- End Show Panel ---
 
-    const firstRun = !localStorage.getItem('checkra_onboarded');
-    if (firstRun) {
-      this.showOnboarding(); // This might call domManager.show() again, should be okay
-    } else {
-      // Panel is now visible, prepare the default input state (body)
-      console.log('[FeedbackViewerImpl] showFromApi preparing default input state (body).');
-      this.prepareForInput(null, null, null, document.body); // Pass body explicitly
+    if (!this.domManager) {
+      console.error('[FeedbackViewerLogic] Cannot show: DOM Manager not initialized.');
+      return;
     }
+    console.log(`[FeedbackViewerImpl] showFromApi called. triggeredByUserAction: ${triggeredByUserAction}`);
+
+    eventEmitter.emit('viewerWillShow'); // Emit before showing
+
+    this.domManager.show();
+    this.isVisible = true;
+    this.onToggleCallback(true); // Inform parent about visibility change
+
+    if (triggeredByUserAction) {
+      localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
+      console.log(`[FeedbackViewerImpl] Panel shown by user action. Cleared ${this.PANEL_CLOSED_BY_USER_KEY}.`);
+    }
+
+    // Handle onboarding for the first run if not already onboarded
+    if (!localStorage.getItem('checkra_onboarded')) {
+      this.showOnboarding();
+      localStorage.setItem('checkra_onboarded', 'true');
+    } else {
+      // If not onboarding, prepare default input state (e.g., focus textarea)
+      // This might need to be conditional if onboarding takes focus
+      if (this.domElements && document.activeElement !== this.domElements.promptTextarea) {
+          this.domElements.promptTextarea.focus();
+      }
+    }
+    
+    eventEmitter.emit('viewerDidShow'); // Emit after showing
+    console.log('[FeedbackViewerImpl] Panel shown via API call.');
   }
+
   private loadHistory(): void {
     try {
       const storedHistory = localStorage.getItem(CONVERSATION_HISTORY_KEY);

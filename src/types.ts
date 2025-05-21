@@ -12,9 +12,10 @@ export interface CheckraOptions {
   apiKey?: string;
 
   /**
-   * Whether to render the Checkra UI elements (button, viewer) in the DOM.
-   * If set to false, the library will not add any UI elements.
-   * @default true
+   * Whether to render and show the Checkra UI elements (button, viewer) in the DOM upon initialization.
+   * If set to false, the UI will be initialized but hidden. It can be shown later using the API.
+   * Can be configured via script tag `data-checkra-config='{"isVisible": true}'`.
+   * @default false (handled in initialization logic)
    */
   isVisible?: boolean;
 }

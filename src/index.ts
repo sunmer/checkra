@@ -14,42 +14,106 @@ export type { CheckraOptions } from './types';
  * Default options for auto-initialization.
  */
 const defaultAutoInitOptions: CheckraOptions = {
-  isVisible: true, // Use isVisible
-  // Add other default options here if needed in the future
+  // No apiKey by default, triggers anonymous UUID
+  isVisible: false, // Default to hidden
 };
 
 /**
- * Reads configuration from a global variable if it exists.
- * Allows users to configure Checkra *before* the script tag.
- * Example: <script>window.CheckraConfig = { isVisible: false };</script>
- *          <script src="path/to/logger.js"></script>
+ * Reads configuration from the script tag's data attributes.
  */
-function getGlobalConfig(): CheckraOptions | undefined {
-  const globalConfig = (window as any).CheckraConfig; // Use CheckraConfig for clarity
-  if (typeof window !== 'undefined' && globalConfig) {
-    // Merge global config with defaults, letting global config override
-    return {
-      ...defaultAutoInitOptions,
-      ...globalConfig // Spread the global config object
-    };
+function getScriptTagConfig(): Partial<CheckraOptions> | undefined {
+  if (typeof document !== 'undefined') {
+    let ownScriptTag: HTMLScriptElement | null = null;
+    // Prefer document.currentScript if available and seems to be us
+    if (document.currentScript && (document.currentScript as HTMLScriptElement).src && (document.currentScript as HTMLScriptElement).src.includes('checkra')) {
+      ownScriptTag = document.currentScript as HTMLScriptElement;
+    } else {
+      // Fallback: Find the script tag that likely loaded this UMD bundle.
+      // This is heuristic, searches for a script tag with 'checkra' in its src.
+      const scripts = document.getElementsByTagName('script');
+      for (let i = scripts.length - 1; i >= 0; i--) {
+        if (scripts[i].src && scripts[i].src.includes('checkra')) {
+          ownScriptTag = scripts[i];
+          break;
+        }
+      }
+    }
+
+    if (ownScriptTag) {
+      const configString = ownScriptTag.getAttribute('data-checkra-config');
+      if (configString) {
+        try {
+          const parsedConfig = JSON.parse(configString);
+          // Basic validation: ensure it's an object
+          if (typeof parsedConfig === 'object' && parsedConfig !== null) {
+            return parsedConfig as Partial<CheckraOptions>;
+          } else {
+            console.error('[Checkra] data-checkra-config did not parse to an object:', parsedConfig);
+          }
+        } catch (e) {
+          console.error('[Checkra] Failed to parse data-checkra-config JSON:', e, configString);
+        }
+      }
+    }
   }
-  // Return only defaults if no global config is found
-  return defaultAutoInitOptions;
+  return undefined;
+}
+
+/**
+ * Reads configuration from a global variable if it exists.
+ */
+function getGlobalVariableConfig(): Partial<CheckraOptions> | undefined {
+  if (typeof window !== 'undefined' && (window as any).CheckraConfig) {
+    const globalConfig = (window as any).CheckraConfig;
+    if (typeof globalConfig === 'object' && globalConfig !== null) {
+      return globalConfig as Partial<CheckraOptions>;
+    } else {
+      console.error('[Checkra] window.CheckraConfig is not an object:', globalConfig);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Combines configurations from various sources with a defined precedence.
+ * Precedence: Script Tag data attributes > Global window.CheckraConfig > Default options.
+ */
+function getFinalConfig(): CheckraOptions {
+  const scriptConfig = getScriptTagConfig();
+  const globalVarConfig = getGlobalVariableConfig();
+
+  // Precedence: Script Tag > Global Var > Programmatic Options (passed to init) > Defaults
+  // Note: programmatic options are handled in initCheckra itself.
+  return {
+    ...defaultAutoInitOptions,
+    ...(globalVarConfig || {}),
+    ...(scriptConfig || {}),
+  };
 }
 
 // Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  checkForPublishedVersion();
+  checkForPublishedVersion(); // This handles ?checkra-variant-id for A/B testing
   initAnalytics();
 
   const initialize = () => {
     // Check if already initialized
     if (!(window as any).CheckraInitialized) {
       try {
-        const options = getGlobalConfig();
-        console.log('[Checkra] DOM ready, auto-initializing...');
-        initCheckra(options);
-        (window as any).CheckraInitialized = true;
+        const configFromSources = getFinalConfig(); // Gets script/global config merged with defaults
+        console.log('[Checkra] DOM ready, auto-initializing with config from sources:', configFromSources);
+        
+        // initCheckra is now imported from './core/index'
+        const api = initCheckra(configFromSources); 
+        
+        if (api) {
+          (window as any).Checkra = api; // Expose API globally
+          (window as any).CheckraInitialized = true;
+          document.dispatchEvent(new CustomEvent('checkraReady'));
+          console.log('[Checkra] Auto-initialization complete. API exposed as window.Checkra. "checkraReady" event dispatched.');
+        } else {
+          console.error("[Checkra] Auto-initialization failed, API not returned.");
+        }
       } catch (e) {
         console.error("[Checkra] Failed to auto-initialize:", e);
       }
