@@ -482,12 +482,12 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   }
   private createMessageElement(item: ConversationItem): HTMLDivElement {
     const messageDiv = document.createElement('div');
+    
+    // REVERTED to original logic
     messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
 
-    // Sanitize/parse content appropriately
-    // For AI, use marked. For others, escapeHTML or handle as plain text.
-    if (item.type === 'ai' || item.type === 'usermessage') { // User messages can also contain HTML
-      messageDiv.innerHTML = item.content; // Assuming marked.parse happens before calling this for AI
+    if (item.type === 'ai' || item.type === 'usermessage') { 
+      messageDiv.innerHTML = item.content; 
     } else {
       messageDiv.textContent = item.content;
     }

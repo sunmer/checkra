@@ -5,7 +5,7 @@ import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
 import { generateStableSelector } from '../utils/selector-utils';
-import { API_BASE } from '../config'; 
+import { API_BASE, CDN_DOMAIN } from '../config';
 import { getSiteId } from '../utils/id'; 
 
 interface ConversationItem {
@@ -123,6 +123,14 @@ export class FeedbackViewerImpl {
     eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
     eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
     eventEmitter.on('aiImageGenerationStart', this.boundHandleImageGenerationStart);
+
+    // Add event listener for stats badges clicks (delegated to responseContent)
+    this.domElements.responseContent.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      if (target.classList.contains('checkra-stat-badge') && target.dataset.queryname) {
+        this.fetchAndDisplayStats(target.dataset.queryname);
+      }
+    });
 
     console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
@@ -439,6 +447,15 @@ export class FeedbackViewerImpl {
       console.log("[FeedbackViewerLogic] /help command detected. Calling showOnboarding().");
       this.showOnboarding();
       this.domManager?.setPromptState(true, ''); // Clear the /help command
+      this.domManager?.updateSubmitButtonState(true); // Re-enable submit if it was disabled
+      return;
+    }
+
+    // ADDED: Handle /stats command
+    if (promptText?.toLowerCase() === '/stats') {
+      console.log("[FeedbackViewerLogic] /stats command detected.");
+      this.displayStatsBadges(); // New method to be created
+      this.domManager?.setPromptState(true, ''); // Clear the /stats command
       this.domManager?.updateSubmitButtonState(true); // Re-enable submit if it was disabled
       return;
     }
@@ -1180,6 +1197,88 @@ export class FeedbackViewerImpl {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during saving.";
       this.showError(`Failed to save snapshot: ${errorMessage}`);
       this.renderUserMessage(`Error saving snapshot: ${errorMessage}`);
+    }
+  }
+
+  private displayStatsBadges(): void {
+    if (!this.domManager) return;
+
+    // Added a wrapper div with a specific class for targeting in CSS
+    const badgesHtml = `
+      <div class="checkra-stats-badges-wrapper">
+        <div class="checkra-stats-badges">
+          <button class="checkra-stat-badge" data-queryname="metrics_1d">Stats (last 24h)</button>
+          <button class="checkra-stat-badge" data-queryname="metrics_7d">Stats (last 7d)</button>
+          <button class="checkra-stat-badge" data-queryname="geo_top5_7d">Top Countries (last 7d)</button>
+        </div>
+      </div>
+    `;
+    
+    this.saveHistory({ type: 'usermessage', content: badgesHtml }); // Kept as 'usermessage'
+  }
+
+  // Method to fetch and display stats when a badge is clicked
+  private async fetchAndDisplayStats(queryName: string): Promise<void> {
+    if (!this.domManager) return;
+    console.log(`[FeedbackViewerLogic] Fetching stats for query: ${queryName}`);
+
+    this.domManager.appendHistoryItem({
+      type: 'ai', // Show a thinking indicator
+      content: `Fetching ${queryName.replace(/_/g, ' ')}...`,
+      isStreaming: true // Use streaming style for "thinking"
+    });
+
+    try {
+      const response = await fetch(`https://${CDN_DOMAIN}/analytics/${queryName}`);
+      
+      // Update the "thinking" message to a final state (non-streaming)
+      // This requires a way to update the last message if the DOM manager supports it,
+      // or simply appending a new message. For simplicity, we'll append new.
+      // Ideally, domManager.updateLastAIMessage would be used.
+      // For now, we'll remove the thinking message if possible, or just let it be.
+      // Let's assume we can't easily remove/update the "thinking" message and proceed.
+      // A better approach would be to have domManager.updateLastAIMessage take an ID or be smarter.
+      // The current domManager.updateLastAIMessage updates the *very last* AI bubble.
+      // So, if another AI message came in, it would get overwritten.
+      // For robust V1, new bubble for result is safest.
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch stats: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('[FeedbackViewerLogic] Stats data received:', data.rows);
+
+      if (!data.rows || data.rows.length === 0) {
+        this.saveHistory({ type: 'ai', content: "No data available for this query." });
+        return;
+      }
+
+      let markdownTable = "";
+      if (queryName === 'metrics_1d' || queryName === 'metrics_7d') {
+        markdownTable = `| Variant | Views   | Uniques | Avg. Dwell (ms) |\n|---------|---------|---------|-----------------|\n`;
+        data.rows.forEach((row: any) => {
+          markdownTable += `| ${row.var || 'N/A'} | ${row.views || '0'} | ${row.uniques || '0'} | ${row.avg_dur_ms || '0'} |\n`;
+        });
+      } else if (queryName === 'geo_top5_7d') {
+        markdownTable = `| Variant | Country | Views   | Uniques | Avg. Dwell (ms) |\n|---------|---------|---------|---------|-----------------|\n`;
+        data.rows.forEach((row: any) => {
+          markdownTable += `| ${row.var || 'N/A'} | ${row.country || 'N/A'} | ${row.views || '0'} | ${row.uniques || '0'} | ${row.avg_dur_ms || '0'} |\n`;
+        });
+      }
+
+      if (markdownTable) {
+         // Replace the "Fetching..." message with the actual table.
+        this.domManager.updateLastAIMessage(markdownTable, false);
+      } else {
+        this.saveHistory({ type: 'ai', content: "Could not format data for display." });
+      }
+
+    } catch (error: any) {
+      console.error('[FeedbackViewerLogic] Error fetching or displaying stats:', error);
+      // Replace the "Fetching..." message with the error.
+      this.domManager.updateLastAIMessage(`Sorry, I couldn't fetch those stats right now. Please try again. Error: ${error.message}`, false);
     }
   }
 }

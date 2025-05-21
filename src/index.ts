@@ -2,7 +2,7 @@ import { initCheckra } from './core/index';
 import './core/shortcut-handler';
 import { CheckraOptions } from './types';
 import { CDN_DOMAIN } from './config';
-import { initAnalytics } from './analytics/event-tracker';
+import { initAnalytics } from './analytics/analytics';
 
 // Re-export core functions and types
 export { initCheckra } from './core/index';
