@@ -1,14 +1,18 @@
 # Checkra: Ship growth & UI experiments without a CMS or pull requests
 
-Checkra empowers developers and teams to rapidly test and deploy UI/UX changes, growth experiments, and content variations directly on their live website, bypassing traditional CMS limitations and lengthy pull request cycles.
+Checkra empowers developers and teams to rapidly test and deploy UI changes, growth experiments, and content variations directly on their live website, bypassing traditional CMS limitations and lengthy pull request cycles.
 
-## Features
 
-- ✨ **AI-Powered Editing**: Use AI to suggest and implement UI/UX changes, content variations, and new elements.
-- 🧪 **Live Experimentation**: Test different headlines, CTAs, layouts, and user flows directly on your production site.
-- 🚀 **Instant Deployment**: Publish changes and experiments live to segments of your audience without code deploys or PRs.
-- ⚙️ **Simple Integration**: Add Checkra to your site with a single script tag or npm install.
-- 🎨 **Visual Inline Editing**: See and approve changes directly on your webpage.
+## Key Features
+
+*   ✨ **AI Live Editor:** Instantly make, test and analyze UI & content changes using an intuitive AI sidebar – without leaving your own website. Say goodbye to slow PRs and clunky CMS workflows
+*   🚀 **Ship changes with one command:** Simply type `/publish` to generate a publicy shareable URL. A/B tests and demos made easy
+*   📊 **Built-in Analytics:** Automatically track variant performance and get key stats directly from the AI sidebar for quick, data-driven decisions
+
+## Use cases
+* **Developers**: Rapid Prototyping & Validation of UI/UX hypotheses
+* **Designers**: Iterate on live UI visuals, saving devs from tedious pixel-pushing tickets
+* **Growth Teams**: Validate UI ideas quickly, preventing dev effort on unproven features
 
 ## Installation
 
