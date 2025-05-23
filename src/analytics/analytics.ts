@@ -131,38 +131,3 @@ export function initAnalytics(config?: AnalyticsConfig): void {
     console.error('[Checkra Analytics] Failed to initialize analytics:', error);
   }
 }
-
-export function sendAnalyticsEvent(eventData: CustomAnalyticsEventData): void {
-  if (!sessionId) {
-    console.warn('[Checkra Analytics] Analytics not initialized. Call initAnalytics() first. Event dropped:', eventData);
-    return;
-  }
-
-  const now = Date.now();
-
-  const event: AnalyticsEventCore = {
-    ts: now,
-    uid: anonymousUid,
-    sid: sessionId,
-    var: variantId,
-    ref: eventData.ref !== undefined ? eventData.ref : document.referrer || null, // Allow override, else default
-    ua: userAgent,
-    // Spread any other custom properties from eventData
-    // This is not strictly typed in AnalyticsEventCore for V1 to allow flexibility,
-    // but for robust typing, one might define a union or map known optional fields.
-    ...eventData 
-  };
-
-  postEvent(event).catch(error => {
-    console.error('[Checkra Analytics] Unhandled error in postEvent from sendAnalyticsEvent:', error);
-  });
-  // TODO: Implement event batching for custom events as a future enhancement.
-}
-
-// Guidance for manual SPA tracking (as per prompt refinement):
-// When your SPA router successfully navigates:
-// 1. Record a startTime for the view: `const viewStartTime = Date.now();`
-// 2. On view exit or next view load, calculate duration: `const durationMs = Date.now() - viewStartTime;`
-// 3. Send the event: 
-//    `sendAnalyticsEvent({ path: '/your-new-spa-route', dur_ms: durationMs });`
-//    Ensure 'path' uniquely identifies the SPA view/state. 

@@ -161,9 +161,3 @@ export async function currentUserId(): Promise<string | null> {
   console.warn('[Auth] currentUserId: No active user found through supabase.auth.getUser().');
   return null; 
 }
-
-// Optional: Expose a way to listen to auth state changes directly
-// This is very useful for UI updates.
-export function onAuthStateChange(callback: (event: string, session: import('@supabase/supabase-js').Session | null) => void) {
-  return supabase.auth.onAuthStateChange(callback);
-}

@@ -97,10 +97,7 @@ export interface CheckraAPI {
    * Checks if a user is currently logged in (has a valid or refreshable token).
    */
   isLoggedIn: () => Promise<boolean>;
-  /**
-   * Gets the current user's ID (sub from JWT) if logged in.
-   */
-  currentUserId: () => Promise<string | null>;
+
   /**
    * Utility to get a valid auth token, attempts refresh if needed.
    * Exposed mainly for debugging or advanced scenarios; fetchProtected is preferred.
@@ -201,7 +198,6 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
       handleAuthCallback: Auth.handleAuthCallback,
       logout: Auth.logout,
       isLoggedIn: Auth.isLoggedIn,
-      currentUserId: Auth.currentUserId,
       getAuthToken: Auth.getToken // Exposing getToken as getAuthToken on the API
     };
 
