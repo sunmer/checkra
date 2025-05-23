@@ -89,7 +89,10 @@ export default defineConfig(({ command, mode }) => {
           },
           sourcemap: true, // Generate source maps for library
           rollupOptions: {
-            // No externals – ensure html2canvas and other deps are bundled.
+            // Bundle everything into a single file – avoids additional chunk requests and bare-specifier issues.
+            output: {
+              inlineDynamicImports: true
+            }
           },
           emptyOutDir: true, // Clean the dist directory before building
           minify: 'terser', // Explicitly use terser, can also be true by default

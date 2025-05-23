@@ -22,8 +22,8 @@ Add the following lines inside the `<head>` section of your HTML file:
 
 ```html
 <!-- Inside the <head> section -->
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
-<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/index.css">
+<script type="module" src="https://unpkg.com/checkra@latest/dist/checkra.js" defer></script>
 
 ```
 
@@ -40,28 +40,30 @@ pnpm add checkra
 
 **Note:** When installing via a package manager, you still need to include the CSS separately. Add the following line to the `<head>` of your HTML:
 ```html
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/index.css">
 ```
 
-**Basic Usage (ES Module):**
+**Basic Usage (ES Module / ESM CDN):**
 
 ```javascript
 import { initCheckra } from 'checkra';
 
-// Initialize Checkra (typically on DOMContentLoaded or later)
-const checkraInstance = initCheckra({
-  isVisible: true // Default is true
+// Initialize Checkra (usually after the DOM is ready)
+const checkra = initCheckra({
+  isVisible: false // Start hidden, show later via API
 });
 
-// Example: Trigger feedback capture programmatically (e.g., on a custom button click)
-if (checkraInstance) {
-  const myCustomButton = document.getElementById('my-feedback-button');
-  if (myCustomButton) {
-    myCustomButton.addEventListener('click', () => {
-      checkraInstance.showFeedback();
-    });
-  }
-}
+// Show the viewer when a custom button is clicked
+const btn = document.getElementById('show-sidepanel');
+btn?.addEventListener('click', () => {
+  checkra?.show();
+});
+
+// Optionally hide it again
+const hideBtn = document.getElementById('hide-sidepanel');
+hideBtn?.addEventListener('click', () => {
+  checkra?.hide();
+});
 ```
 
 ### Configuration Before Script Load (CDN/Script Tag Users)
@@ -69,7 +71,7 @@ if (checkraInstance) {
 If you are using the simple CDN script tag installation but need to configure Checkra *before* it initializes (e.g., to disable the UI conditionally), you can define a global `CheckraConfig` object in a `<script>` tag placed *before* the main Checkra script:
 
 ```html
-<!-- Place this *before* the checkra.umd.cjs script -->
+<!-- Place this *before* the esm checkra.js script -->
 <script>
   // Example: Disable Checkra UI based on some condition
   if (window.location.hostname !== 'dev.mysite.com') {
@@ -79,8 +81,8 @@ If you are using the simple CDN script tag installation but need to configure Ch
 </script>
 
 <!-- Standard Checkra Scripts -->
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
-<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/index.css">
+<script type="module" src="https://unpkg.com/checkra@latest/dist/checkra.js" defer></script>
 ```
 
 ### Loading Checkra Only in Development/Preview (for Platforms)
@@ -91,9 +93,15 @@ A common requirement when using platforms like Shopify, Squarespace, or Webflow 
 
 The `initCheckra(options)` function returns an API object (or `null` on failure) with the following methods:
 
-*   `showFeedback(): void`: Programmatically triggers the feedback capture UI flow. Does nothing if the UI was initialized with `isVisible: false`.
-*   `showSettings(): void`: Programmatically shows the settings modal. Does nothing if the UI was initialized with `isVisible: false`.
-*   `destroy(): void`: Removes the Checkra UI elements and cleans up resources.
+*   `show(): void` – show the AI sidepanel.
+*   `hide(): void` – hide the AI sidepanel.
+*   `showSettings(): void` – open the settings modal.
+*   `destroy(): void` – tear down UI and listeners.
+*   `startLogin(): Promise<void>` – begin Google OAuth flow.
+*   `handleAuthCallback(): Promise<boolean>` – finalize OAuth on the callback page.
+*   `logout(): Promise<void>` – clear session.
+*   `isLoggedIn(): Promise<boolean>` – check session.
+*   `getAuthToken(): Promise<string | null>` – get (and refresh) bearer token.
 
 ## Configuration Options
 
