@@ -150,8 +150,10 @@
       // DEV MODE: Load directly from source using module script below.
       // The <script type="module"> at the bottom handles this.
       // Button setup will be handled by the dev-specific script block.
+      console.log('[Checkra Loader - index.html] DEV mode detected. Will load from src/index.ts via module script.');
     } else if (isPreprod) {
       // PREPROD MODE: Load built UMD files from local build output
+      console.log('[Checkra Loader - index.html] PREPROD mode detected. Attempting to load local ./checkra.umd.cjs');
 
       // Path Explanation:
       // - 'npm run build:demo' builds 'demo/index.html' into 'demo-dist/index.html'.
@@ -162,17 +164,18 @@
       // Load the locally built library JS
       loadScript('./checkra.umd.cjs') // Load from demo-dist root
         .then(initializeCheckra)
-        .catch(err => console.error('[Checkra Loader] Failed to load preprod script:', err));
+        .catch(err => console.error('[Checkra Loader - index.html] Failed to load preprod script:', err));
 
     } else { // isProductionLike (or static hosting)
       // PRODUCTION-LIKE / STATIC: Fallback to loading from CDN (unpkg)
+      console.log('[Checkra Loader - index.html] Production-like mode detected. Attempting to load from CDN.');
       // Use the version injected by Vite build
       const version = import.meta.env.PACKAGE_VERSION || 'latest'; // Fallback to 'latest' if undefined
       loadStyle(`https://unpkg.com/checkra@${version}/dist/style.css`);
       // *** CORRECTION HERE: Use the correct UMD filename from unpkg ***
       loadScript(`https://unpkg.com/checkra@${version}/dist/checkra.umd.cjs`)
         .then(initializeCheckra)
-        .catch(err => console.error('[Checkra Loader] Failed to load CDN script:', err));
+        .catch(err => console.error('[Checkra Loader - index.html] Failed to load CDN script:', err));
     }
   </script>
 
@@ -630,8 +633,10 @@
     // In DEV mode, we need to explicitly import the entry point
     // for its auto-initialization logic to run.
     if (import.meta.env.DEV) {
+      console.log('[Checkra Loader - index.html DEV import block] Attempting to import ../src/index.ts');
       import('../src/index.ts')
         .then(coreModule => {
+          console.log('[Checkra Loader - index.html DEV import block] Successfully imported module:', coreModule);
           if (coreModule && typeof coreModule.initCheckra === 'function') {
             if (!window.checkraApiInstance) {
               window.checkraApiInstance = coreModule.initCheckra({ isVisible: false });
@@ -647,11 +652,11 @@
               setupGetInstantFeedbackButton();
             }
           } else {
-            console.error('[Checkra Loader] DEV mode: initCheckra not found or module not loaded correctly.', coreModule);
+            console.error('[Checkra Loader - index.html DEV import block] DEV mode: initCheckra not found or module not loaded correctly.', coreModule);
           }
         })
         .catch(err => {
-          console.error('[Checkra Loader] Failed to dynamically load dev module entry point:', err);
+          console.error('[Checkra Loader - index.html DEV import block] Failed to dynamically load dev module entry point:', err);
         });
     }
   </script>

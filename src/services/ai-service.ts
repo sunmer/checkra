@@ -63,15 +63,6 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
     return null;
   }
 };
-// --- END MOVED ---
-interface DalleImageRequest {
-  prompt: string;
-  size?: string;
-}
-
-interface DalleImageResponse {
-  url: string;
-}
 
 interface PageMetadata {
   title: string | null;
@@ -359,86 +350,4 @@ export const fetchFeedback = async (
   // If image sending is needed for this specific endpoint later, logic must be added here.
   const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/feedback`;
   return fetchFeedbackBase(apiUrl, promptText, selectedHtml, imageDataUrl);
-};
-/**
- * Calls the backend to generate an image using DALL-E.
- * @param prompt The text prompt for image generation.
- * @param size The desired size of the image (e.g., "256x256", "512x512", "1024x1024").
- * @returns Promise resolving to the image URL.
- */
-export const generateDalleImage = async (
-  prompt: string,
-  size?: string
-): Promise<string> => {
-  console.log(`[AI Service] generateDalleImage called. Prompt: "${prompt}", Size: ${size}`);
-  const apiUrl = `${Settings.API_URL}/checkraCompletions/genImage`;
-  console.log(`[Checkra Service] Generating DALL-E image with prompt: "${prompt}", size: ${size || 'default'}`);
-
-  try {
-    const currentAiSettings = getCurrentAiSettings(); 
-    console.log('[AI Service] Using AiSettings for request (generateDalleImage):', currentAiSettings); // DEBUG LOG
-    const metadata = await getPageMetadata(); 
-
-    const requestBody: DalleImageRequest & { aiSettings?: AiSettings; metadata?: PageMetadata } = { 
-      prompt: prompt,
-      aiSettings: currentAiSettings,
-      metadata: metadata 
-    };
-
-    if (size) {
-      requestBody.size = size;
-    }
-    console.log('[AI Service] Full request body (generateDalleImage):', requestBody); // DEBUG LOG
-
-    const currentApiKey = getEffectiveApiKey();
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (currentApiKey) {
-      headers['Authorization'] = `Bearer ${currentApiKey}`;
-    } else {
-      console.warn('[Checkra Service] API key/anonymous ID not available for DALL-E request.');
-    }
-
-    console.log('[AI Service] Attempting to fetch from DALL-E endpoint:', apiUrl, 'Request Body:', requestBody);
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody),
-    });
-    console.log('[AI Service] DALL-E fetch response status:', response.status);
-
-    if (!response.ok) {
-      let specificErrorMessage = `DALL-E request failed: ${response.status} ${response.statusText}`;
-      try {
-        const errorBodyText = await response.text();
-        console.error('[AI Service] DALL-E error response body:', errorBodyText);
-        if (errorBodyText) {
-            const errorJson = JSON.parse(errorBodyText);
-            if (errorJson && errorJson.error) {
-                specificErrorMessage = errorJson.error;
-            }
-        }
-      } catch (parseError) {
-        console.warn("[Checkra Service] Failed to parse DALL-E error response body:", parseError);
-      }
-      eventEmitter.emit('dalleImageError', { prompt, size, error: specificErrorMessage });
-      throw new Error(specificErrorMessage);
-    }
-
-    const result: DalleImageResponse = await response.json();
-    console.log('[AI Service] DALL-E response JSON:', result);
-    if (!result.url) {
-        const errorMsg = "DALL-E response missing image URL.";
-        eventEmitter.emit('dalleImageError', { prompt, size, error: errorMsg });
-        throw new Error(errorMsg);
-    }
-    
-    eventEmitter.emit('dalleImageLoaded', { prompt, size, url: result.url });
-    return result.url;
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[AI Service] Error in generateDalleImage function:", errorMessage, error);
-    eventEmitter.emit('dalleImageError', { prompt, size, error: errorMessage });
-    throw error; 
-  }
 };

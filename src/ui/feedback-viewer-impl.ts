@@ -7,6 +7,7 @@ import { eventEmitter } from '../core/index';
 import { generateStableSelector } from '../utils/selector-utils';
 import { API_BASE, CDN_DOMAIN } from '../config';
 import { getSiteId } from '../utils/id'; 
+import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -37,6 +38,10 @@ interface AppliedFixInfo {
   isCurrentlyFixed: boolean; // Tracks if the displayed version in the wrapper is the fix
   stableTargetSelector: string; // ADDED: A stable selector for the original element
 }
+
+// localStorage keys for pending actions
+const PENDING_ACTION_TYPE_KEY = 'checkra_auth_pending_action_type';
+const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
 
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
@@ -171,6 +176,11 @@ export class FeedbackViewerImpl {
         }, 250); 
       }
     }
+    // Handle Supabase error query params (e.g. server_error) to avoid auth loops
+    this.handleAuthErrorInUrl();
+
+    // Check for and handle pending actions after auth callback
+    this.handlePendingActionAfterLogin();
     eventEmitter.emit('feedbackViewerImplReady'); // Emit event after all initialization
   }
 
@@ -468,6 +478,28 @@ export class FeedbackViewerImpl {
       this.publishSnapshot();
       this.domManager?.setPromptState(true, ''); 
       this.domManager?.updateSubmitButtonState(true); 
+      return; 
+    }
+
+    // ADDED: Handle /logout command
+    if (promptText?.toLowerCase() === '/logout') {
+      console.log("[FeedbackViewerLogic] /logout command detected.");
+      this.renderUserMessage("Logging out..."); // Provide immediate feedback
+      logout().then(() => {
+        // This part might not be reached if window.location.reload() in Auth.logout executes quickly.
+        // However, it's good practice to have a success path.
+        console.log("[FeedbackViewerLogic] Logout successful (as per promise resolve).");
+        this.renderUserMessage("You have been logged out. The page should reload automatically.");
+      }).catch((err: Error) => {
+        console.error("[FeedbackViewerLogic] Error during /logout command:", err);
+        // Use renderUserMessage for consistency with /publish feedback style
+        this.renderUserMessage(`Logout failed: ${err.message}`);
+      }).finally(() => {
+        // Clear the command from the textarea and re-enable submit, 
+        // though this might also be interrupted by page reload.
+        this.domManager?.setPromptState(true, ''); 
+        this.domManager?.updateSubmitButtonState(true); 
+      });
       return; 
     }
 
@@ -1116,42 +1148,26 @@ export class FeedbackViewerImpl {
       this.renderUserMessage("No changes have been applied to publish.");
       return;
     }
-
-    const changes = Array.from(this.appliedFixes.values()).map(fixInfo => {
-      return {
-        targetSelector: fixInfo.stableTargetSelector,
-        appliedHtml: fixInfo.fixedOuterHTML,
-        sessionFixId: fixInfo.originalElementId
-      };
-    });
-
+    const changes = Array.from(this.appliedFixes.entries()); // Get data for potential storage
     const siteId = getSiteId();
-    const clientGeneratedSnapshotId = crypto.randomUUID(); // Frontend still generates a UUID for the snapshot content
-    console.log("[FeedbackViewerImpl DEBUG] Generated clientSnapshotId for this publish attempt:", clientGeneratedSnapshotId);
-
+    const clientGeneratedSnapshotId = crypto.randomUUID();
     const snapshotData = {
-      siteId:      siteId,
-      snapshotId:  clientGeneratedSnapshotId, // This UUID is sent to the backend
-      timestamp:   new Date().toISOString(),
-      pageUrl:     window.location.href,
-      changes:     changes,
+      siteId, snapshotId: clientGeneratedSnapshotId, timestamp: new Date().toISOString(),
+      pageUrl: window.location.href, changes: this.appliedFixes.size > 0 ? Array.from(this.appliedFixes.values()).map(fixInfo => ({ 
+        targetSelector: fixInfo.stableTargetSelector, 
+        appliedHtml: fixInfo.fixedOuterHTML, 
+        sessionFixId: fixInfo.originalElementId 
+      })) : [],
     };
-
-    console.log("[FeedbackViewerImpl] Snapshot data for POST /snapshots prepared:", snapshotData);
-    
     const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
-    console.log(`[FeedbackViewerImpl] Saving snapshot to: ${postSnapshotUrl}`);
 
     try {
-      this.renderUserMessage("Publishing changes..."); 
-      const postResponse = await fetch(postSnapshotUrl, {
+      this.renderUserMessage("Publishing changes...");
+      const postResponse = await fetchProtected(postSnapshotUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(snapshotData),
       });
-
       if (!postResponse.ok) {
         const errorBody = await postResponse.text();
         let specificErrorMessage = `Saving snapshot failed: ${postResponse.status} ${postResponse.statusText}`;
@@ -1165,38 +1181,19 @@ export class FeedbackViewerImpl {
         }
         throw new Error(specificErrorMessage);
       }
-
-      // Backend now returns { publishedVariantId (short), snapshotId (UUID from payload), publicCdnUrl, newVariantRecordCreated }
       const postResult = await postResponse.json(); 
       console.log("[FeedbackViewerImpl] Snapshot successfully saved (POST response):", postResult);
-      
       if (postResult.publishedVariantId && postResult.snapshotId) {
-        const shortPublishedId = postResult.publishedVariantId; // Short ID for URLs and promote path
-        const fullSnapshotIdUUID = postResult.snapshotId; // UUID for promotion body, should match clientGeneratedSnapshotId
-
-        // Verify backend returned the same snapshotId we sent
-        if (fullSnapshotIdUUID !== clientGeneratedSnapshotId) {
-            console.warn(`[FeedbackViewerImpl] Mismatch between client-generated snapshotId (${clientGeneratedSnapshotId}) and backend-returned snapshotId (${fullSnapshotIdUUID}). Using backend's.`);
-            // Potentially use clientGeneratedSnapshotId if strict control is needed, or trust backend's echo.
-            // For now, we'll use what the backend confirmed (fullSnapshotIdUUID) for the promotion body.
-        }
-
+        const shortPublishedId = postResult.publishedVariantId; 
+        const fullSnapshotIdUUID = postResult.snapshotId; 
         this.renderUserMessage(`Published ID: ${shortPublishedId}`);
-        
-        // Promote using the SHORT publishedVariantId in the path
         const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${shortPublishedId}`;
-        console.log(`[FeedbackViewerImpl] Promoting variant. URL: ${promoteUrl}`);
-
         try {
-          const promoteResponse = await fetch(promoteUrl, {
+          const promoteResponse = await fetchProtected(promoteUrl, {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            // Body MUST contain the full UUID snapshotId
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ snapshotIdToPromote: fullSnapshotIdUUID }), 
           });
-
           if (!promoteResponse.ok) {
             const promoteErrorBody = await promoteResponse.text();
             let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
@@ -1208,40 +1205,78 @@ export class FeedbackViewerImpl {
             } catch (parseErr) {
                 specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
             }
-            console.error("[FeedbackViewerImpl] Error promoting snapshot:", specificPromoteErrorMessage, promoteErrorBody);
-            this.showError(`Failed to promote snapshot: ${specificPromoteErrorMessage}`);
-            this.renderUserMessage(`Error promoting: ${specificPromoteErrorMessage}. Snapshot saved (ID: ${shortPublishedId.substring(0,8)}...) but not live.`);
-            return; 
+            throw new Error(specificPromoteErrorMessage);
           }
-
-          // Promotion response: { variantId (short, same as publishedVariantId), cdnUrl, snapshotId (UUID) }
-          const promoteResult = await promoteResponse.json(); 
+          const promoteResult = await promoteResponse.json();
           console.log("[FeedbackViewerImpl] Snapshot successfully promoted (PUT response):", promoteResult);
-          
-          // Use the cdnUrl from the promotion response, or fallback to publicCdnUrl from POST response
-          const liveCdnUrl = promoteResult.cdnUrl || postResult.publicCdnUrl;
-          // Share URL uses the SHORT publishedVariantId and the new query parameter
           const shareUrl = `${window.location.origin}${window.location.pathname}?checkra-variant-id=${shortPublishedId}`;
-
           this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
-          console.log("[FeedbackViewerImpl] Share URL:", shareUrl, "Live CDN URL:", liveCdnUrl);
-
         } catch (promoteError) {
-          console.error("[FeedbackViewerImpl] Network or other error promoting snapshot:", promoteError);
-          const errorMessage = promoteError instanceof Error ? promoteError.message : "An unknown error occurred during promotion.";
-          this.showError(`Failed to promote snapshot: ${errorMessage}`);
-          this.renderUserMessage(`Error promoting: ${errorMessage}. Snapshot saved (ID: ${shortPublishedId.substring(0,8)}...) but not live.`);
+          if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
+            console.log('[FeedbackViewerImpl] Authentication required during snapshot promotion.');
+            await this.handleAuthenticationRequiredAndRedirect('publish', changes, promoteError as AuthenticationRequiredError); 
+          } else {
+            console.error("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
+            if (promoteError instanceof Error) {
+              console.error("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
+              console.error("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
+              if (promoteError.stack) {
+                console.error("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
+              }
+              if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
+                const response = (promoteError as any).response as Response;
+                console.error("[FeedbackViewerImpl] Underlying promote response status:", response.status);
+                try {
+                   const responseBody = await response.text();
+                   console.error("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
+                } catch (bodyError) {
+                   console.error("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
+                }
+             }
+            } else {
+              console.error("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
+            }
+            const shortPublishedId = snapshotData.snapshotId.substring(0,8); // Assuming snapshotData is in scope
+            const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
+            this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
+            this.renderUserMessage(`Error promoting: ${displayErrorMessage}. Snapshot saved (ID: ${shortPublishedId}...) but not live.`);
+          }
         }
       } else {
         console.warn("[FeedbackViewerImpl] Snapshot POST successful, but publishedVariantId or snapshotId missing in response:", postResult);
         this.renderUserMessage("Snapshot saved, but could not get necessary IDs for promotion.");
       }
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
+        console.log('[FeedbackViewerImpl] Authentication required during snapshot save. Error object:', error);
+        await this.handleAuthenticationRequiredAndRedirect('publish', changes, error as AuthenticationRequiredError); 
+      } else {
+        console.error("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot. Error details follow.");
+        if (error instanceof Error) {
+          console.error("[FeedbackViewerImpl] Error Name:", error.name);
+          console.error("[FeedbackViewerImpl] Error Message:", error.message);
+          if (error.stack) {
+            console.error("[FeedbackViewerImpl] Error Stack:", error.stack);
+          }
+          // Check if we have a response object attached to the error, common in HTTP error wrappers
+          // This is a common pattern but not standard for all Error objects.
+          if ((error as any).response && typeof (error as any).response.status === 'number') {
+             const response = (error as any).response as Response;
+             console.error("[FeedbackViewerImpl] Underlying response status:", response.status);
+             try {
+                const responseBody = await response.text(); // Attempt to read body if not already read
+                console.error("[FeedbackViewerImpl] Underlying response body:", responseBody);
+             } catch (bodyError) {
+                console.error("[FeedbackViewerImpl] Could not read underlying response body:", bodyError);
+             }
+          }
+        } else {
+          console.error("[FeedbackViewerImpl] Caught a non-Error object:", error);
+        }
 
-    } catch (error) { // Error from initial POST
-      console.error("[FeedbackViewerImpl] Error saving snapshot:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during saving.";
-      this.showError(`Failed to save snapshot: ${errorMessage}`);
-      this.renderUserMessage(`Error saving snapshot: ${errorMessage}`);
+        const displayErrorMessage = error instanceof Error ? error.message : String(error);
+        this.showError(`Failed to save snapshot: ${displayErrorMessage}`);
+      }
     }
   }
 
@@ -1268,25 +1303,14 @@ export class FeedbackViewerImpl {
     console.log(`[FeedbackViewerLogic] Fetching stats for query: ${queryName}`);
 
     this.domManager.appendHistoryItem({
-      type: 'ai', // Show a thinking indicator
+      type: 'ai', 
       content: `Fetching ${queryName.replace(/_/g, ' ')}...`,
-      isStreaming: true // Use streaming style for "thinking"
+      isStreaming: true 
     });
 
     try {
-      const response = await fetch(`https://${CDN_DOMAIN}/analytics/${queryName}`);
+      const response = await fetchProtected(`https://${CDN_DOMAIN}/analytics/${queryName}`);
       
-      // Update the "thinking" message to a final state (non-streaming)
-      // This requires a way to update the last message if the DOM manager supports it,
-      // or simply appending a new message. For simplicity, we'll append new.
-      // Ideally, domManager.updateLastAIMessage would be used.
-      // For now, we'll remove the thinking message if possible, or just let it be.
-      // Let's assume we can't easily remove/update the "thinking" message and proceed.
-      // A better approach would be to have domManager.updateLastAIMessage take an ID or be smarter.
-      // The current domManager.updateLastAIMessage updates the *very last* AI bubble.
-      // So, if another AI message came in, it would get overwritten.
-      // For robust V1, new bubble for result is safest.
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Failed to fetch stats: ${response.status} ${errorText}`);
@@ -1314,16 +1338,151 @@ export class FeedbackViewerImpl {
       }
 
       if (markdownTable) {
-         // Replace the "Fetching..." message with the actual table.
         this.domManager.updateLastAIMessage(markdownTable, false);
       } else {
         this.saveHistory({ type: 'ai', content: "Could not format data for display." });
       }
 
     } catch (error: any) {
-      console.error('[FeedbackViewerLogic] Error fetching or displaying stats:', error);
-      // Replace the "Fetching..." message with the error.
-      this.domManager.updateLastAIMessage(`Sorry, I couldn't fetch those stats right now. Please try again. Error: ${error.message}`, false);
+      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
+        console.log('[FeedbackViewerImpl] Authentication required for fetching stats.');
+        await this.handleAuthenticationRequiredAndRedirect('fetchStats', { queryName }, error as AuthenticationRequiredError);
+      } else {
+        console.error("[FeedbackViewerImpl] Non-AuthenticationRequiredError during fetching stats. Error details follow.");
+        if (error instanceof Error) {
+          console.error("[FeedbackViewerImpl] Stats Error Name:", error.name);
+          console.error("[FeedbackViewerImpl] Stats Error Message:", error.message);
+          if (error.stack) {
+            console.error("[FeedbackViewerImpl] Stats Error Stack:", error.stack);
+          }
+          if ((error as any).response && typeof (error as any).response.status === 'number') {
+            const response = (error as any).response as Response;
+            console.error("[FeedbackViewerImpl] Underlying stats response status:", response.status);
+            try {
+               const responseBody = await response.text();
+               console.error("[FeedbackViewerImpl] Underlying stats response body:", responseBody);
+            } catch (bodyError) {
+               console.error("[FeedbackViewerImpl] Could not read underlying stats response body:", bodyError);
+            }
+         }
+        } else {
+          console.error("[FeedbackViewerImpl] Caught a non-Error object during stats fetch:", error);
+        }
+        const displayErrorMessage = error instanceof Error ? error.message : String(error);
+        this.domManager.updateLastAIMessage(`Sorry, I couldn't fetch those stats. Error: ${displayErrorMessage}`, false);
+      }
+    }
+  }
+
+  private async handleAuthenticationRequiredAndRedirect(actionType: string, actionData: any, authError: AuthenticationRequiredError): Promise<void> {
+    try {
+      localStorage.setItem(PENDING_ACTION_TYPE_KEY, actionType);
+      if (actionData !== undefined) {
+        localStorage.setItem(PENDING_ACTION_DATA_KEY, JSON.stringify(actionData));
+      }
+      
+      const loginUrlFromError = authError?.loginUrl;
+      const encodedRedirect = encodeURIComponent((window as any).Checkra?.REDIRECT_URI ?? location.origin + '/auth/callback');
+      const safeToUseLoginUrl = loginUrlFromError && loginUrlFromError.includes(`redirect_to=${encodedRedirect}`);
+
+      if (safeToUseLoginUrl) {
+        console.log(`[FeedbackViewerImpl] Redirecting browser to backend-provided loginUrl: ${loginUrlFromError}`);
+        window.location.href = loginUrlFromError;
+      } else {
+        // Fallback: build correct login flow via startLogin()
+        console.warn('[FeedbackViewerImpl] Backend loginUrl missing or has wrong redirect_to. Falling back to startLogin().');
+        try {
+          await startLogin(); // Use imported startLogin
+        } catch (loginError) {
+          console.error('[FeedbackViewerImpl] Error calling startLogin():', loginError);
+          this.showError('Authentication is required. Auto-redirect to login failed.');
+        }
+      }
+    } catch (e) {
+      console.error('[FeedbackViewerImpl] Failed to store pending action or initiate login:', e);
+      this.showError('Could not prepare for login. Please try again.');
+    }
+  }
+
+  private async handlePendingActionAfterLogin(): Promise<void> {
+    const actionType = localStorage.getItem(PENDING_ACTION_TYPE_KEY);
+    const rawActionData = localStorage.getItem(PENDING_ACTION_DATA_KEY);
+
+    if (actionType) {
+      const loggedIn = await isLoggedIn(); // Use imported isLoggedIn
+      if (!loggedIn) {
+        console.log('[FeedbackViewerImpl] Pending action exists but user is not logged in yet — waiting until after successful login.');
+        return; // Do not resume; keep data intact for after auth
+      }
+
+      console.log(`[FeedbackViewerImpl] Found pending action after login and user is authenticated: ${actionType}`);
+      localStorage.removeItem(PENDING_ACTION_TYPE_KEY);
+      localStorage.removeItem(PENDING_ACTION_DATA_KEY);
+
+      let actionData: any = null;
+      if (rawActionData) {
+        try {
+          actionData = JSON.parse(rawActionData);
+        } catch (e) {
+          console.error('[FeedbackViewerImpl] Failed to parse pending action data:', e);
+          this.showError('Could not restore previous action: invalid data.');
+          return;
+        }
+      }
+
+      switch (actionType) {
+        case 'publish':
+          if (actionData && Array.isArray(actionData)) {
+            // Attempt to restore this.appliedFixes from the stored array of entries
+            try {
+              this.appliedFixes = new Map(actionData as Iterable<readonly [string, AppliedFixInfo]>);
+              console.log(`[FeedbackViewerImpl] Restored ${this.appliedFixes.size} fixes for pending publish.`);
+            } catch (e) {
+              console.error('[FeedbackViewerImpl] Error restoring appliedFixes from localStorage:', e);
+              this.showError('Failed to restore changes for publishing.');
+              return;
+            }
+          } else if (this.appliedFixes.size === 0) { // If no actionData or it was bad, AND current fixes are empty
+            this.renderUserMessage("No changes were pending to publish after login.");
+            return;
+          }
+          this.renderUserMessage("Resuming publish operation after login...");
+          await this.publishSnapshot();
+          break;
+        case 'fetchStats':
+          if (actionData && typeof actionData.queryName === 'string') {
+            this.renderUserMessage(`Resuming stats fetch for ${actionData.queryName} after login...`);
+            await this.fetchAndDisplayStats(actionData.queryName);
+          } else {
+            console.error('[FeedbackViewerImpl] Invalid or missing queryName for pending fetchStats action.');
+            this.showError('Could not restore stats fetch: missing query details.');
+          }
+          break;
+        default:
+          console.warn(`[FeedbackViewerImpl] Unknown pending action type: ${actionType}`);
+      }
+    } else {
+      console.log('[FeedbackViewerImpl] No pending action found after login.');
+    }
+  }
+
+  /**
+   * Detects ?error=... returned from Supabase and surfaces it to the user once, then cleans it from history.
+   * Prevents endless redirect loops when Supabase cannot create the user due to RLS / grants.
+   */
+  private handleAuthErrorInUrl(): void {
+    const params = new URLSearchParams(location.search);
+    const errorCode = params.get('error');
+    const errorDesc = params.get('error_description');
+    if (errorCode) {
+      console.warn('[FeedbackViewerImpl] Supabase auth error detected in URL:', errorCode, errorDesc);
+      this.renderUserMessage(`Login failed: ${errorDesc || errorCode}. Please contact support or retry later.`);
+      // Clear the params to avoid repeated messages / loops
+      params.delete('error');
+      params.delete('error_code');
+      params.delete('error_description');
+      const newUrl = `${location.pathname}${params.toString() ? '?' + params.toString() : ''}${location.hash}`;
+      history.replaceState(null, '', newUrl);
     }
   }
 }

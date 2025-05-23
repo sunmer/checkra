@@ -3,6 +3,7 @@ import { AiSettings as CoreAiSettings } from '../ui/settings-modal';
 import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
 import { EventEmitter } from './event-emitter';
+import * as Auth from '../auth/auth'; // Import auth functions
 
 // Module-level instance variables
 let settingsModalInstance: SettingsModal | null = null;
@@ -78,6 +79,33 @@ export interface CheckraAPI {
    * Removes the Checkra UI elements and cleans up resources.
    */
   destroy: () => void;
+  /**
+   * Starts the Google OAuth login flow.
+   */
+  startLogin: () => Promise<void>;
+  /**
+   * Handles the OAuth callback. The Supabase client typically handles the code exchange automatically.
+   * This function can be used to confirm session status post-redirect.
+   * Typically called on the redirect URI page.
+   */
+  handleAuthCallback: () => Promise<boolean>;
+  /**
+   * Clears the current session and reloads the page.
+   */
+  logout: () => Promise<void>;
+  /**
+   * Checks if a user is currently logged in (has a valid or refreshable token).
+   */
+  isLoggedIn: () => Promise<boolean>;
+  /**
+   * Gets the current user's ID (sub from JWT) if logged in.
+   */
+  currentUserId: () => Promise<string | null>;
+  /**
+   * Utility to get a valid auth token, attempts refresh if needed.
+   * Exposed mainly for debugging or advanced scenarios; fetchProtected is preferred.
+   */
+  getAuthToken: () => Promise<string | null>;
 }
 
 // Default options specifically for the core initialization path
@@ -166,9 +194,15 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
           settingsModalInstance = null;
           console.log('[Checkra Core] SettingsModal instance destroyed.');
         }
-        // Potentially unsubscribe all eventEmitter listeners here if appropriate for full cleanup
         console.log('[Checkra API] Cleanup complete.');
-      }
+      },
+      // Auth methods
+      startLogin: Auth.startLogin,
+      handleAuthCallback: Auth.handleAuthCallback,
+      logout: Auth.logout,
+      isLoggedIn: Auth.isLoggedIn,
+      currentUserId: Auth.currentUserId,
+      getAuthToken: Auth.getToken // Exposing getToken as getAuthToken on the API
     };
 
     return api;

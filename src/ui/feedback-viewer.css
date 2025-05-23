@@ -711,7 +711,7 @@
   border: 1px solid #8f2d2d !important;
   margin-right: auto;
   border-radius: 4px;
-  padding: 10px; /* This was likely here before or similar */
+  padding: 10px !important; /* This was likely here before or similar */
   font-family: var(--checkra-base-font-stack) !important;
   font-size: var(--checkra-base-font-size) !important;
 }

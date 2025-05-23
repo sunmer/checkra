@@ -98,7 +98,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
   const initialize = () => {
     // Check if already initialized
-    if (!(window as any).CheckraInitialized) {
+    if (!(window as any).checkraInitialized) {
       try {
         const configFromSources = getFinalConfig(); // Gets script/global config merged with defaults
         console.log('[Checkra] DOM ready, auto-initializing with config from sources:', configFromSources);
@@ -107,10 +107,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         const api = initCheckra(configFromSources); 
         
         if (api) {
-          (window as any).Checkra = api; // Expose API globally
-          (window as any).CheckraInitialized = true;
+          (window as any).checkra = api; // Expose API globally (lowercase 'c')
+          (window as any).checkraInitialized = true; // Use a consistent flag name
           document.dispatchEvent(new CustomEvent('checkraReady'));
-          console.log('[Checkra] Auto-initialization complete. API exposed as window.Checkra. "checkraReady" event dispatched.');
+          console.log('[Checkra] Auto-initialization complete. API exposed as window.checkra. "checkraReady" event dispatched.');
         } else {
           console.error("[Checkra] Auto-initialization failed, API not returned.");
         }

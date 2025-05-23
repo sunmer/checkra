@@ -1,3 +1,5 @@
+import type { CheckraAPI } from './core/index'; // type-only import to avoid runtime cycle
+
 /**
  * Configuration options for the Checkra feedback module.
  */
@@ -18,4 +20,11 @@ export interface CheckraOptions {
    * @default false (handled in initialization logic)
    */
   isVisible?: boolean;
+}
+
+// --- Global Augmentation for window.Checkra --- 
+declare global {
+  interface Window {
+    Checkra?: CheckraAPI; // Make it optional as it's loaded dynamically
+  }
 }
