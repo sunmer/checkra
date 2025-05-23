@@ -56,7 +56,6 @@ export class FeedbackViewerImpl {
   // --- State ---
   private isVisible: boolean = false;
   private currentImageDataUrl: string | null = null;
-  private initialSelectedElement: Element | null = null; // The element *initially* selected by the user for the cycle
   private currentlyHighlightedElement: Element | null = null; // << ADDED: Track element with outline
   private originalOuterHTMLForCurrentCycle: string | null = null; // Store the initial HTML of the selected element
   private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
@@ -248,7 +247,6 @@ export class FeedbackViewerImpl {
     }
 
     this.currentImageDataUrl = imageDataUrl;
-    this.initialSelectedElement = targetElement; 
 
     const isElementSelected = !!(targetElement && targetElement !== document.body); // Ensure boolean
 
@@ -260,7 +258,7 @@ export class FeedbackViewerImpl {
       this.stableSelectorForCurrentCycle = 'body';
       this.originalOuterHTMLForCurrentCycle = document.body.outerHTML; // Fallback or default context
       if (targetElement === document.body) {
-        this.initialSelectedElement = document.body; // Explicitly set for clarity if it was body
+        // Removed: this.initialSelectedElement = document.body; // Explicitly set for clarity if it was body
       }
     }
 
@@ -412,10 +410,8 @@ export class FeedbackViewerImpl {
 
   private resetStateForNewSelection(): void {
     this.currentImageDataUrl = null;
-    this.initialSelectedElement = null;
     this.originalOuterHTMLForCurrentCycle = null;
     this.fixedOuterHTMLForCurrentCycle = null;
-    // this.currentFixId = null; // currentFixId should persist until a new selection cycle starts in prepareForInput
     this.stableSelectorForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
