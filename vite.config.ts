@@ -9,8 +9,49 @@ const packageJsonPath = resolve(__dirname, 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
 const currentVersion = packageJson.version;
 
+// Helper function to create the HTML transform plugin
+function htmlTransformPlugin() {
+  return {
+    name: 'html-transform-checkra-loader',
+    transformIndexHtml(html, ctx) {
+      const isDevServer = !!ctx.server;
+      // process.env.VITE_USER_NODE_ENV is set in defineConfig for build commands
+      const buildMode = isDevServer ? 'development' : process.env.VITE_USER_NODE_ENV;
+
+      let scriptSrc = '';
+      let cssLink = '';
+
+      if (isDevServer) { // Dev server (vite serve)
+        const absoluteSrcPath = resolve(__dirname, 'src/index.ts');
+        scriptSrc = `/@fs/${absoluteSrcPath}`;
+        // In dev, Vite handles CSS injection from JS/TS imports, so no explicit CSS link needed here
+        console.log(`[HTML Transform DEV] Injected script: ${scriptSrc}`);
+      } else if (buildMode === 'preprod') { // Preprod build (npm run build:demo)
+        scriptSrc = './checkra.umd.cjs'; // Relative to demo-dist/index.html or demo-dist/auth/callback.html
+        cssLink = '<link rel="stylesheet" href="./style.css">'; // Relative to demo-dist
+        console.log(`[HTML Transform PREPROD] Injected script: ${scriptSrc}, CSS: ${cssLink}`);
+      } else { // Production library build or other modes (e.g. CDN usage for demo)
+        scriptSrc = `https://unpkg.com/checkra@${currentVersion}/dist/checkra.umd.cjs`;
+        cssLink = `<link rel="stylesheet" href="https://unpkg.com/checkra@${currentVersion}/dist/style.css">`;
+        console.log(`[HTML Transform PROD/CDN] Injected script: ${scriptSrc}, CSS: ${cssLink}`);
+      }
+
+      return html
+        .replace('%CHECKRA_CSS_LINK%', cssLink)
+        .replace('%CHECKRA_SCRIPT_TAG%', `<script type="module" src="${scriptSrc}" defer></script>`);
+    }
+  };
+}
+
 export default defineConfig(({ command, mode }) => {
-  // console.log(`Vite Config - Command: ${command}, Mode: ${mode}`); // Optional: for debugging
+  // Update the environment variable for more reliable mode detection in the plugin
+  if (command === 'build') {
+    process.env.VITE_USER_NODE_ENV = mode;
+  } else if (command === 'serve') {
+    // For dev server, explicitly set a development mode for the plugin if needed, though isDevServer is primary check
+    process.env.VITE_USER_NODE_ENV = 'development'; 
+  }
+  // console.log(`Vite Config - Command: ${command}, Mode: ${mode}, process.env.VITE_USER_NODE_ENV: ${process.env.VITE_USER_NODE_ENV}`);
 
   // --- DEVELOPMENT SERVER (npm run dev) ---
   if (command === 'serve') {
@@ -24,8 +65,7 @@ export default defineConfig(({ command, mode }) => {
           ignored: ['!**/node_modules/**','!**/dist/**']
         }
       },
-      // No plugins needed specifically for dev serving in this case
-      plugins: [],
+      plugins: [htmlTransformPlugin()], // Add plugin for dev server
       fs: {
         allow: [
           resolve(__dirname, '..'),
@@ -102,8 +142,7 @@ export default defineConfig(({ command, mode }) => {
         define: {
           'import.meta.env.PACKAGE_VERSION': JSON.stringify(currentVersion)
         },
-        // No dts plugin needed for demo build
-        plugins: [],
+        plugins: [htmlTransformPlugin()], // Add plugin for demo build
       };
     }
 

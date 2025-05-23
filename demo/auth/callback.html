@@ -10,55 +10,13 @@
     .error { color: #d9534f; }
     .success { color: #5cb85c; }
   </style>
-  <!-- Script to load Checkra library (which now includes Supabase client init) -->
-  <script type="module">
-    // This script block assumes your main Checkra library (e.g., ../../src/index.ts)
-    // correctly initializes the Supabase client and exposes Checkra globally.
-    // The Supabase client needs to be active for onAuthStateChange or handleAuthCallback to work.
 
-    if (import.meta.env.DEV) {
-      console.log('[Callback Loader] DEV mode: Importing local Checkra src/index.ts...');
-      import('../../src/index.ts') // This should set up window.Checkra with new auth
-        .then(() => {
-          console.log('[Callback Loader] Local Checkra (src/index.ts) loaded.');
-          // The Checkra library itself should handle Supabase client initialization.
-          // The client's `detectSessionInUrl: true` (default) will automatically process the URL.
-        })
-        .catch(err => {
-          console.error('[Callback] Failed to load local Checkra source in dev:', err);
-          document.getElementById('message').textContent = 'Error loading application library (dev mode).';
-        });
-    } else {
-      // Production: Load the bundled UMD version of Checkra
-      // This UMD bundle should also initialize the Supabase client internally.
-      const SELF_HOSTED = '/checkra.umd.cjs'; // Adjust if your build output is different
-      const CDN = 'https://unpkg.com/checkra@latest/dist/checkra.umd.cjs'; // Example CDN path
-      console.log('[Callback Loader] Production-like mode. Attempting to load Checkra UMD...');
+  <!-- Placeholder for Checkra library CSS (injected by Vite plugin) -->
+  %CHECKRA_CSS_LINK%
 
-      function loadCheckraScript(src, isFallback = false) {
-        console.log(`[Callback Loader] ${isFallback ? 'Fallback: ' : ''}Loading Checkra from ${src}`);
-        const s = document.createElement('script');
-        s.defer = true;
-        // If your UMD needs specific config, pass it via data attribute or global var
-        // s.setAttribute('data-checkra-config', JSON.stringify({ /* options */ }));
-        s.src = src;
-        s.onload = () => {
-          console.log(`[Callback Loader] Checkra loaded successfully from ${src}.`);
-          // Supabase client within Checkra will handle URL session detection.
-        };
-        s.onerror = () => {
-          console.error(`[Callback Loader] Failed to load Checkra from ${src}.`);
-          if (!isFallback) {
-            loadCheckraScript(CDN, true); // Try CDN on failure
-          } else {
-            document.getElementById('message').textContent = 'Error loading application library.';
-          }
-        };
-        document.head.appendChild(s);
-      }
-      loadCheckraScript(SELF_HOSTED);
-    }
-  </script>
+  <!-- Placeholder for Checkra library SCRIPT (injected by Vite plugin) -->
+  %CHECKRA_SCRIPT_TAG%
+
 </head>
 <body>
   <div class="container">
@@ -67,67 +25,93 @@
   </div>
 
   <script type="module">
-    // This script runs after the Checkra library (and its Supabase client) is expected to be loaded and initialized.
+    // This script runs after the Checkra library (loaded by %CHECKRA_SCRIPT_TAG%)
+    // and its Supabase client are expected to be initialized.
     // The Supabase client, due to `detectSessionInUrl:true` by default, should have already handled
     // the OAuth code exchange by the time the DOM is ready or `checkraReady` fires.
 
     async function onCheckraReady() {
       const messageEl = document.getElementById('message');
-      console.log('[AuthCallback] checkra is ready. Verifying login status...');
+      console.log('[AuthCallbackPage] checkra is ready or assumed ready. Verifying login status...');
 
+      // The Checkra library (src/index.ts) auto-initializes and sets window.checkra and window.checkraInitialized.
+      // It also dispatches 'checkraReady'.
       if (!window.checkra || typeof window.checkra.handleAuthCallback !== 'function') {
-        console.error('[AuthCallback] window.checkra.handleAuthCallback not found. Checkra library might not have loaded correctly or exposed the function.');
-        messageEl.textContent = 'Error: Auth library not available.';
-        messageEl.className = 'error';
+        console.error('[AuthCallbackPage] window.checkra.handleAuthCallback not found. Checkra library might not have loaded/initialized correctly or exposed the function.');
+        if (messageEl) {
+            messageEl.textContent = 'Error: Auth library not available. Please ensure Checkra loaded.';
+            messageEl.className = 'error';
+        }
         return;
       }
 
       try {
-        messageEl.textContent = 'Finalizing login...';
-        // Call the refactored handleAuthCallback from your checkra.auth module
+        if (messageEl) messageEl.textContent = 'Finalizing login...';
+        
         const loginSuccess = await window.checkra.handleAuthCallback(); 
 
         if (loginSuccess) {
-          console.log('[AuthCallback] Login successful (confirmed by handleAuthCallback).');
-          messageEl.textContent = 'Login successful! Redirecting...';
-          messageEl.className = 'success';
+          console.log('[AuthCallbackPage] Login successful (confirmed by handleAuthCallback).');
+          if (messageEl) {
+            messageEl.textContent = 'Login successful! Redirecting...';
+            messageEl.className = 'success';
+          }
           // Redirect to the main page (origin) after successful login
-          window.location.href = location.origin; 
+          // Add a small delay for the message to be visible if desired
+          setTimeout(() => { window.location.href = location.origin; }, 500);
         } else {
-          console.warn('[AuthCallback] Login failed or no session established (confirmed by handleAuthCallback).');
-          messageEl.textContent = 'Login failed. Please try again.';
-          messageEl.className = 'error';
+          console.warn('[AuthCallbackPage] Login failed or no session established (confirmed by handleAuthCallback).');
+          if (messageEl) {
+            messageEl.textContent = 'Login failed. Please try again or contact support.';
+            messageEl.className = 'error';
+          }
         }
       } catch (error) {
-        console.error('[AuthCallback] Error during callback handling:', error);
-        messageEl.textContent = `An error occurred: ${error.message}. Please try logging in again.`;
-        messageEl.className = 'error';
+        console.error('[AuthCallbackPage] Error during callback handling:', error);
+        if (messageEl) {
+            messageEl.textContent = `An error occurred: ${error.message}. Please try logging in again.`;
+            messageEl.className = 'error';
+        }
       }
     }
 
     // Wait for Checkra to be ready. 
-    // Your main Checkra library (src/index.ts) should dispatch 'checkraReady' 
-    // after it has initialized the Supabase client and exposed the API.
-    if (window.checkraInitialized) { // If checkra said it's ready
-        console.log('[AuthCallback] checkra already initialized. Proceeding.');
-        onCheckraReady();
-    } else {
-        console.log('[AuthCallback] Waiting for checkraReady event...');
-        document.addEventListener('checkraReady', () => {
-            console.log('[AuthCallback] checkraReady event received. Proceeding.');
+    // The main Checkra library (src/index.ts) should dispatch 'checkraReady' 
+    // after it has initialized the Supabase client and exposed the API (window.checkra).
+    function attemptAuthCallback() {
+        if (window.checkraInitialized && window.checkra) {
+            console.log('[AuthCallbackPage] Checkra already initialized. Proceeding with auth callback handling.');
             onCheckraReady();
-        }, { once: true });
+        } else {
+            console.log('[AuthCallbackPage] Waiting for checkraReady event...');
+            document.addEventListener('checkraReady', () => {
+                console.log('[AuthCallbackPage] checkraReady event received. Proceeding.');
+                onCheckraReady(); // Now window.checkra should be available
+            }, { once: true });
+        }
     }
 
-    // Fallback for errors in URL from OAuth provider (e.g. user cancels)
-    const urlParams = new URLSearchParams(location.search);
+    // Check for errors in URL from OAuth provider (e.g. user cancels or other auth error)
+    // This should be checked before attempting to handle a successful callback.
+    const urlParams = new URLSearchParams(window.location.search);
     const errorCode = urlParams.get('error');
     const errorDescription = urlParams.get('error_description');
+    
     if (errorCode) {
-      console.error('[AuthCallback] OAuth Error in URL:', errorCode, errorDescription);
+      console.error('[AuthCallbackPage] OAuth Error in URL:', errorCode, errorDescription);
       const messageEl = document.getElementById('message');
-      messageEl.textContent = `Login Failed: ${errorDescription || errorCode}. You can close this page.`;
-      messageEl.className = 'error';
+      if (messageEl) {
+        messageEl.textContent = `Login Failed: ${errorDescription || errorCode}. You can close this page.`;
+        messageEl.className = 'error';
+      }
+      // Do not proceed with attemptAuthCallback if there's an explicit OAuth error in URL
+    } else {
+        // If no OAuth error in URL, proceed to wait for Checkra and handle callback
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', attemptAuthCallback);
+        } else {
+            attemptAuthCallback();
+        }
     }
   </script>
 </body>

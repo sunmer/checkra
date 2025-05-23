@@ -29,6 +29,12 @@
     rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
+  <!-- Placeholder for Checkra library CSS (injected by Vite plugin) -->
+  %CHECKRA_CSS_LINK%
+
+  <!-- Placeholder for Checkra library SCRIPT (injected by Vite plugin) -->
+  %CHECKRA_SCRIPT_TAG%
+
   <!-- CSS-only Tab Styles (Standard CSS) -->
   <style>
     /* Hide the actual radio buttons */
@@ -91,93 +97,6 @@
       display: block;
     }
   </style>
-
-  <script type="module">
-    // Vite provides import.meta.env automatically
-    const isDev = import.meta.env.DEV;          // True during 'vite dev'
-    const isPreprod = import.meta.env.MODE === 'preprod'; // True during 'vite build --mode preprod'
-    // Assume anything else is production (e.g., deployed demo) or needs CDN
-    const isProductionLike = !isDev && !isPreprod;
-
-    window.checkraApiInstance = null;
-
-    function loadScript(src, type) {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        if (type) script.type = type;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    }
-
-    function loadStyle(href) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = href;
-      document.head.appendChild(link);
-    }
-
-    function initializeCheckra() {
-      // Standard UMD initialization (for preprod/production-like)
-      if (window.CheckraInitialized && window.checkraApiInstance) { // Check if API also set
-        console.log('[Checkra Loader] UMD path: Already initialized and API instance exists.');
-        // If already initialized, ensure button setup is attempted
-        setupGetInstantFeedbackButton(); // MODIFIED: Call directly
-        return;
-      }
-      if (window.checkra && typeof window.checkra.initCheckra === 'function') {
-        if (!window.checkraApiInstance) { // Initialize only if API not set
-          window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false });
-          console.log('[Checkra Loader] UMD path: API instance set.');
-          document.dispatchEvent(new CustomEvent('checkraApiReady'));
-        } else {
-          console.log('[Checkra Loader] UMD path: API instance was already set. Ensuring event.');
-          if (!document.querySelector('#get-instant-feedback-btn[data-checkra-listener-attached]')) {
-            // If API was set but event might have been missed by early DOMContentLoaded for button listener
-            document.dispatchEvent(new CustomEvent('checkraApiReady'));
-          }
-        }
-        // window.CheckraInitialized = true; // This flag seems redundant if we rely on checkraApiInstance
-        setupGetInstantFeedbackButton(); // MODIFIED: Call directly after init attempt
-      } else {
-        console.error('[Checkra Loader] Checkra UMD global not found for initialization.');
-      }
-    }
-
-    if (isDev) {
-      // DEV MODE: Load directly from source using module script below.
-      // The <script type="module"> at the bottom handles this.
-      // Button setup will be handled by the dev-specific script block.
-      console.log('[Checkra Loader - index.html] DEV mode detected. Will load from src/index.ts via module script.');
-    } else if (isPreprod) {
-      // PREPROD MODE: Load built UMD files from local build output
-      console.log('[Checkra Loader - index.html] PREPROD mode detected. Attempting to load local ./checkra.umd.cjs');
-
-      // Path Explanation:
-      // - 'npm run build:demo' builds 'demo/index.html' into 'demo-dist/index.html'.
-      // - 'npm run preview:demo' serves the 'demo-dist' directory.
-      // - Therefore, from 'demo-dist/index.html', the path to the library build output
-      //   in the 'dist' folder is indeed '../dist/'.
-
-      // Load the locally built library JS
-      loadScript('./checkra.umd.cjs') // Load from demo-dist root
-        .then(initializeCheckra)
-        .catch(err => console.error('[Checkra Loader - index.html] Failed to load preprod script:', err));
-
-    } else { // isProductionLike (or static hosting)
-      // PRODUCTION-LIKE / STATIC: Fallback to loading from CDN (unpkg)
-      console.log('[Checkra Loader - index.html] Production-like mode detected. Attempting to load from CDN.');
-      // Use the version injected by Vite build
-      const version = import.meta.env.PACKAGE_VERSION || 'latest'; // Fallback to 'latest' if undefined
-      loadStyle(`https://unpkg.com/checkra@${version}/dist/style.css`);
-      // *** CORRECTION HERE: Use the correct UMD filename from unpkg ***
-      loadScript(`https://unpkg.com/checkra@${version}/dist/checkra.umd.cjs`)
-        .then(initializeCheckra)
-        .catch(err => console.error('[Checkra Loader - index.html] Failed to load CDN script:', err));
-    }
-  </script>
 
 </head>
 <!-- Google tag (gtag.js) -->
@@ -629,40 +548,95 @@
     </div>
   </footer>
 
-  <script type="module">
-    // In DEV mode, we need to explicitly import the entry point
-    // for its auto-initialization logic to run.
-    if (import.meta.env.DEV) {
-      console.log('[Checkra Loader - index.html DEV import block] Attempting to import ../src/index.ts');
-      import('../src/index.ts')
-        .then(coreModule => {
-          console.log('[Checkra Loader - index.html DEV import block] Successfully imported module:', coreModule);
-          if (coreModule && typeof coreModule.initCheckra === 'function') {
-            if (!window.checkraApiInstance) {
-              window.checkraApiInstance = coreModule.initCheckra({ isVisible: false });
-              console.log('[Checkra Loader] DEV mode: API instance explicitly set.');
-            } else {
-              console.log('[Checkra Loader] DEV mode: API instance was already set.');
-            }
-            // Dispatch event and setup button for DEV mode
-            document.dispatchEvent(new CustomEvent('checkraApiReady'));
-            // Call setupGetInstantFeedbackButton here, it's defined in the next script block
-            // but will be in scope due to how browsers process scripts.
-            if (typeof setupGetInstantFeedbackButton === 'function') {
-              setupGetInstantFeedbackButton();
-            }
-          } else {
-            console.error('[Checkra Loader - index.html DEV import block] DEV mode: initCheckra not found or module not loaded correctly.', coreModule);
-          }
-        })
-        .catch(err => {
-          console.error('[Checkra Loader - index.html DEV import block] Failed to dynamically load dev module entry point:', err);
-        });
-    }
-  </script>
+  <!-- REMOVED the old complex loader script -->
+  <!-- The script below is for demo page interactions (e.g. "Try it live" button) -->
+  <!-- It relies on Checkra being initialized by the script injected by Vite (%CHECKRA_SCRIPT_TAG%) -->
 
-  <!-- Script for Copy Button -->
-  <script>
+  <script type="module">
+    // This IIFE (Immediately Invoked Function Expression) sets up the demo page interactions.
+    // It waits for the Checkra library to be fully loaded and initialized.
+    (function setupDemoInteractions() {
+      window.checkraApiInstance = null; // Initialize to null
+
+      // Function to setup the "Try it live" button
+      function setupGetInstantFeedbackButton() {
+        const button = document.getElementById('get-instant-feedback-btn');
+        if (!button) {
+          console.warn('[Demo Page] #get-instant-feedback-btn not found.');
+          return;
+        }
+        if (button.hasAttribute('data-checkra-listener-attached')) {
+          console.log('[Demo Page] #get-instant-feedback-btn listener already attached.');
+          return;
+        }
+        button.addEventListener('click', () => {
+          console.log('[Demo Page] #get-instant-feedback-btn clicked. API Instance:', window.checkraApiInstance);
+          if (window.checkraApiInstance && typeof window.checkraApiInstance.show === 'function') {
+            window.checkraApiInstance.show();
+          } else {
+            // This case might happen if 'checkraReady' fired but core initCheckra failed or API is not yet on window.checkra
+            // Let's try to get it from window.checkra directly if instance is not set but lib might be.
+            if (window.checkra && typeof window.checkra.show === 'function') {
+                 window.checkra.show(); 
+            } else if (window.checkra && typeof window.checkra.initCheckra === 'function' && !window.checkraApiInstance) {
+                 // If the library is on window but not yet initialized by this demo script
+                 console.log('[Demo Page] Initializing Checkra API for button click as it was not yet on window.checkraApiInstance.');
+                 window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false });
+                 if (window.checkraApiInstance && typeof window.checkraApiInstance.show === 'function') {
+                    window.checkraApiInstance.show();
+                 } else {
+                    console.error('[Demo Page] Checkra API (window.checkra) not available or show is not a function even after trying init.');
+                 }
+            } else {
+                 console.error('[Demo Page] Checkra API (window.checkraApiInstance) not available or show is not a function.');
+            }
+          }
+        });
+        button.setAttribute('data-checkra-listener-attached', 'true');
+        console.log('[Demo Page] #get-instant-feedback-btn listener attached.');
+      }
+
+      // Function to initialize Checkra and then setup the button
+      function initializeAndSetupButton() {
+        // The Checkra library is now loaded by the %CHECKRA_SCRIPT_TAG% (defer means it runs after DOM parsing)
+        // Its own auto-initialization logic (in src/index.ts) should run and expose window.checkra.
+        // That auto-init should also dispatch 'checkraReady'.
+
+        // We need to ensure that window.checkra (the API object) is available.
+        // The auto-init in src/index.ts sets window.checkra = api and window.checkraInitialized = true
+        // and dispatches 'checkraReady'.
+
+        if (window.checkraInitialized && window.checkra) {
+          console.log('[Demo Page] Checkra already initialized. API is on window.checkra.');
+          window.checkraApiInstance = window.checkra; // Assign the globally initialized API
+          setupGetInstantFeedbackButton();
+        } else {
+          console.log('[Demo Page] Waiting for checkraReady event...');
+          document.addEventListener('checkraReady', () => {
+            console.log('[Demo Page] checkraReady event received.');
+            if (window.checkra) {
+              window.checkraApiInstance = window.checkra; // Assign the globally initialized API
+              console.log('[Demo Page] Checkra API instance set from window.checkra after event.');
+              setupGetInstantFeedbackButton();
+            } else {
+              console.error('[Demo Page] checkraReady event fired, but window.checkra (API) is not available.');
+            }
+          }, { once: true });
+        }
+      }
+      
+      // For DEV mode, the /src/index.ts is loaded as a module. Its auto-init runs.
+      // For PREPROD/PROD, the UMD script is loaded. Its auto-init runs.
+      // In both cases, we should wait for 'checkraReady' or check if it's already initialized.
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeAndSetupButton);
+      } else {
+        initializeAndSetupButton();
+      }
+
+    })();
+
+    // Script for Copy Button (can remain as is, uses DOMContentLoaded)
     document.addEventListener('DOMContentLoaded', () => {
       const copyButton = document.getElementById('copy-script-button');
       const textToCopy = `<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">\n<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer><\/script>`;
@@ -670,68 +644,22 @@
       if (copyButton) {
         copyButton.addEventListener('click', () => {
           navigator.clipboard.writeText(textToCopy).then(() => {
-            // Success: Change button text temporarily
             const originalText = copyButton.textContent;
             copyButton.textContent = 'Copied!';
-            copyButton.disabled = true; // Optionally disable button briefly
+            copyButton.disabled = true;
             setTimeout(() => {
               copyButton.textContent = originalText;
-              copyButton.disabled = false; // Re-enable button
-            }, 2000); // Revert after 2 seconds
+              copyButton.disabled = false;
+            }, 2000);
           }).catch(err => {
             console.error('Failed to copy text: ', err);
-            alert('Failed to copy script tag. Please copy it manually.'); // Provide feedback about the failure
+            alert('Failed to copy script tag. Please copy it manually.');
           });
         });
       } else {
         console.warn('Copy button (#copy-script-button) not found.');
       }
     });
-  </script>
-
-  <!-- REVISED: Script to attach click listener to the "Get instant feedback" button -->
-  <script type="module">
-    // Make setupGetInstantFeedbackButton a global function or ensure it's hoisted/available
-    window.setupGetInstantFeedbackButton = function () {
-      const button = document.getElementById('get-instant-feedback-btn');
-      if (!button) {
-        return;
-      }
-      if (button.hasAttribute('data-checkra-listener-attached')) {
-        return;
-      }
-      button.addEventListener('click', () => {
-        console.log('[Demo Page] #get-instant-feedback-btn clicked. API Instance:', window.checkraApiInstance);
-        if (window.checkraApiInstance && typeof window.checkraApiInstance.show === 'function') {
-          window.checkraApiInstance.show();
-        } else {
-          console.error('[Demo Page] Checkra API not available or show is not a function.');
-        }
-      });
-      button.setAttribute('data-checkra-listener-attached', 'true');
-    }
-
-    if (window.checkraApiInstance) {
-      window.setupGetInstantFeedbackButton();
-    } else {
-      document.addEventListener('checkraApiReady', () => {
-        window.setupGetInstantFeedbackButton();
-      }, { once: true });
-    }
-
-    // Fallback for DEV mode DOMContentLoaded, in case the async import is slow
-    if (import.meta.env.DEV && !window.checkraApiInstance) {
-      document.addEventListener('DOMContentLoaded', () => {
-        if (window.checkraApiInstance && typeof window.setupGetInstantFeedbackButton === 'function' && !document.getElementById('get-instant-feedback-btn').hasAttribute('data-checkra-listener-attached')) {
-          console.log('[Demo Page] DEV DOMContentLoaded: API instance now available, setting up button.');
-          window.setupGetInstantFeedbackButton();
-        } else if (!window.checkraApiInstance && typeof window.setupGetInstantFeedbackButton === 'function') {
-          // If button setup function is available but API isn't, it means core init failed or is very slow.
-          console.warn('[Demo Page] DEV DOMContentLoaded: API instance still not available for button setup.');
-        }
-      });
-    }
-
   </script>
 </body>
 
