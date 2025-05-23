@@ -25,15 +25,12 @@ function htmlTransformPlugin() {
         const absoluteSrcPath = resolve(__dirname, 'src/index.ts');
         scriptSrc = `/@fs/${absoluteSrcPath}`;
         // In dev, Vite handles CSS injection from JS/TS imports, so no explicit CSS link needed here
-        console.log(`[HTML Transform DEV] Injected script: ${scriptSrc}`);
       } else if (buildMode === 'preprod') { // Preprod build (npm run build:demo)
-        scriptSrc = './checkra.umd.cjs'; // Relative to demo-dist/index.html or demo-dist/auth/callback.html
+        scriptSrc = './checkra.umd.js'; // Changed to .js
         cssLink = '<link rel="stylesheet" href="./style.css">'; // Relative to demo-dist
-        console.log(`[HTML Transform PREPROD] Injected script: ${scriptSrc}, CSS: ${cssLink}`);
       } else { // Production library build or other modes (e.g. CDN usage for demo)
-        scriptSrc = `https://unpkg.com/checkra@${currentVersion}/dist/checkra.umd.cjs`;
+        scriptSrc = `https://unpkg.com/checkra@${currentVersion}/dist/checkra.umd.js`; // Changed to .js
         cssLink = `<link rel="stylesheet" href="https://unpkg.com/checkra@${currentVersion}/dist/style.css">`;
-        console.log(`[HTML Transform PROD/CDN] Injected script: ${scriptSrc}, CSS: ${cssLink}`);
       }
 
       return html
@@ -51,7 +48,7 @@ export default defineConfig(({ command, mode }) => {
     // For dev server, explicitly set a development mode for the plugin if needed, though isDevServer is primary check
     process.env.VITE_USER_NODE_ENV = 'development'; 
   }
-  // console.log(`Vite Config - Command: ${command}, Mode: ${mode}, process.env.VITE_USER_NODE_ENV: ${process.env.VITE_USER_NODE_ENV}`);
+
 
   // --- DEVELOPMENT SERVER (npm run dev) ---
   if (command === 'serve') {
@@ -88,7 +85,7 @@ export default defineConfig(({ command, mode }) => {
             entry: resolve(__dirname, 'src/index.ts'), // Your library entry point
             name: 'checkra', // Global variable name for UMD build
             formats: ['es', 'umd'], // Generate ES and UMD formats
-            fileName: (format) => `checkra.${format === 'umd' ? 'umd.cjs' : 'js'}` // Match package.json
+            fileName: (format) => `checkra.${format === 'umd' ? 'umd.js' : 'js'}` // Changed to .js for UMD
           },
           sourcemap: true, // Generate source maps for library
           rollupOptions: {

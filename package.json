@@ -7,13 +7,13 @@
     "url": "https://github.com/sunmer/checkra.git"
   },
   "type": "module",
-  "main": "./dist/checkra.umd.cjs",
+  "main": "./dist/checkra.umd.js",
   "module": "./dist/checkra.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/checkra.js",
-      "require": "./dist/checkra.umd.cjs",
+      "require": "./dist/checkra.umd.js",
       "types": "./dist/index.d.ts"
     }
   },
@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "vite",
     "build:lib": "vite build --mode production",
-    "build:demo": "npm run build:lib && vite build --mode preprod && cp dist/checkra.umd.cjs demo-dist/ && cp dist/index.css demo-dist/style.css",
+    "build:demo": "npm run build:lib && vite build --mode preprod && cp dist/checkra.umd.js demo-dist/ && cp dist/index.css demo-dist/style.css",
     "preview:demo": "vite preview --mode preprod --open",
     "preprod": "npm run build:lib && npm run build:demo && npm run preview:demo",
     "publish-checkra": "npm run build:lib && npm version patch && npm publish",
