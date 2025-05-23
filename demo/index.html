@@ -145,15 +145,15 @@
       <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 my-24 flex flex-col items-center text-center">
         <div class="mt-5 max-w-4xl">
           <h1 class="block font-bold text-gray-800 text-4xl lg:text-5xl">
-            Ship growth & UI experiments<br />
+            Get inline AI-based<br />
             <span class="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-500">
-              directly from your website
+              website improvements
             </span>
           </h1>
         </div>
         <div class="mt-5 max-w-2xl">
           <p class="text-lg text-gray-600 mb-4">
-            Ship growth & UI experiments without a CMS or pull requests. Our open-source AI editor lets you ship variations of your website using natural language.
+            Publish new variants in seconds, share anywhere, and analyse the results,  all without leaving your website.
           </p>
 
           <button type="button" id="get-instant-feedback-btn"
@@ -566,11 +566,9 @@
           return;
         }
         if (button.hasAttribute('data-checkra-listener-attached')) {
-          console.log('[Demo Page] #get-instant-feedback-btn listener already attached.');
           return;
         }
         button.addEventListener('click', () => {
-          console.log('[Demo Page] #get-instant-feedback-btn clicked. API Instance:', window.checkraApiInstance);
           if (window.checkraApiInstance && typeof window.checkraApiInstance.show === 'function') {
             window.checkraApiInstance.show();
           } else {
@@ -580,7 +578,6 @@
                  window.checkra.show(); 
             } else if (window.checkra && typeof window.checkra.initCheckra === 'function' && !window.checkraApiInstance) {
                  // If the library is on window but not yet initialized by this demo script
-                 console.log('[Demo Page] Initializing Checkra API for button click as it was not yet on window.checkraApiInstance.');
                  window.checkraApiInstance = window.checkra.initCheckra({ isVisible: false });
                  if (window.checkraApiInstance && typeof window.checkraApiInstance.show === 'function') {
                     window.checkraApiInstance.show();
@@ -593,7 +590,6 @@
           }
         });
         button.setAttribute('data-checkra-listener-attached', 'true');
-        console.log('[Demo Page] #get-instant-feedback-btn listener attached.');
       }
 
       // Function to initialize Checkra and then setup the button
@@ -607,16 +603,12 @@
         // and dispatches 'checkraReady'.
 
         if (window.checkraInitialized && window.checkra) {
-          console.log('[Demo Page] Checkra already initialized. API is on window.checkra.');
           window.checkraApiInstance = window.checkra; // Assign the globally initialized API
           setupGetInstantFeedbackButton();
         } else {
-          console.log('[Demo Page] Waiting for checkraReady event...');
           document.addEventListener('checkraReady', () => {
-            console.log('[Demo Page] checkraReady event received.');
             if (window.checkra) {
               window.checkraApiInstance = window.checkra; // Assign the globally initialized API
-              console.log('[Demo Page] Checkra API instance set from window.checkra after event.');
               setupGetInstantFeedbackButton();
             } else {
               console.error('[Demo Page] checkraReady event fired, but window.checkra (API) is not available.');
