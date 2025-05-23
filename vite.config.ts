@@ -89,12 +89,7 @@ export default defineConfig(({ command, mode }) => {
           },
           sourcemap: true, // Generate source maps for library
           rollupOptions: {
-            external: ['html2canvas'], // Add html2canvas here
-            output: {
-              globals: {
-                'html2canvas': 'html2canvas' // For UMD build, it will expect html2canvas to be a global
-              }
-            }
+            // No externals – ensure html2canvas and other deps are bundled.
           },
           emptyOutDir: true, // Clean the dist directory before building
           minify: 'terser', // Explicitly use terser, can also be true by default
