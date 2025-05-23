@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/auth/callback",
+      "destination": "/auth/callback.html"
+    },
+    {
+      "source": "/:path((?!api/|_next/|static/|public/|assets/|favicon.ico|robots.txt|sitemap.xml|auth/callback.html).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "cleanUrls": true
+}
