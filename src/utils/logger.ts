@@ -1,6 +1,6 @@
-// Vite sets process.env.NODE_ENV during build, or it might be set by the server environment.
-// For library mode, 'production' is typical. For dev server, it's 'development'.
-const IS_DEV = process.env.NODE_ENV === 'development';
+// Vite exposes a boolean flag via `import.meta.env.DEV` during build and dev server.
+// This avoids relying on the Node-only `process` global in browser bundles.
+const IS_DEV = import.meta.env.DEV;
 
 /**
  * Custom logger that only outputs in development mode.

@@ -26,10 +26,10 @@ function htmlTransformPlugin() {
         scriptSrc = `/@fs/${absoluteSrcPath}`;
         // In dev, Vite handles CSS injection from JS/TS imports, so no explicit CSS link needed here
       } else if (buildMode === 'preprod') { // Preprod build (npm run build:demo)
-        scriptSrc = './checkra.umd.js'; // Changed to .js
+        scriptSrc = './checkra.js'; // Use ES module build
         cssLink = '<link rel="stylesheet" href="./style.css">'; // Relative to demo-dist
       } else { // Production library build or other modes (e.g. CDN usage for demo)
-        scriptSrc = `https://unpkg.com/checkra@${currentVersion}/dist/checkra.umd.js`; // Changed to .js
+        scriptSrc = `https://unpkg.com/checkra@${currentVersion}/dist/checkra.js`; // Use ES module for CDN usage
         cssLink = `<link rel="stylesheet" href="https://unpkg.com/checkra@${currentVersion}/dist/style.css">`;
       }
 
@@ -104,6 +104,12 @@ export default defineConfig(({ command, mode }) => {
               drop_debugger: true
             }
           }
+        },
+        // Ensure no leftover Node-specific globals leak into the bundle
+        define: {
+          'process.env.NODE_ENV': '"production"',
+          'process.env': '{}',
+          process: '{}'
         },
         plugins: [
           dts({
