@@ -15,7 +15,7 @@ let effectiveApiKey: string | null = null;
 const LOCAL_STORAGE_KEY = 'checkra_anonymous_id';
 
 // Cache latest settings to avoid instance mismatch issues
-let latestAiSettings: CoreAiSettings = { model: 'gpt-4o', temperature: 0.7 };
+let latestAiSettings: CoreAiSettings = { model: 'gpt-4.1', temperature: 0.7 };
 
 // Global event emitter instance
 export const eventEmitter = new EventEmitter();

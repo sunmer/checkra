@@ -630,11 +630,11 @@ export class FeedbackViewerImpl {
 
         // --- Update toggle button appearance ---
         if (fixInfo.isCurrentlyFixed) {
-          toggleButton.innerHTML = HIDE_FIX_SVG;
+          toggleButton.innerHTML = DISPLAY_FIX_SVG;
           toggleButton.title = "Toggle Original Version";
           toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // Active color
         } else {
-          toggleButton.innerHTML = DISPLAY_FIX_SVG;
+          toggleButton.innerHTML = HIDE_FIX_SVG;
           toggleButton.title = "Toggle Fixed Version";
           toggleButton.style.backgroundColor = ''; // Reset to default CSS background
         }
