@@ -1,13 +1,45 @@
 import Settings from '../settings';
 import { getEffectiveApiKey, getCurrentAiSettings, eventEmitter } from '../core/index';
 import { AiSettings } from '../ui/settings-modal';
-import html2canvas from 'html2canvas';
+import { customWarn, customError } from '../utils/logger';
+// import html2canvas from 'html2canvas'; // Eager import removed
+
+// Type for the html2canvas function itself
+type Html2CanvasStatic = (element: HTMLElement, options?: Partial<any>) => Promise<HTMLCanvasElement>; 
+// The above 'any' for options is a simplification; you might want to import Options type from html2canvas if needed elsewhere
+
+let h2cModule: Html2CanvasStatic | null = null;
+
+async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
+  if (h2cModule) return h2cModule;
+  try {
+    const imported = await import('html2canvas');
+    // html2canvas is a default export which is the function itself
+    h2cModule = imported.default;
+    if (typeof h2cModule !== 'function') {
+        customError('[AI Service] html2canvas loaded but is not a function. Loaded:', h2cModule);
+        h2cModule = null; // Reset if not valid
+        return null;
+    }
+    return h2cModule;
+  } catch (error) {
+    customError('[AI Service] Failed to dynamically load html2canvas:', error);
+    eventEmitter.emit('error', { source: 'ai-service', error: new Error('html2canvas lib failed to load') });
+    return null;
+  }
+}
 
 
 const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary?: string; accent?: string } | null> => {
+  const html2canvasRenderFunc = await getHtml2Canvas();
+  if (!html2canvasRenderFunc) {
+    customWarn('[Checkra Service] html2canvas not available, cannot extract colors from screenshot.');
+    return null;
+  }
+
   try {
-    const canvas = await html2canvas(element, {
-      scale: 0.25,
+    const canvas = await html2canvasRenderFunc(element, {
+      scale: 0.25, // Lower scale for performance if full detail isn't needed for color extraction
       height: window.innerHeight,
       windowHeight: window.innerHeight,
       y: window.scrollY,
@@ -59,7 +91,7 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
     return { primary, accent };
 
   } catch (error) {
-    console.warn('[Checkra Service] Failed to extract colors from screenshot:', error);
+    customWarn('[Checkra Service] Failed to extract colors from screenshot:', error);
     return null;
   }
 };
@@ -116,7 +148,7 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
 
     // Fallback logic if CSS variables are not found or are empty
     if (!primaryColor || !accentColor) {
-      console.log('[Checkra Service] CSS variables --primary or --accent not found/empty. Attempting fallback...');
+      
       const buttons = document.querySelectorAll('button, a[role="button"], input[type="submit"], input[type="button"]');
       let firstVisibleButton: HTMLElement | null = null;
       for (const btn of Array.from(buttons)) {
@@ -134,15 +166,15 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
         // Use button background if --primary was missing
         if (!primaryColor && btnBgColor && !['transparent', 'rgba(0, 0, 0, 0)'].includes(btnBgColor)) {
           primaryColor = btnBgColor;
-          console.log(`[Checkra Service] Fallback: Using button background for primary color: ${primaryColor}`);
+          
         }
         // Use button text color if --accent was missing and different from primary
         if (!accentColor && btnTextColor && !['transparent', 'rgba(0, 0, 0, 0)'].includes(btnTextColor) && btnTextColor !== primaryColor) {
           accentColor = btnTextColor;
-          console.log(`[Checkra Service] Fallback: Using button text for accent color: ${accentColor}`);
+          
         }
       } else {
-        console.log('[Checkra Service] Fallback: No visible button found to infer colors.');
+        
       }
     }
     
@@ -152,20 +184,20 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
         if (accentColor) metadata.brand.accent = accentColor;
     }
   } catch (e) {
-    console.warn('[Checkra Service] Could not retrieve brand colors:', e);
+    customWarn('[Checkra Service] Could not retrieve brand colors:', e);
   }
   if (!metadata.brand?.primary || !metadata.brand?.accent) {
-    console.log('[Checkra Service] Attempting screenshot-based color extraction...');
+    
     const screenshotColors = await extractColorsFromElement(document.body);
     if (screenshotColors) {
       if (!metadata.brand) metadata.brand = {};
       if (!metadata.brand.primary && screenshotColors.primary) {
         metadata.brand.primary = screenshotColors.primary;
-        console.log(`[Checkra Service] Screenshot fallback: Using primary color: ${screenshotColors.primary}`);
+        
       }
       if (!metadata.brand.accent && screenshotColors.accent) {
         metadata.brand.accent = screenshotColors.accent;
-        console.log(`[Checkra Service] Screenshot fallback: Using accent color: ${screenshotColors.accent}`);
+        
       }
     }
   }
@@ -185,7 +217,7 @@ const fetchFeedbackBase = async (
   try {
     const metadata = await getPageMetadata();
     const currentAiSettings = getCurrentAiSettings();
-    console.log('[AI Service] Using AiSettings for request (fetchFeedbackBase):', currentAiSettings); // DEBUG LOG
+    
 
     const requestBody: {
       prompt: string;
@@ -205,17 +237,17 @@ const fetchFeedbackBase = async (
     if (imageDataUrl) {
       requestBody.image = imageDataUrl;
     }
-    console.log('[AI Service] Full request body (fetchFeedbackBase):', requestBody); // DEBUG LOG
+    
 
     const currentApiKey = getEffectiveApiKey();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentApiKey) {
       headers['Authorization'] = `Bearer ${currentApiKey}`;
     } else {
-      console.warn('[Checkra Service] API key/anonymous ID not available for request.');
+      customWarn('[Checkra Service] API key/anonymous ID not available for request.');
     }
 
-    console.log(`[Checkra Service] Sending request to: ${apiUrl}`);
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: headers,
@@ -233,7 +265,7 @@ const fetchFeedbackBase = async (
             }
         }
       } catch (parseError) {
-        console.warn("[Checkra Service] Failed to parse error response body:", parseError);
+        customWarn("[Checkra Service] Failed to parse error response body:", parseError);
       }
       throw new Error(specificErrorMessage);
     }
@@ -254,7 +286,7 @@ const fetchFeedbackBase = async (
         if (buffer.trim()) {
           // Simplified final processing, assuming event context might be lost or irrelevant for trailing data
           // For robustness, one might need to process the last event/data pair here if buffer holds them.
-          console.log("[SSE Parser] Processing final buffer content:", buffer);
+          
           // Basic attempt to parse if it looks like a data line, otherwise log it.
           if (buffer.startsWith('data:')) {
             try {
@@ -265,18 +297,18 @@ const fetchFeedbackBase = async (
                 if (data.content) {
                   eventEmitter.emit('aiResponseChunk', data.content);
                 } else {
-                  console.warn("[SSE Parser] Final buffer data line did not contain 'content':", data);
+                  customWarn("[SSE Parser] Final buffer data line did not contain 'content':", data);
                 }
               }
             } catch (e) {
-              console.error("[SSE Parser] Error processing final buffer as data line:", e, buffer);
+              customError("[SSE Parser] Error processing final buffer as data line:", e, buffer);
             }
           } else if (buffer.trim()) { // Log if it's not empty and not a data line
-            console.log("[SSE Parser] Non-empty final buffer did not start with 'data:':", buffer);
+            
           }
         }
         eventEmitter.emit('aiFinalized');
-        console.log("[SSE Parser] Stream ended, aiFinalized emitted.");
+        
         break;
       }
 
@@ -287,18 +319,18 @@ const fetchFeedbackBase = async (
       for (const line of lines) {
         if (line.startsWith('event:')) {
           currentEventType = line.substring(6).trim();
-          console.log(`[SSE Parser] Encountered event type: ${currentEventType}`);
+          
         } else if (line.startsWith('data:')) {
           try {
             const jsonString = line.substring(5).trim();
             if (jsonString) {
               const parsedData = JSON.parse(jsonString);
-              console.log("[SSE Parser] Data received:", parsedData, "Current Event Type:", currentEventType);
+              
 
               if (currentEventType) {
                 // If we have a specific event type, emit that with the parsed data as payload
                 eventEmitter.emit(currentEventType, parsedData);
-                console.log(`[SSE Parser] Emitted event '${currentEventType}' with payload:`, parsedData);
+                
                 currentEventType = null;
               } else {
                 // Default behavior: check for known structures in the data payload
@@ -307,15 +339,15 @@ const fetchFeedbackBase = async (
                 } else if (parsedData.content) {
                   eventEmitter.emit('aiResponseChunk', parsedData.content);
                 } else if (parsedData.error) {
-                  console.error("[SSE Parser] Received error object via SSE data line:", parsedData.error);
+                  customError("[SSE Parser] Received error object via SSE data line:", parsedData.error);
                   eventEmitter.emit('aiError', `Stream Error: ${parsedData.error}`);
                 } else {
-                  console.warn("[SSE Parser] Received data line with unknown structure (no event type):");
+                  customWarn("[SSE Parser] Received data line with unknown structure (no event type):");
                 }
               }
             }
           } catch (e) {
-            console.error("[SSE Parser] Error parsing SSE data line:", e, line);
+            customError("[SSE Parser] Error parsing SSE data line:", e, line);
             eventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
             currentEventType = null;
           }
@@ -327,13 +359,13 @@ const fetchFeedbackBase = async (
           // currentEventType = null; // Not strictly needed to reset here as data line resets it.
         } else if (line.trim() !== '') {
           // Log lines that are not event, data, or empty (could be comments or malformed)
-          console.log("[SSE Parser] Ignoring non-standard SSE line:", line);
+          
         }
       }
     }
 
   } catch (error) {
-    console.error("Error in fetchFeedbackBase:", error);
+    customError("Error in fetchFeedbackBase:", error);
     eventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
   }
 };

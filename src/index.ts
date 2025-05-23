@@ -3,6 +3,7 @@ import './core/shortcut-handler';
 import { CheckraOptions } from './types';
 import { CDN_DOMAIN } from './config';
 import { initAnalytics } from './analytics/analytics';
+import { customWarn, customError } from './utils/logger';
 
 // Re-export core functions and types
 export { initCheckra } from './core/index';
@@ -48,10 +49,10 @@ function getScriptTagConfig(): Partial<CheckraOptions> | undefined {
           if (typeof parsedConfig === 'object' && parsedConfig !== null) {
             return parsedConfig as Partial<CheckraOptions>;
           } else {
-            console.error('[Checkra] data-checkra-config did not parse to an object:', parsedConfig);
+            customError('[Checkra] data-checkra-config did not parse to an object:', parsedConfig);
           }
         } catch (e) {
-          console.error('[Checkra] Failed to parse data-checkra-config JSON:', e, configString);
+          customError('[Checkra] Failed to parse data-checkra-config JSON:', e, configString);
         }
       }
     }
@@ -68,7 +69,7 @@ function getGlobalVariableConfig(): Partial<CheckraOptions> | undefined {
     if (typeof globalConfig === 'object' && globalConfig !== null) {
       return globalConfig as Partial<CheckraOptions>;
     } else {
-      console.error('[Checkra] window.CheckraConfig is not an object:', globalConfig);
+      customError('[Checkra] window.CheckraConfig is not an object:', globalConfig);
     }
   }
   return undefined;
@@ -101,7 +102,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (!(window as any).checkraInitialized) {
       try {
         const configFromSources = getFinalConfig(); // Gets script/global config merged with defaults
-        console.log('[Checkra] DOM ready, auto-initializing with config from sources:', configFromSources);
         
         // initCheckra is now imported from './core/index'
         const api = initCheckra(configFromSources); 
@@ -110,15 +110,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
           (window as any).checkra = api; // Expose API globally (lowercase 'c')
           (window as any).checkraInitialized = true; // Use a consistent flag name
           document.dispatchEvent(new CustomEvent('checkraReady'));
-          console.log('[Checkra] Auto-initialization complete. API exposed as window.checkra. "checkraReady" event dispatched.');
         } else {
-          console.error("[Checkra] Auto-initialization failed, API not returned.");
+          customError("[Checkra] Auto-initialization failed, API not returned.");
         }
       } catch (e) {
-        console.error("[Checkra] Failed to auto-initialize:", e);
+        customError("[Checkra] Failed to auto-initialize:", e);
       }
     } else {
-      console.log("[Checkra] Already initialized, skipping auto-init.");
     }
   };
 
@@ -171,7 +169,6 @@ function removeFlickerGuard(styleEl: HTMLStyleElement | null): void {
 // Boot-loader logic for ?v= parameter
 async function applyPublishedSnapshot(variantId: string): Promise<void> {
   const snapshotUrl = `https://${CDN_DOMAIN}/variants/${variantId}.json`;
-  console.log(`[Checkra Bootloader] Detected variantId: ${variantId}. Fetching snapshot from: ${snapshotUrl}`);
 
   // Preconnect & prefetch hints (best-effort)
   injectPreconnect(`https://${CDN_DOMAIN}`);
@@ -186,14 +183,12 @@ async function applyPublishedSnapshot(variantId: string): Promise<void> {
       throw new Error(`Failed to fetch snapshot: ${response.status} ${response.statusText}`);
     }
     const snapshot = await response.json();
-    console.log("[Checkra Bootloader] Snapshot data fetched:", snapshot);
 
     if (snapshot && snapshot.changes && Array.isArray(snapshot.changes)) {
       if (document.readyState === 'loading') {
         await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
       }
 
-      console.log(`[Checkra Bootloader] Applying ${snapshot.changes.length} changes...`);
       // Batch DOM mutations inside a single frame for minimal layout thrash
       requestAnimationFrame(() => {
         for (const change of snapshot.changes) {
@@ -204,25 +199,24 @@ async function applyPublishedSnapshot(variantId: string): Promise<void> {
                 if (targetElement.parentNode) {
                   targetElement.outerHTML = change.appliedHtml;
                 } else {
-                  console.warn(`[Checkra Bootloader] Target element for selector: ${change.targetSelector} has no parent. Cannot apply outerHTML.`);
+                  customWarn(`[Checkra Bootloader] Target element for selector: ${change.targetSelector} has no parent. Cannot apply outerHTML.`);
                 }
               } else {
-                console.warn(`[Checkra Bootloader] Target element not found for selector: ${change.targetSelector}`);
+                customWarn(`[Checkra Bootloader] Target element not found for selector: ${change.targetSelector}`);
               }
             } catch (e) {
-              console.error(`[Checkra Bootloader] Error applying change for selector ${change.targetSelector}:`, e);
+              customError(`[Checkra Bootloader] Error applying change for selector ${change.targetSelector}:`, e);
             }
           }
         }
         removeFlickerGuard(guardStyle);
       });
-      console.log("[Checkra Bootloader] Finished applying snapshot changes.");
     } else {
-      console.warn("[Checkra Bootloader] Snapshot data is invalid or has no changes.", snapshot);
+      customWarn("[Checkra Bootloader] Snapshot data is invalid or has no changes.", snapshot);
       removeFlickerGuard(guardStyle);
     }
   } catch (error) {
-    console.error("[Checkra Bootloader] Error loading or applying snapshot:", error);
+    customError("[Checkra Bootloader] Error loading or applying snapshot:", error);
     removeFlickerGuard(guardStyle);
   }
 }
@@ -238,7 +232,7 @@ function checkForPublishedVersion(): void {
       injectPrefetch(prefetchUrl);
 
       applyPublishedSnapshot(variantId).catch(err => {
-        console.error("[Checkra Bootloader] Unhandled error in applyPublishedSnapshot:", err);
+        customError("[Checkra Bootloader] Unhandled error in applyPublishedSnapshot:", err);
       });
     }
   }

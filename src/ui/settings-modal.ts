@@ -70,15 +70,12 @@ export class SettingsModal {
    * Assumes any previous modal has been destroyed.
    */
   private create(): void {
-    // console.log('[SettingsModal] ENTERING create()');
-
     // --- Check document.body readiness --- //
     if (!document.body) {
       console.error('[SettingsModal] Cannot create modal: document.body is not available yet.');
       return; // Exit if body not ready
     }
-    // console.log('[SettingsModal] Document body ready, proceeding with DOM creation.');
-
+    
     // --- Create Modal Container ---
     this.modalContainer = document.createElement('div');
     this.modalContainer.id = 'checkra-settings-modal-container';
@@ -219,7 +216,6 @@ export class SettingsModal {
     this.boundModelChangeHandler = (event: Event) => {
       const selectedModel = (event.target as HTMLSelectElement).value;
       this.currentSettings.model = selectedModel;
-      console.log('[SettingsModal] Model changed to:', this.currentSettings.model); // DEBUG LOG
       eventEmitter.emit('settingsChanged', { ...this.currentSettings });
     };
     this.boundTempSliderHandler = (event: Event) => {
@@ -230,7 +226,6 @@ export class SettingsModal {
           if (this.temperatureDescriptionDisplay) {
               this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(selectedTemp);
           }
-          console.log(`[SettingsModal] Slider handler updated temperature to: ${this.currentSettings.temperature}`);
           eventEmitter.emit('settingsChanged', { ...this.currentSettings });
       } else {
           console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
@@ -301,7 +296,6 @@ export class SettingsModal {
     if (!this.currentSettings.model) {
       this.currentSettings.model = 'gpt-4o';
     }
-    console.log('[SettingsModal] getCurrentSettings returning:', this.currentSettings); // DEBUG LOG
     return { ...this.currentSettings };
   }
 

@@ -92,11 +92,11 @@ export default defineConfig(({ command, mode }) => {
           },
           sourcemap: true, // Generate source maps for library
           rollupOptions: {
-            // Specify external dependencies to avoid bundling them
-            external: [], // Add peer dependencies here if needed
+            external: ['html2canvas'], // Add html2canvas here
             output: {
-              // Global variable names for UMD external dependencies
-              globals: {} // e.g., { react: 'React' }
+              globals: {
+                'html2canvas': 'html2canvas' // For UMD build, it will expect html2canvas to be a global
+              }
             }
           },
           emptyOutDir: true, // Clean the dist directory before building

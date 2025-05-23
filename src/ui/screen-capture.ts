@@ -210,7 +210,6 @@ class ScreenCapture {
         const clickedElement = event.target as HTMLElement;
 
         if (this.ignoreElement && this.ignoreElement.contains(clickedElement)) {
-          console.log('[ScreenCapture] Click occurred inside the ignored element (feedback panel). Ignoring selection.');
           return; 
         }
 
@@ -329,13 +328,11 @@ class ScreenCapture {
       const viewerElement = document.getElementById('checkra-feedback-viewer');
       if (viewerElement) {
         this.viewerHoverListener = () => {
-          console.log('[ScreenCapture] Mouse entered viewer, removing crosshair.');
           document.body.classList.remove('capturing-mode');
         };
         this.viewerLeaveListener = () => {
           // Re-apply crosshair only if capture is still active
           if (this.isCapturing) {
-            console.log('[ScreenCapture] Mouse left viewer, restoring crosshair.');
             document.body.classList.add('capturing-mode');
           }
         };

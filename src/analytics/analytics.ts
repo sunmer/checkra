@@ -1,5 +1,6 @@
 import pako from 'pako';
 import { API_BASE as FALLBACK_API_BASE } from '../config';
+import { customWarn, customError } from '../utils/logger';
 
 interface AnalyticsEventCore {
   ts: number;         // epoch ms
@@ -10,6 +11,7 @@ interface AnalyticsEventCore {
   dur_ms: number;      // dwell time for the page/action
   ref: string | null;  // document.referrer
   ua: string;          // navigator.userAgent
+  [key: string]: any;  // Allow additional properties from CustomAnalyticsEventData
 }
 
 // For custom events, some fields are optional or will be overridden
@@ -32,16 +34,14 @@ const CHECKRA_ANONYMOUS_ID_KEY = 'CheckraAnonymousId';
 
 async function postEvent(event: AnalyticsEventCore): Promise<void> {
   if (!configuredApiBase) {
-    console.error('[Checkra Analytics] API base URL not configured. Call initAnalytics({ apiBaseUrl: "..." }) first.');
+    customError('[Checkra Analytics] API base URL not configured. Call initAnalytics({ apiBaseUrl: "..." }) first.');
     return;
   }
 
   const payload = JSON.stringify([event]); // API expects an array of events
-  console.log('[Checkra Analytics] Event to send:', event);
 
   try {
     const gzippedPayload = pako.gzip(payload);
-    console.log(`[Checkra Analytics] Original size: ${payload.length} bytes, Gzipped size: ${gzippedPayload.byteLength} bytes`);
 
     const response = await fetch(`${configuredApiBase}/collect`, {
       method: 'POST',
@@ -56,12 +56,11 @@ async function postEvent(event: AnalyticsEventCore): Promise<void> {
     });
 
     if (!response.ok) {
-      console.error(`[Checkra Analytics] Failed to send analytics event. Status: ${response.status}`, await response.text());
+      customError(`[Checkra Analytics] Failed to send analytics event. Status: ${response.status}`, await response.text());
     } else {
-      console.log('[Checkra Analytics] Analytics event sent successfully.');
     }
   } catch (error) {
-    console.error('[Checkra Analytics] Error sending analytics event:', error);
+    customError('[Checkra Analytics] Error sending analytics event:', error);
   }
 }
 
@@ -84,7 +83,7 @@ function handlePageUnload(): void {
   // This call to postEvent is deliberately not awaited and errors are caught internally
   // to ensure it doesn't block page unload.
   postEvent(event).catch(error => {
-    console.error('[Checkra Analytics] Unhandled error in postEvent from handlePageUnload:', error);
+    customError('[Checkra Analytics] Unhandled error in postEvent from handlePageUnload:', error);
   });
 }
 
@@ -94,14 +93,14 @@ export interface AnalyticsConfig {
 
 export function initAnalytics(config?: AnalyticsConfig): void {
   if (typeof window === 'undefined' || typeof document === 'undefined' || typeof crypto === 'undefined' || typeof localStorage === 'undefined' || typeof performance === 'undefined') {
-    console.warn('[Checkra Analytics] Not initializing in non-browser or feature-limited environment.');
+    customWarn('[Checkra Analytics] Not initializing in non-browser or feature-limited environment.');
     return;
   }
 
   try {
     configuredApiBase = config?.apiBaseUrl || FALLBACK_API_BASE;
     if (!configuredApiBase) {
-      console.error('[Checkra Analytics] API base URL is not defined. Provide it in initAnalytics or src/config.ts.');
+      customError('[Checkra Analytics] API base URL is not defined. Provide it in initAnalytics or src/config.ts.');
       return;
     }
 
@@ -112,7 +111,7 @@ export function initAnalytics(config?: AnalyticsConfig): void {
       const url = new URL(window.location.href);
       variantId = url.searchParams.get('v');
     } catch (e) {
-      console.warn('[Checkra Analytics] Could not parse current URL to get variantId:', e);
+      customWarn('[Checkra Analytics] Could not parse current URL to get variantId:', e);
       variantId = null;
     }
     
@@ -126,8 +125,30 @@ export function initAnalytics(config?: AnalyticsConfig): void {
 
     window.addEventListener('beforeunload', handlePageUnload);
 
-    console.log('[Checkra Analytics] Initialized. Configured API Base:', configuredApiBase, { sessionId, variantId, anonymousUid, userAgent });
   } catch (error) {
-    console.error('[Checkra Analytics] Failed to initialize analytics:', error);
+    customError('[Checkra Analytics] Failed to initialize analytics:', error);
   }
+}
+
+export function sendAnalyticsEvent(eventData: CustomAnalyticsEventData): void {
+  if (!sessionId) {
+    customWarn('[Checkra Analytics] Analytics not initialized. Call initAnalytics() first. Event dropped:', eventData);
+    return;
+  }
+
+  const now = Date.now();
+
+  const event: AnalyticsEventCore = {
+    ts: now,
+    uid: anonymousUid,
+    sid: sessionId,
+    var: variantId,
+    ref: eventData.ref !== undefined ? eventData.ref : document.referrer || null,
+    ua: userAgent,
+    ...eventData // Spread other custom properties
+  };
+
+  postEvent(event).catch(error => {
+    customError('[Checkra Analytics] Unhandled error in postEvent from sendAnalyticsEvent:', error);
+  });
 }

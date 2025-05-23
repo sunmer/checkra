@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { REDIRECT_URI } from './auth-config'; // Keep REDIRECT_URI for explicit passing
+import { customLog, customWarn, customError } from '../utils/logger';
 // The supabase-js library will handle session storage internally, so SESSION_KEY is no longer needed here.
 // SUPABASE_ANON_KEY and SUPABASE_PROJECT_ID are used in supabaseClient.ts, not directly here.
 
@@ -15,7 +16,7 @@ import { REDIRECT_URI } from './auth-config'; // Keep REDIRECT_URI for explicit 
 
 // STEP-1  – Call on "Log in" button click
 export async function startLogin(provider: 'google' | 'github' /* add more as needed */ = 'google'): Promise<void> {
-  console.log(`[Auth] Attempting to sign in with ${provider} via Supabase client...`);
+  customLog(`[Auth] Attempting to sign in with ${provider} via Supabase client...`);
   const { error } = await supabase.auth.signInWithOAuth({
     provider: provider,
     options: {
@@ -25,7 +26,7 @@ export async function startLogin(provider: 'google' | 'github' /* add more as ne
   });
 
   if (error) {
-    console.error(`[Auth] Error starting ${provider} OAuth flow:`, error);
+    customError(`[Auth] Error starting ${provider} OAuth flow:`, error);
     // Potentially throw error or show a user-facing message
     // For now, just logging.
   }
@@ -52,17 +53,17 @@ export async function handleAuthCallback(): Promise<boolean> {
   const { data: { session }, error } = await supabase.auth.getSession();
 
   if (error) {
-    console.error('[Auth] Error getting session after callback:', error);
+    customError('[Auth] Error getting session after callback:', error);
     return false;
   }
 
   if (session) {
-    console.log('[Auth] Session successfully established after callback:', session);
+    customLog('[Auth] Session successfully established after callback:', session);
     // Optionally, store additional user profile data if needed here
     // For example, by calling supabase.from('profiles').upsert(...)
     return true;
   } else {
-    console.warn('[Auth] No session found after callback. This might happen if the URL was already processed or there was an issue.');
+    customWarn('[Auth] No session found after callback. This might happen if the URL was already processed or there was an issue.');
     return false;
   }
 }
@@ -74,13 +75,13 @@ export async function handleAuthCallback(): Promise<boolean> {
 // storeSession and loadSession are no longer needed.
 
 export async function logout(): Promise<void> {
-  console.log('[Auth] Attempting to sign out via Supabase client...');
+  customLog('[Auth] Attempting to sign out via Supabase client...');
   const { error } = await supabase.auth.signOut();
   if (error) {
-    console.error('[Auth] Error signing out:', error);
+    customError('[Auth] Error signing out:', error);
     throw error; // Re-throw to be caught by the caller and for consistent error handling
   }
-  console.log('[Auth] User signed out. Reloading page...');
+  customLog('[Auth] User signed out. Reloading page...');
   window.location.reload(); // Automatically reload the page
 }
 
@@ -88,14 +89,14 @@ export async function logout(): Promise<void> {
 export async function getToken(): Promise<string | null> {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error) {
-    console.error('[Auth] Error getting current session/token:', error);
+    customError('[Auth] Error getting current session/token:', error);
     return null;
   }
   if (session) {
-    // console.log('[Auth] Token retrieved:', session.access_token ? 'Exists' : 'Missing');
+  
     return session.access_token;
   }
-  // console.log('[Auth] No active session, token is null.');
+
   return null;
 }
 
@@ -125,7 +126,7 @@ export async function fetchProtected(url: string, init: RequestInit = {}): Promi
   const response = await fetch(url, { ...init, headers: headersWithAuth });
 
   if (response.status === 401) {
-    console.warn('[Auth] fetchProtected received 401 Unauthenticated for URL:', url);
+    customWarn('[Auth] fetchProtected received 401 Unauthenticated for URL:', url);
     // Potentially trigger logout or a global unauthenticated event
     // await logout(); // Example: force logout on 401
     // Re-throw a specific error that UI can catch to redirect to login
@@ -150,7 +151,7 @@ export async function currentUserId(): Promise<string | null> {
   const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error) {
-    console.error("[Auth] Error fetching user for currentUserId:", error);
+    customError("[Auth] Error fetching user for currentUserId:", error);
     return null;
   }
   
@@ -158,6 +159,12 @@ export async function currentUserId(): Promise<string | null> {
     return user.id;
   }
   
-  console.warn('[Auth] currentUserId: No active user found through supabase.auth.getUser().');
+  customWarn('[Auth] currentUserId: No active user found through supabase.auth.getUser().');
   return null; 
+}
+
+// Optional: Expose a way to listen to auth state changes directly
+// This is very useful for UI updates.
+export function onAuthStateChange(callback: (event: string, session: import('@supabase/supabase-js').Session | null) => void) {
+  return supabase.auth.onAuthStateChange(callback);
 }

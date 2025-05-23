@@ -12,7 +12,6 @@ export default class FeedbackViewer {
   private initialVisibility: boolean; // Store initial visibility
 
   private constructor(settingsModal: SettingsModal, initialVisibility: boolean = false) {
-    console.log(`[FeedbackViewer] Constructor called with initialVisibility: ${initialVisibility}`);
     this.settingsModal = settingsModal;
     this.initialVisibility = initialVisibility;
     this.feedbackViewerDOM = new FeedbackViewerDOM();
@@ -27,7 +26,6 @@ export default class FeedbackViewer {
     // The Impl will decide based on its initialVisibility and localStorage if it should show itself.
     this.feedbackViewerImpl.initialize(this.feedbackViewerDOM, this.settingsModal);
 
-    console.log('[FeedbackViewer] Initialized.');
   }
 
   // Bound methods for event listeners
@@ -48,7 +46,6 @@ export default class FeedbackViewer {
   }
 
   private handleToggle(isVisible: boolean): void {
-    console.log(`[FeedbackViewer] Panel visibility changed to: ${isVisible}`);
     if (isVisible) {
       eventEmitter.emit('viewerDidShow');
     } else {
@@ -80,6 +77,5 @@ export default class FeedbackViewer {
     this.feedbackViewerImpl.cleanup(); 
     this.feedbackViewerDOM.destroy();   
     FeedbackViewer.instance = null;
-    console.log('[FeedbackViewer] Destroyed.');
   }
 } 

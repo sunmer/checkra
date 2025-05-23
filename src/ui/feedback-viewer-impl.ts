@@ -8,6 +8,7 @@ import { generateStableSelector } from '../utils/selector-utils';
 import { API_BASE, CDN_DOMAIN } from '../config';
 import { getSiteId } from '../utils/id'; 
 import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
+import { customWarn, customError } from '../utils/logger';
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -92,7 +93,6 @@ export class FeedbackViewerImpl {
     private onToggleCallback: (isVisible: boolean) => void,
     initialVisibilityFromOptions: boolean = false // New parameter
   ) {
-    console.log(`[FeedbackViewerImpl] Constructor called with initialVisibilityFromOptions: ${initialVisibilityFromOptions}`);
     this.optionsInitialVisibility = initialVisibilityFromOptions;
     // Bind methods
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
@@ -148,15 +148,12 @@ export class FeedbackViewerImpl {
       }
     });
 
-    console.log('[FeedbackViewerLogic] Initialized. Attaching global listeners and subscribing to AI events.');
     this.addGlobalListeners();
 
     // --- Initial Visibility Logic --- 
     const panelWasClosedByUser = localStorage.getItem(this.PANEL_CLOSED_BY_USER_KEY) === 'true';
-    console.log(`[FeedbackViewerImpl] Initializing visibility. OptionsInitial: ${this.optionsInitialVisibility}, PanelClosedByUser: ${panelWasClosedByUser}`);
 
     if (this.optionsInitialVisibility && !panelWasClosedByUser) {
-      console.log('[FeedbackViewerImpl] Initial visibility is true and panel was not closed by user. Showing panel.');
       this.showFromApi(false); // Show programmatically, don't mark as user action for clearing flags
     } else {
       // Panel is intended to be hidden or was closed by user.
@@ -164,7 +161,6 @@ export class FeedbackViewerImpl {
       if (this.isVisible) {
         this.hide(false); // Programmatic hide if somehow visible
       }
-      console.log(`[FeedbackViewerImpl] Initial visibility is false or panel was closed by user (${panelWasClosedByUser}). Panel remains hidden.`);
       // Show availability toast if panel is hidden and toast not shown this session
       // Ensure this.domManager is checked, and also this.isVisible before showing toast.
       if (this.domManager && !this.isVisible && !sessionStorage.getItem('checkra_toast_shown_session')) {
@@ -229,7 +225,6 @@ export class FeedbackViewerImpl {
     // this.conversationHistory = []; 
     this.removeSelectionHighlight();
 
-    console.log('[FeedbackViewerLogic] Cleaned up listeners and unsubscribed from AI events.');
   }
 
   // --- Public API ---
@@ -247,10 +242,8 @@ export class FeedbackViewerImpl {
     targetRect: DOMRect | null,
     targetElement: Element | null
   ): void {
-    console.log(`[Impl.prepareForInput] Received selectedHtml length: ${selectedHtml?.length ?? 'null'}, targetElement: ${targetElement?.tagName}`);
-
     if (!this.domManager || !this.domElements) {
-      console.error("[FeedbackViewerLogic] Cannot prepare for input: DOM Manager or elements not initialized.");
+      customError("[FeedbackViewerLogic] Cannot prepare for input: DOM Manager or elements not initialized.");
       return;
     }
 
@@ -261,14 +254,11 @@ export class FeedbackViewerImpl {
 
     if (isElementSelected && targetElement) { // Added targetElement check for type safety
       this.stableSelectorForCurrentCycle = generateStableSelector(targetElement);
-      console.log(`[Impl.prepareForInput] Generated stable selector for ${targetElement.tagName}: ${this.stableSelectorForCurrentCycle}`);
       this.originalOuterHTMLForCurrentCycle = selectedHtml; // Should only be set if an element is truly selected
-      console.log(`[Impl.prepareForInput] USING specific selectedHtml for ${targetElement.tagName}, length: ${selectedHtml?.length}`);
     } else {
       // Handles null targetElement or document.body selection
       this.stableSelectorForCurrentCycle = 'body';
       this.originalOuterHTMLForCurrentCycle = document.body.outerHTML; // Fallback or default context
-      console.log(`[Impl.prepareForInput] No specific element selected or body selected. Defaulting context. Target: ${targetElement?.tagName}`);
       if (targetElement === document.body) {
         this.initialSelectedElement = document.body; // Explicitly set for clarity if it was body
       }
@@ -286,7 +276,6 @@ export class FeedbackViewerImpl {
       this.currentlyHighlightedElement = null; // No highlight on body or if no selection
     }
 
-    console.log(`[FeedbackViewerLogic] Preparing for new input cycle. Assigned ID ${this.currentFixId} to ${this.initialSelectedElement?.tagName ?? 'null'}`);
 
     // Reset fix-specific state for this NEW cycle
     this.fixedOuterHTMLForCurrentCycle = null;
@@ -308,7 +297,6 @@ export class FeedbackViewerImpl {
     if (this.domElements) { }
 
     this.domElements?.promptTextarea.focus();
-    console.log('[Impl.prepareForInput] UI reset for new input context.');
   }
 
   public updateResponse(chunk: string): void {
@@ -317,11 +305,9 @@ export class FeedbackViewerImpl {
     const currentStreamItem = this.activeStreamingAiItem;
 
     if (currentStreamItem) {
-      console.log(`[FeedbackViewerImpl DEBUG] updateResponse: Checking currentStreamItem. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}, ContentLen: ${currentStreamItem.content?.length}`);
     } else {
-      console.log('[FeedbackViewerImpl DEBUG] updateResponse: activeStreamingAiItem is null.');
       const lastItemInHistory = this.conversationHistory.length > 0 ? this.conversationHistory[this.conversationHistory.length - 1] : null;
-      console.warn(`[FeedbackViewerImpl] updateResponse: activeStreamingAiItem is null. Last item in history: ${lastItemInHistory?.type}, streaming: ${lastItemInHistory?.isStreaming}`);
+      customWarn(`[FeedbackViewerImpl] updateResponse: activeStreamingAiItem is null. Last item in history: ${lastItemInHistory?.type}, streaming: ${lastItemInHistory?.isStreaming}`);
       return;
     }
 
@@ -333,18 +319,16 @@ export class FeedbackViewerImpl {
       this.domManager.showImageGenerationStatus(false);
       this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Loading...');
     } else {
-      console.warn(`[FeedbackViewerImpl] updateResponse called but currentStreamItem (activeStreamingAiItem) is not an AI message or not streaming. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}`);
+      customWarn(`[FeedbackViewerImpl] updateResponse called but currentStreamItem (activeStreamingAiItem) is not an AI message or not streaming. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}`);
     }
   }
 
   public finalizeResponse(): void {
-    console.log("[FeedbackViewerLogic] Feedback stream finalized.");
     if (!this.domManager || !this.domElements) return;
 
     const streamToFinalize = this.activeStreamingAiItem;
 
     if (streamToFinalize && streamToFinalize.type === 'ai' && streamToFinalize.isStreaming) {
-      console.log("[FeedbackViewerImpl DEBUG] finalizeResponse: Finalizing activeStreamingAiItem.");
       streamToFinalize.isStreaming = false;
       this.extractAndStoreFixHtml();
       
@@ -358,18 +342,17 @@ export class FeedbackViewerImpl {
       this.saveHistory();
       this.domManager.updateLastAIMessage(streamToFinalize.content, false);
       this.activeStreamingAiItem = null;
-      console.log("[FeedbackViewerImpl DEBUG] finalizeResponse: Cleared activeStreamingAiItem.");
     } else {
-      console.warn(`[FeedbackViewerImpl] finalizeResponse called but no active AI message was streaming or found. Active item state: type=${streamToFinalize?.type}, streaming=${streamToFinalize?.isStreaming}`);
+      customWarn(`[FeedbackViewerImpl] finalizeResponse called but no active AI message was streaming or found. Active item state: type=${streamToFinalize?.type}, streaming=${streamToFinalize?.isStreaming}`);
       const lastHistoryAI = [...this.conversationHistory].reverse().find(item => item.type === 'ai' && item.isStreaming);
       if (lastHistoryAI) {
-        console.warn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - found a different streaming AI item in history. Finalizing it.", lastHistoryAI);
+        customWarn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - found a different streaming AI item in history. Finalizing it.", lastHistoryAI);
         lastHistoryAI.isStreaming = false;
         this.extractAndStoreFixHtml();
         this.saveHistory();
         this.domManager.updateLastAIMessage(lastHistoryAI.content, false);
       } else {
-         console.warn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - no streaming AI item found in history either.");
+         customWarn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - no streaming AI item found in history either.");
       }
       this.activeStreamingAiItem = null;
     }
@@ -387,11 +370,11 @@ export class FeedbackViewerImpl {
       if (lastAiItem && lastAiItem.fix) {
         this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, this.stableSelectorForCurrentCycle || undefined);
       } else {
-        console.warn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
+        customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
         if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle) {
           this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, this.stableSelectorForCurrentCycle || undefined);
         } else {
-          console.error('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
+          customError('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
         }
       }
     }
@@ -410,11 +393,10 @@ export class FeedbackViewerImpl {
   public hide(initiatedByUser: boolean, fromCloseButton: boolean = false): void {
     if (!this.isVisible) return;
     if (!this.domManager) {
-      console.error('[FeedbackViewerLogic] Cannot hide: DOM manager not initialized.');
+      customError('[FeedbackViewerLogic] Cannot hide: DOM manager not initialized.');
       return;
     }
 
-    console.log(`[FeedbackViewerImpl] hide called. initiatedByUser: ${initiatedByUser}, fromCloseButton: ${fromCloseButton}`);
     eventEmitter.emit('viewerWillHide'); // Emit before hiding
     this.domManager.hide();
     this.isVisible = false;
@@ -424,13 +406,11 @@ export class FeedbackViewerImpl {
     
     if (initiatedByUser && fromCloseButton) {
       localStorage.setItem(this.PANEL_CLOSED_BY_USER_KEY, 'true');
-      console.log(`[FeedbackViewerImpl] Panel closed by user via close button. Set ${this.PANEL_CLOSED_BY_USER_KEY}.`);
     }
     eventEmitter.emit('viewerDidHide'); // Emit after hiding
   }
 
   private resetStateForNewSelection(): void {
-    console.log('[FeedbackViewerImpl] Resetting state for new selection/cycle.');
     this.currentImageDataUrl = null;
     this.initialSelectedElement = null;
     this.originalOuterHTMLForCurrentCycle = null;
@@ -449,14 +429,13 @@ export class FeedbackViewerImpl {
   // --- Method to render user-facing messages (warnings, info) into history ---
   private renderUserMessage(message: string): void {
     if (!this.domManager) {
-      console.error("[FeedbackViewerImpl] Cannot render user message: DOM Manager not initialized.");
+      customError("[FeedbackViewerImpl] Cannot render user message: DOM Manager not initialized.");
       return;
     }
     const userMessageItem: ConversationItem = { type: 'usermessage', content: message };
     // We save it to history, and appendHistoryItem will also render it.
     this.saveHistory(userMessageItem); 
     // No direct call to domManager.appendHistoryItem here as saveHistory handles it.
-    console.log(`[FeedbackViewerImpl] Rendered user message: ${message}`);
   }
 
   // --- UI Event Handlers ---
@@ -474,7 +453,6 @@ export class FeedbackViewerImpl {
 
     // Allow /publish even if other conditions aren't met
     if (promptText?.toLowerCase() === '/publish') {
-      console.log("[FeedbackViewerLogic] /publish command detected. Calling publishSnapshot().");
       this.publishSnapshot();
       this.domManager?.setPromptState(true, ''); 
       this.domManager?.updateSubmitButtonState(true); 
@@ -483,15 +461,13 @@ export class FeedbackViewerImpl {
 
     // ADDED: Handle /logout command
     if (promptText?.toLowerCase() === '/logout') {
-      console.log("[FeedbackViewerLogic] /logout command detected.");
       this.renderUserMessage("Logging out..."); // Provide immediate feedback
       logout().then(() => {
         // This part might not be reached if window.location.reload() in Auth.logout executes quickly.
         // However, it's good practice to have a success path.
-        console.log("[FeedbackViewerLogic] Logout successful (as per promise resolve).");
         this.renderUserMessage("You have been logged out. The page should reload automatically.");
       }).catch((err: Error) => {
-        console.error("[FeedbackViewerLogic] Error during /logout command:", err);
+        customError("[FeedbackViewerLogic] Error during /logout command:", err);
         // Use renderUserMessage for consistency with /publish feedback style
         this.renderUserMessage(`Logout failed: ${err.message}`);
       }).finally(() => {
@@ -505,7 +481,6 @@ export class FeedbackViewerImpl {
 
     // ADDED: Handle /help command
     if (promptText?.toLowerCase() === '/help') {
-      console.log("[FeedbackViewerLogic] /help command detected. Calling showOnboarding().");
       this.showOnboarding();
       this.domManager?.setPromptState(true, ''); // Clear the /help command
       this.domManager?.updateSubmitButtonState(true); // Re-enable submit if it was disabled
@@ -514,7 +489,6 @@ export class FeedbackViewerImpl {
 
     // ADDED: Handle /stats command
     if (promptText?.toLowerCase() === '/stats') {
-      console.log("[FeedbackViewerLogic] /stats command detected.");
       this.displayStatsBadges(); // New method to be created
       this.domManager?.setPromptState(true, ''); // Clear the /stats command
       this.domManager?.updateSubmitButtonState(true); // Re-enable submit if it was disabled
@@ -533,7 +507,6 @@ export class FeedbackViewerImpl {
     }
 
     // The /publish case is handled above, so no need for trimmedLowerCasePrompt here again for that.
-    console.log(`[FeedbackViewerLogic] Submitting feedback for Fix ID: ${this.currentFixId}...`);
 
     this.domManager.setPromptState(false);
     this.domManager.updateSubmitButtonState(false);
@@ -547,11 +520,8 @@ export class FeedbackViewerImpl {
 
     if (promptHasImageKeyword && this.currentImageDataUrl) {
       imageDataToSend = this.currentImageDataUrl;
-      console.log("[FeedbackViewerLogic] Image keyword found, using existing screenshot from current selection.");
     } else if (promptHasImageKeyword) {
-      console.log("[FeedbackViewerLogic] Image keyword found, but no existing screenshot from selection. Proceeding without image.");
     } else {
-      console.log("[FeedbackViewerLogic] No image-related keyword in prompt. Not sending image.");
     }
 
     this.saveHistory({ type: 'user', content: promptText });
@@ -561,9 +531,8 @@ export class FeedbackViewerImpl {
     if (this.conversationHistory.length > 0 && 
         this.conversationHistory[this.conversationHistory.length - 1].type === 'ai') {
       this.activeStreamingAiItem = this.conversationHistory[this.conversationHistory.length - 1];
-      console.log("[FeedbackViewerLogic DEBUG] handleSubmit: Set activeStreamingAiItem.");
     } else {
-      console.error("[FeedbackViewerLogic ERROR] handleSubmit: Failed to set activeStreamingAiItem after adding AI placeholder.");
+      customError("[FeedbackViewerLogic ERROR] handleSubmit: Failed to set activeStreamingAiItem after adding AI placeholder.");
       this.activeStreamingAiItem = null;
     }
 
@@ -571,30 +540,30 @@ export class FeedbackViewerImpl {
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
     try {
-      console.log('[FeedbackViewerLogic] Preprocessing HTML to replace SVGs...');
       processedHtmlForAI = this.preprocessHtmlForAI(processedHtmlForAI);
-      console.log(`[FeedbackViewerLogic] Preprocessing complete. Stored ${this.originalSvgsMap.size} SVGs.`);
     } catch (e) {
-      console.error('[FeedbackViewerLogic] Error preprocessing HTML for AI:', e);
+      customError('[FeedbackViewerLogic] Error preprocessing HTML for AI:', e);
       this.showError('Failed to process HTML before sending.');
       return;
     }
 
     fetchFeedback(imageDataToSend, promptText, processedHtmlForAI);
+    // After submitting, clear the textarea and reset button for general prompts too
+    this.domManager?.setPromptState(true, ''); 
+    this.domManager?.updateSubmitButtonState(true); // Re-enable submit, assuming selection is still valid or will be re-evaluated
+
     try {
       if (!localStorage.getItem('checkra_onboarded')) {
         localStorage.setItem('checkra_onboarded', '1');
-        console.log('[FeedbackViewerImpl] Onboarding marked complete via first submission.');
       }
     } catch (e) {
-      console.warn('[FeedbackViewerImpl] Failed to set checkra_onboarded after submission:', e);
+      customWarn('[FeedbackViewerImpl] Failed to set checkra_onboarded after submission:', e);
     }
   }
 
   // --- Applied Fix Button Handlers --- (These remain for already applied fixes)
   private handleAppliedFixClose(fixId: string, event: Event): void {
     event.stopPropagation();
-    console.log(`[FeedbackViewerLogic] Close button clicked for applied Fix ID: ${fixId}`);
     const fixInfo = this.appliedFixes.get(fixId);
     const wrapperElement = document.querySelector(`.checkra-feedback-applied-fix[data-checkra-fix-id="${fixId}"]`);
 
@@ -614,7 +583,6 @@ export class FeedbackViewerImpl {
 
         wrapperElement.replaceWith(originalFragment);
         // --- END EDIT ---
-        console.log(`[FeedbackViewerLogic] Replaced wrapper ${fixId} with original fragment.`);
 
 
         // Clean up listeners and map entry
@@ -623,14 +591,13 @@ export class FeedbackViewerImpl {
           this.appliedFixListeners.delete(fixId);
         }
         this.appliedFixes.delete(fixId);
-        console.log(`[FeedbackViewerLogic] Removed fix info and listeners for ${fixId}.`);
 
       } catch (error) {
-        console.error(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId}:`, error);
+        customError(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId}:`, error);
         // Optionally show an error to the user?
       }
     } else {
-      console.warn(`[FeedbackViewerLogic] Could not find fix info or wrapper element for Fix ID: ${fixId} during close.`);
+      customWarn(`[FeedbackViewerLogic] Could not find fix info or wrapper element for Fix ID: ${fixId} during close.`);
       // Attempt cleanup if possible
       if (wrapperElement) wrapperElement.remove();
       if (this.appliedFixes.has(fixId)) this.appliedFixes.delete(fixId);
@@ -640,7 +607,6 @@ export class FeedbackViewerImpl {
 
   private handleAppliedFixToggle(fixId: string, event: Event): void {
     event.stopPropagation();
-    console.log(`[FeedbackViewerLogic] Toggle button clicked for applied Fix ID: ${fixId}`);
     const fixInfo = this.appliedFixes.get(fixId);
     const wrapperElement = document.querySelector(`.checkra-feedback-applied-fix[data-checkra-fix-id="${fixId}"]`);
     const contentContainer = wrapperElement?.querySelector('.checkra-applied-fix-content');
@@ -665,7 +631,6 @@ export class FeedbackViewerImpl {
 
         // Update state
         fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
-        console.log(`[FeedbackViewerLogic] Toggled ${fixId}. Currently showing fixed: ${fixInfo.isCurrentlyFixed}`);
 
         // --- Update toggle button appearance ---
         if (fixInfo.isCurrentlyFixed) {
@@ -679,7 +644,7 @@ export class FeedbackViewerImpl {
         }
 
       } catch (error) {
-        console.error(`[FeedbackViewerLogic] Error toggling fix ${fixId}:`, error);
+        customError(`[FeedbackViewerLogic] Error toggling fix ${fixId}:`, error);
         // Attempt to restore a known state? Maybe revert to fixed?
         if (!fixInfo.isCurrentlyFixed) { // If failed going back to fixed
           try {
@@ -694,16 +659,16 @@ export class FeedbackViewerImpl {
               toggleButton.title = "Toggle Original Version";
               toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
             } else {
-              console.error(`[FeedbackViewerLogic] Failed to parse fixed HTML during toggle error restore for ${fixId}.`);
+              customError(`[FeedbackViewerLogic] Failed to parse fixed HTML during toggle error restore for ${fixId}.`);
             }
             // --- END EDIT ---
           } catch (restoreError) {
-            console.error(`[FeedbackViewerLogic] Failed to restore fixed state for ${fixId} after toggle error:`, restoreError);
+            customError(`[FeedbackViewerLogic] Failed to restore fixed state for ${fixId} after toggle error:`, restoreError);
           }
         }
       }
     } else {
-      console.warn(`[FeedbackViewerLogic] Could not find fix info, wrapper, content container, or toggle button for Fix ID: ${fixId} during toggle.`);
+      customWarn(`[FeedbackViewerLogic] Could not find fix info, wrapper, content container, or toggle button for Fix ID: ${fixId} during toggle.`);
     }
   }
 
@@ -744,23 +709,19 @@ export class FeedbackViewerImpl {
    */
   private postprocessHtmlFromAI(aiHtmlString: string): string {
     if (this.originalSvgsMap.size === 0) {
-      console.log('[FeedbackViewerLogic] No original SVGs stored, skipping postprocessing.');
       return aiHtmlString; // No SVGs were replaced initially
     }
-    console.log(`[FeedbackViewerLogic] Postprocessing AI HTML to restore ${this.originalSvgsMap.size} SVGs...`);
 
     let restoredHtml = aiHtmlString.replace(SVG_PLACEHOLDER_REGEX, (match, placeholderId) => {
       const originalSvg = this.originalSvgsMap.get(placeholderId);
       if (originalSvg) {
-        console.log(`[FeedbackViewerLogic] Restoring SVG for ID: ${placeholderId}`);
         return originalSvg;
       } else {
-        console.warn(`[FeedbackViewerLogic] Original SVG not found for placeholder ID: ${placeholderId}. Leaving placeholder.`);
+        customWarn(`[FeedbackViewerLogic] Original SVG not found for placeholder ID: ${placeholderId}. Leaving placeholder.`);
         return match; // Keep the placeholder if original is missing
       }
     });
 
-    console.log('[FeedbackViewerLogic] Postprocessing complete.');
     return restoredHtml;
   }
 
@@ -773,76 +734,63 @@ export class FeedbackViewerImpl {
     const lastAiItem = aiItems.length > 0 ? aiItems[aiItems.length - 1] : null;
 
     if (!lastAiItem || !lastAiItem.content) {
-      console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: No AI message content found in history to extract from.');
       this.fixedOuterHTMLForCurrentCycle = null;
       return;
     }
     const responseText = lastAiItem.content;
-    console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Full AI responseText for HTML extraction: ', responseText);
 
     let match = responseText.match(SPECIFIC_HTML_REGEX);
-    console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: SPECIFIC_HTML_REGEX match result:', match);
     if (!match) {
       match = responseText.match(GENERIC_HTML_REGEX);
-      console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: GENERIC_HTML_REGEX match result:', match);
     }
 
     if (match && match[1]) {
       let extractedHtml = match[1].trim();
-      console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Initial extractedHtml (trimmed):', extractedHtml);
 
       try {
         extractedHtml = this.postprocessHtmlFromAI(extractedHtml);
-        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: extractedHtml after postprocessHtmlFromAI() (changed: ${beforePostProcess !== extractedHtml}):', extractedHtml);
         
         const tempFragment = this.createFragmentFromHTML(extractedHtml);
-        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: createFragmentFromHTML result:', tempFragment ? 'Fragment created' : 'Fragment FAILED');
 
         if (tempFragment && tempFragment.childNodes.length > 0) {
           this.fixedOuterHTMLForCurrentCycle = extractedHtml;
-          console.log(`[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Successfully STORED fixedOuterHTMLForCurrentCycle (length: ${extractedHtml.length}).`);
         } else {
-          console.warn('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Failed to parse extracted HTML into a valid, non-empty fragment. Fix may not be applicable.');
+          customWarn('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Failed to parse extracted HTML into a valid, non-empty fragment. Fix may not be applicable.');
           this.fixedOuterHTMLForCurrentCycle = null;
         }
       } catch (e) {
-        console.error('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Error during postprocessing/validation:', e);
+        customError('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Error during postprocessing/validation:', e);
         this.fixedOuterHTMLForCurrentCycle = null;
       }
     } else {
       if (!lastAiItem.isStreaming && !GENERIC_HTML_REGEX.test(responseText)) {
-        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: No HTML block found in the final AI response history item (isStreaming: false, regex test failed).');
       } else {
-        console.log('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: No regex match for HTML block (isStreaming: ${lastAiItem.isStreaming}, regex test result for GENERIC_HTML_REGEX on full response: ${GENERIC_HTML_REGEX.test(responseText)}).');
       }
       this.fixedOuterHTMLForCurrentCycle = null;
     }
   }
   private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, stableSelector?: string): void {
-    console.log(`[FeedbackViewerLogic DEBUG] applyFixToPage: Attempting to apply fix. Fix ID: ${fixId}, Stable Selector: ${stableSelector || 'Not Provided (will use current cycle)'}`);
     if (!this.domManager || !this.domElements) {
-      console.warn('[FeedbackViewerLogic DEBUG] applyFixToPage: Cannot apply fix: Missing DOM Manager or elements.');
+      customWarn('[FeedbackViewerLogic DEBUG] applyFixToPage: Cannot apply fix: Missing DOM Manager or elements.');
       return;
     }
 
     try {
       let elementToReplace = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
-      console.log('[FeedbackViewerLogic DEBUG] applyFixToPage: Result of querySelector(`[data-checkra-fix-id="${fixId}"]`):', elementToReplace);
 
       let insertionParent: Node | null = null;
       let insertionBeforeNode: Node | null = null;
 
       if (elementToReplace) {
         if (!elementToReplace.parentNode) {
-          console.error(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} has no parent node.`);
+          customError(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} has no parent node.`);
           throw new Error(`Original element with ID ${fixId} has no parent node.`);
         }
         insertionParent = elementToReplace.parentNode;
-        console.log('[FeedbackViewerLogic DEBUG] applyFixToPage: Determined insertionParent:', insertionParent);
         insertionBeforeNode = elementToReplace.nextSibling;
         elementToReplace.remove(); 
       } else {
-        console.error(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} not found. Cannot apply fix.`);
+        customError(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} not found. Cannot apply fix.`);
         this.showError(`Failed to apply fix: Original target element for fix ${fixId} not found.`);
         return;
       }
@@ -866,11 +814,10 @@ export class FeedbackViewerImpl {
       wrapper.appendChild(toggleBtn);
 
       insertionParent.insertBefore(wrapper, insertionBeforeNode);
-      console.log(`[FeedbackViewerLogic] Inserted permanent wrapper for ${fixId}.`);
 
       const finalStableSelector = stableSelector || this.stableSelectorForCurrentCycle;
       if (!finalStableSelector) {
-        console.error(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}. Cannot reliably apply or store fix.`);
+        customError(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}. Cannot reliably apply or store fix.`);
         this.showError(`Failed to apply fix: Stable target selector missing for fix ${fixId}.`);
         return;
       }
@@ -884,7 +831,6 @@ export class FeedbackViewerImpl {
         stableTargetSelector: finalStableSelector // Use the determined stable selector
       };
       this.appliedFixes.set(fixId, fixInfo);
-      console.log(`[FeedbackViewerLogic] Stored applied fix info for ${fixId} with stable selector: ${finalStableSelector}`);
 
       const listeners = {
         close: (e: Event) => this.handleAppliedFixClose(fixId, e),
@@ -905,7 +851,7 @@ export class FeedbackViewerImpl {
       // Consider what should happen in the panel UI after this.
 
     } catch (error) {
-      console.error('[FeedbackViewerLogic] Error applying fix directly to page:', error);
+      customError('[FeedbackViewerLogic] Error applying fix directly to page:', error);
       this.showError(`Failed to apply fix: ${error instanceof Error ? error.message : String(error)}`);
       // If elementToReplace was found and removed, but wrapper insertion failed, we need to restore original.
       // This is complex. For now, an error is shown. A more robust undo for failed apply would be needed.
@@ -923,7 +869,7 @@ export class FeedbackViewerImpl {
       template.innerHTML = htmlString.trim();
       return template.content;
     } catch (e) {
-      console.error("Error creating fragment from HTML string:", e, htmlString);
+      customError("Error creating fragment from HTML string:", e, htmlString);
       return null;
     }
   }
@@ -953,7 +899,6 @@ export class FeedbackViewerImpl {
    * Assumes initialization is handled by the coordinator.
    */
   public toggle(): void {
-    console.log(`[FeedbackViewerImpl.toggle] Current visibility: ${this.isVisible}`);
     if (this.isVisible) {
       this.hide(true, false); // User initiated, not from close button
     } else {
@@ -969,7 +914,7 @@ export class FeedbackViewerImpl {
    */
   public showOnboarding(): void {
     if (!this.domManager || !this.domElements) {
-      console.error("[FeedbackViewerLogic] Cannot show onboarding: DOM Manager or elements not initialized.");
+      customError("[FeedbackViewerLogic] Cannot show onboarding: DOM Manager or elements not initialized.");
       return;
     }
     this.domManager.showOnboardingView(true);
@@ -979,7 +924,6 @@ export class FeedbackViewerImpl {
     this.domManager.show(); // This makes the panel visible
     this.isVisible = true; // << SET isVisible to true
     this.onToggleCallback(true); // Notify coordinator/external
-    console.log('[FeedbackViewerLogic] Showing onboarding.');
 
     // No specific listeners to add to onboarding buttons anymore as audit is removed.
     // The onboarding view itself is handled by FeedbackViewerDOM.
@@ -988,7 +932,6 @@ export class FeedbackViewerImpl {
   // Handler for the mini select button click
   private handleMiniSelectClick(e: MouseEvent): void {
     e.stopPropagation(); // Prevent triggering other clicks
-    console.log('[FeedbackViewerLogic] Mini select (crosshair) button clicked.');
     // this.isQuickAuditRun = false; // REMOVED: Audit feature removed
 
     // Trigger screen capture, passing the main viewer element to be ignored
@@ -998,22 +941,20 @@ export class FeedbackViewerImpl {
         this.domElements.viewer // Pass the panel element to ignore
       );
     } else {
-      console.error('[FeedbackViewerImpl] Cannot start screen capture: domElements.viewer is not available.');
+      customError('[FeedbackViewerImpl] Cannot start screen capture: domElements.viewer is not available.');
     }
   }
 
   private handleSettingsClick(): void {
-    console.log('[FeedbackViewerLogic] Settings button clicked.');
     if (this.settingsModal) {
       this.settingsModal.showModal();
     } else {
-      console.error('[FeedbackViewerLogic] SettingsModal instance is not available.');
+      customError('[FeedbackViewerLogic] SettingsModal instance is not available.');
     }
   }
 
   private handleEscapeKey(event: KeyboardEvent): void {
     if (event.key === 'Escape' && this.isVisible) { // Use the private property
-      console.log('[FeedbackViewerImpl] Escape key pressed.');
       this.hide(true, false); // User initiated hide via Escape, not fromCloseButton
     }
   }
@@ -1021,33 +962,28 @@ export class FeedbackViewerImpl {
   private addGlobalListeners(): void {
     if (this.boundHandleEscapeKey) {
       document.addEventListener('keydown', this.boundHandleEscapeKey);
-      console.log('[FeedbackViewerImpl] Added escape keydown listener.');
     }
     // Add outside click listener here if not added elsewhere
   }
 
   private removeGlobalListeners(): void {
     document.removeEventListener('keydown', this.boundHandleEscapeKey!);
-    console.log('[FeedbackViewerLogic] Removed global keydown listener for Escape key.');
   }
 
   public showFromApi(triggeredByUserAction: boolean = false): void {
     if (this.isVisible) {
-      console.log('[FeedbackViewerImpl] showFromApi called, but panel is already visible.');
       // If it's already visible, and this call was triggered by a user action (e.g. toggle)
       // that intends to show it, ensure any "closed by user" flag is cleared.
       if (triggeredByUserAction) {
         localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
-        console.log(`[FeedbackViewerImpl] Panel already visible, user action to show, cleared ${this.PANEL_CLOSED_BY_USER_KEY}.`);
       }
       return;
     }
 
     if (!this.domManager) {
-      console.error('[FeedbackViewerLogic] Cannot show: DOM Manager not initialized.');
+      customError('[FeedbackViewerLogic] Cannot show: DOM Manager not initialized.');
       return;
     }
-    console.log(`[FeedbackViewerImpl] showFromApi called. triggeredByUserAction: ${triggeredByUserAction}`);
 
     eventEmitter.emit('viewerWillShow'); // Emit before showing
 
@@ -1057,7 +993,6 @@ export class FeedbackViewerImpl {
 
     if (triggeredByUserAction) {
       localStorage.removeItem(this.PANEL_CLOSED_BY_USER_KEY);
-      console.log(`[FeedbackViewerImpl] Panel shown by user action. Cleared ${this.PANEL_CLOSED_BY_USER_KEY}.`);
     }
 
     // Handle onboarding for the first run if not already onboarded
@@ -1073,7 +1008,6 @@ export class FeedbackViewerImpl {
     }
     
     eventEmitter.emit('viewerDidShow'); // Emit after showing
-    console.log('[FeedbackViewerImpl] Panel shown via API call.');
   }
 
   private loadHistory(): void {
@@ -1088,13 +1022,12 @@ export class FeedbackViewerImpl {
           }
           return item;
         });
-        console.log(`[FeedbackViewerImpl] Loaded ${this.conversationHistory.length} items from history.`);
         // TODO: Add call to domManager to render this history
       } else {
         this.conversationHistory = [];
       }
     } catch (e) {
-      console.error('[FeedbackViewerImpl] Failed to load or parse conversation history:', e);
+      customError('[FeedbackViewerImpl] Failed to load or parse conversation history:', e);
       this.conversationHistory = []; // Start fresh on error
       localStorage.removeItem(CONVERSATION_HISTORY_KEY); // Clear corrupted data
     }
@@ -1111,9 +1044,8 @@ export class FeedbackViewerImpl {
     try {
       // Always save the full history state when called
       localStorage.setItem(CONVERSATION_HISTORY_KEY, JSON.stringify(this.conversationHistory));
-      console.log(`[FeedbackViewerImpl] Saved/Updated history. Total items: ${this.conversationHistory.length}`);
     } catch (e) {
-      console.error('[FeedbackViewerImpl] Failed to save conversation history:', e);
+      customError('[FeedbackViewerImpl] Failed to save conversation history:', e);
     }
 
     // Trigger DOM update ONLY if a NEW item was added
@@ -1129,12 +1061,10 @@ export class FeedbackViewerImpl {
     if (this.currentlyHighlightedElement) {
       this.currentlyHighlightedElement.classList.remove('checkra-selected-element-outline');
       this.currentlyHighlightedElement = null;
-      console.log('[FeedbackViewerLogic] Removed selection highlight.');
     }
   }
   private handleImageGenerationStart(data: { prompt?: string }): void {
     if (!this.domManager) return;
-    console.log('[FeedbackViewerImpl] AI Image Generation Started. Prompt:', data.prompt);
     // Hide general loading indicator if it's showing
     this.domManager.updateLoaderVisibility(false);
     // Show image generation specific status
@@ -1144,7 +1074,7 @@ export class FeedbackViewerImpl {
   // RENAMED and REIMPLEMENTED: from exportSnapshot and sendSnapshotToBackend
   public async publishSnapshot(): Promise<void> {
     if (this.appliedFixes.size === 0) {
-      console.warn("[FeedbackViewerImpl] No fixes applied. Nothing to publish.");
+      customWarn("[FeedbackViewerImpl] No fixes applied. Nothing to publish.");
       this.renderUserMessage("No changes have been applied to publish.");
       return;
     }
@@ -1182,7 +1112,6 @@ export class FeedbackViewerImpl {
         throw new Error(specificErrorMessage);
       }
       const postResult = await postResponse.json(); 
-      console.log("[FeedbackViewerImpl] Snapshot successfully saved (POST response):", postResult);
       if (postResult.publishedVariantId && postResult.snapshotId) {
         const shortPublishedId = postResult.publishedVariantId; 
         const fullSnapshotIdUUID = postResult.snapshotId; 
@@ -1207,71 +1136,68 @@ export class FeedbackViewerImpl {
             }
             throw new Error(specificPromoteErrorMessage);
           }
-          const promoteResult = await promoteResponse.json();
-          console.log("[FeedbackViewerImpl] Snapshot successfully promoted (PUT response):", promoteResult);
+          
           const shareUrl = `${window.location.origin}${window.location.pathname}?checkra-variant-id=${shortPublishedId}`;
           this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
         } catch (promoteError) {
           if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
-            console.log('[FeedbackViewerImpl] Authentication required during snapshot promotion.');
             await this.handleAuthenticationRequiredAndRedirect('publish', changes, promoteError as AuthenticationRequiredError); 
           } else {
-            console.error("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
+            customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
             if (promoteError instanceof Error) {
-              console.error("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
-              console.error("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
+              customError("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
+              customError("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
               if (promoteError.stack) {
-                console.error("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
+                customError("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
               }
               if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
                 const response = (promoteError as any).response as Response;
-                console.error("[FeedbackViewerImpl] Underlying promote response status:", response.status);
+                customError("[FeedbackViewerImpl] Underlying promote response status:", response.status);
                 try {
                    const responseBody = await response.text();
-                   console.error("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
+                   customError("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
                 } catch (bodyError) {
-                   console.error("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
+                   customError("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
                 }
              }
             } else {
-              console.error("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
+              customError("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
             }
-            const shortPublishedId = snapshotData.snapshotId.substring(0,8); // Assuming snapshotData is in scope
+            const shortPublishedId = snapshotData.snapshotId.substring(0,8); 
             const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
             this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
             this.renderUserMessage(`Error promoting: ${displayErrorMessage}. Snapshot saved (ID: ${shortPublishedId}...) but not live.`);
           }
         }
       } else {
-        console.warn("[FeedbackViewerImpl] Snapshot POST successful, but publishedVariantId or snapshotId missing in response:", postResult);
+        customWarn("[FeedbackViewerImpl] Snapshot POST successful, but publishedVariantId or snapshotId missing in response:", postResult);
         this.renderUserMessage("Snapshot saved, but could not get necessary IDs for promotion.");
       }
     } catch (error) {
       if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        console.log('[FeedbackViewerImpl] Authentication required during snapshot save. Error object:', error);
         await this.handleAuthenticationRequiredAndRedirect('publish', changes, error as AuthenticationRequiredError); 
       } else {
-        console.error("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot. Error details follow.");
+        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot. Error details follow.");
         if (error instanceof Error) {
-          console.error("[FeedbackViewerImpl] Error Name:", error.name);
-          console.error("[FeedbackViewerImpl] Error Message:", error.message);
+          customError("[FeedbackViewerImpl] Error Name:", error.name);
+          customError("[FeedbackViewerImpl] Error Message:", error.message);
           if (error.stack) {
-            console.error("[FeedbackViewerImpl] Error Stack:", error.stack);
+            customError("[FeedbackViewerImpl] Error Stack:", error.stack);
           }
           // Check if we have a response object attached to the error, common in HTTP error wrappers
           // This is a common pattern but not standard for all Error objects.
           if ((error as any).response && typeof (error as any).response.status === 'number') {
              const response = (error as any).response as Response;
-             console.error("[FeedbackViewerImpl] Underlying response status:", response.status);
+             customError("[FeedbackViewerImpl] Underlying response status:", response.status);
              try {
                 const responseBody = await response.text(); // Attempt to read body if not already read
-                console.error("[FeedbackViewerImpl] Underlying response body:", responseBody);
+                customError("[FeedbackViewerImpl] Underlying response body:", responseBody);
              } catch (bodyError) {
-                console.error("[FeedbackViewerImpl] Could not read underlying response body:", bodyError);
+                customError("[FeedbackViewerImpl] Could not read underlying response body:", bodyError);
              }
           }
         } else {
-          console.error("[FeedbackViewerImpl] Caught a non-Error object:", error);
+          customError("[FeedbackViewerImpl] Caught a non-Error object:", error);
         }
 
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
@@ -1300,7 +1226,6 @@ export class FeedbackViewerImpl {
   // Method to fetch and display stats when a badge is clicked
   private async fetchAndDisplayStats(queryName: string): Promise<void> {
     if (!this.domManager) return;
-    console.log(`[FeedbackViewerLogic] Fetching stats for query: ${queryName}`);
 
     this.domManager.appendHistoryItem({
       type: 'ai', 
@@ -1317,7 +1242,6 @@ export class FeedbackViewerImpl {
       }
 
       const data = await response.json();
-      console.log('[FeedbackViewerLogic] Stats data received:', data.rows);
 
       if (!data.rows || data.rows.length === 0) {
         this.saveHistory({ type: 'ai', content: "No data available for this query." });
@@ -1345,28 +1269,27 @@ export class FeedbackViewerImpl {
 
     } catch (error: any) {
       if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        console.log('[FeedbackViewerImpl] Authentication required for fetching stats.');
         await this.handleAuthenticationRequiredAndRedirect('fetchStats', { queryName }, error as AuthenticationRequiredError);
       } else {
-        console.error("[FeedbackViewerImpl] Non-AuthenticationRequiredError during fetching stats. Error details follow.");
+        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during fetching stats. Error details follow.");
         if (error instanceof Error) {
-          console.error("[FeedbackViewerImpl] Stats Error Name:", error.name);
-          console.error("[FeedbackViewerImpl] Stats Error Message:", error.message);
+          customError("[FeedbackViewerImpl] Stats Error Name:", error.name);
+          customError("[FeedbackViewerImpl] Stats Error Message:", error.message);
           if (error.stack) {
-            console.error("[FeedbackViewerImpl] Stats Error Stack:", error.stack);
+            customError("[FeedbackViewerImpl] Stats Error Stack:", error.stack);
           }
           if ((error as any).response && typeof (error as any).response.status === 'number') {
             const response = (error as any).response as Response;
-            console.error("[FeedbackViewerImpl] Underlying stats response status:", response.status);
+            customError("[FeedbackViewerImpl] Underlying stats response status:", response.status);
             try {
                const responseBody = await response.text();
-               console.error("[FeedbackViewerImpl] Underlying stats response body:", responseBody);
+               customError("[FeedbackViewerImpl] Underlying stats response body:", responseBody);
             } catch (bodyError) {
-               console.error("[FeedbackViewerImpl] Could not read underlying stats response body:", bodyError);
+               customError("[FeedbackViewerImpl] Could not read underlying stats response body:", bodyError);
             }
          }
         } else {
-          console.error("[FeedbackViewerImpl] Caught a non-Error object during stats fetch:", error);
+          customError("[FeedbackViewerImpl] Caught a non-Error object during stats fetch:", error);
         }
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
         this.domManager.updateLastAIMessage(`Sorry, I couldn't fetch those stats. Error: ${displayErrorMessage}`, false);
@@ -1386,20 +1309,19 @@ export class FeedbackViewerImpl {
       const safeToUseLoginUrl = loginUrlFromError && loginUrlFromError.includes(`redirect_to=${encodedRedirect}`);
 
       if (safeToUseLoginUrl) {
-        console.log(`[FeedbackViewerImpl] Redirecting browser to backend-provided loginUrl: ${loginUrlFromError}`);
         window.location.href = loginUrlFromError;
       } else {
         // Fallback: build correct login flow via startLogin()
-        console.warn('[FeedbackViewerImpl] Backend loginUrl missing or has wrong redirect_to. Falling back to startLogin().');
+        customWarn('[FeedbackViewerImpl] Backend loginUrl missing or has wrong redirect_to. Falling back to startLogin().');
         try {
           await startLogin(); // Use imported startLogin
         } catch (loginError) {
-          console.error('[FeedbackViewerImpl] Error calling startLogin():', loginError);
+          customError('[FeedbackViewerImpl] Error calling startLogin():', loginError);
           this.showError('Authentication is required. Auto-redirect to login failed.');
         }
       }
     } catch (e) {
-      console.error('[FeedbackViewerImpl] Failed to store pending action or initiate login:', e);
+      customError('[FeedbackViewerImpl] Failed to store pending action or initiate login:', e);
       this.showError('Could not prepare for login. Please try again.');
     }
   }
@@ -1411,11 +1333,9 @@ export class FeedbackViewerImpl {
     if (actionType) {
       const loggedIn = await isLoggedIn(); // Use imported isLoggedIn
       if (!loggedIn) {
-        console.log('[FeedbackViewerImpl] Pending action exists but user is not logged in yet — waiting until after successful login.');
         return; // Do not resume; keep data intact for after auth
       }
 
-      console.log(`[FeedbackViewerImpl] Found pending action after login and user is authenticated: ${actionType}`);
       localStorage.removeItem(PENDING_ACTION_TYPE_KEY);
       localStorage.removeItem(PENDING_ACTION_DATA_KEY);
 
@@ -1424,7 +1344,7 @@ export class FeedbackViewerImpl {
         try {
           actionData = JSON.parse(rawActionData);
         } catch (e) {
-          console.error('[FeedbackViewerImpl] Failed to parse pending action data:', e);
+          customError('[FeedbackViewerImpl] Failed to parse pending action data:', e);
           this.showError('Could not restore previous action: invalid data.');
           return;
         }
@@ -1436,9 +1356,8 @@ export class FeedbackViewerImpl {
             // Attempt to restore this.appliedFixes from the stored array of entries
             try {
               this.appliedFixes = new Map(actionData as Iterable<readonly [string, AppliedFixInfo]>);
-              console.log(`[FeedbackViewerImpl] Restored ${this.appliedFixes.size} fixes for pending publish.`);
             } catch (e) {
-              console.error('[FeedbackViewerImpl] Error restoring appliedFixes from localStorage:', e);
+              customError('[FeedbackViewerImpl] Error restoring appliedFixes from localStorage:', e);
               this.showError('Failed to restore changes for publishing.');
               return;
             }
@@ -1454,15 +1373,14 @@ export class FeedbackViewerImpl {
             this.renderUserMessage(`Resuming stats fetch for ${actionData.queryName} after login...`);
             await this.fetchAndDisplayStats(actionData.queryName);
           } else {
-            console.error('[FeedbackViewerImpl] Invalid or missing queryName for pending fetchStats action.');
+            customError('[FeedbackViewerImpl] Invalid or missing queryName for pending fetchStats action.');
             this.showError('Could not restore stats fetch: missing query details.');
           }
           break;
         default:
-          console.warn(`[FeedbackViewerImpl] Unknown pending action type: ${actionType}`);
+          customWarn(`[FeedbackViewerImpl] Unknown pending action type: ${actionType}`);
       }
     } else {
-      console.log('[FeedbackViewerImpl] No pending action found after login.');
     }
   }
 
@@ -1475,7 +1393,7 @@ export class FeedbackViewerImpl {
     const errorCode = params.get('error');
     const errorDesc = params.get('error_description');
     if (errorCode) {
-      console.warn('[FeedbackViewerImpl] Supabase auth error detected in URL:', errorCode, errorDesc);
+      customWarn('[FeedbackViewerImpl] Supabase auth error detected in URL:', errorCode, errorDesc);
       this.renderUserMessage(`Login failed: ${errorDesc || errorCode}. Please contact support or retry later.`);
       // Clear the params to avoid repeated messages / loops
       params.delete('error');

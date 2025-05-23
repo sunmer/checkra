@@ -4,6 +4,7 @@ import { SettingsModal } from '../ui/settings-modal';
 import FeedbackViewer from '../ui/feedback-viewer';
 import { EventEmitter } from './event-emitter';
 import * as Auth from '../auth/auth'; // Import auth functions
+import { customWarn, customError } from '../utils/logger';
 
 // Module-level instance variables
 let settingsModalInstance: SettingsModal | null = null;
@@ -22,7 +23,6 @@ export const eventEmitter = new EventEmitter();
 // Listen for settingsChanged event to keep cache updated
 eventEmitter.on('settingsChanged', (settings: CoreAiSettings) => {
   latestAiSettings = { ...settings };
-  console.log('[Core] latestAiSettings updated via settingsChanged event:', latestAiSettings);
 });
 
 function generateUUID(): string {
@@ -51,10 +51,9 @@ export function getCurrentAiSettings(): CoreAiSettings {
   if (settingsModalInstance) {
     // Prefer cached settings if available
     const settings = { ...latestAiSettings };
-    console.log('[Core] getCurrentAiSettings returning cached settings:', settings);
     return settings;
   } else {
-    console.warn('[Checkra Core] SettingsModal instance not available; returning cached or default settings.');
+    customWarn('[Checkra Core] SettingsModal instance not available; returning cached or default settings.');
     return { ...latestAiSettings };
   }
 }
@@ -125,7 +124,6 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     ...(options || {}),    // Override with explicitly passed options (which might include script/global config from src/index.ts)
   };
 
-  console.log('[Checkra Core] Initializing with final options:', finalOptions);
 
   // Determine Effective API Key
   if (finalOptions.apiKey && typeof finalOptions.apiKey === 'string' && finalOptions.apiKey.trim() !== '') {
@@ -141,57 +139,46 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
         effectiveApiKey = anonymousId;
       }
     } catch (error) {
-      console.warn('[Checkra Core] localStorage access error for anonymous ID. Using session-only ID.');
+      customWarn('[Checkra Core] localStorage access error for anonymous ID. Using session-only ID.');
       effectiveApiKey = generateUUID(); // Generate one for this session only
     }
   }
-  console.log('[Checkra Core] Effective API Key set.');
 
   try {
     if (!settingsModalInstance) {
       settingsModalInstance = new SettingsModal();
-      console.log('[Checkra Core] SettingsModal instance created.');
     }
 
     // Get/create the FeedbackViewer singleton instance, passing initial visibility
     // The FeedbackViewer.getInstance method needs to be adapted to accept initialVisibility
     if (!feedbackViewerInstance) {
       feedbackViewerInstance = FeedbackViewer.getInstance(settingsModalInstance, finalOptions.isVisible);
-      console.log(`[Checkra Core] FeedbackViewer instance created with initial visibility: ${finalOptions.isVisible}.`);
     }
 
-    console.log(`[Checkra Core] UI components initialized.`);
 
     const api: CheckraAPI = {
       show: () => {
-        console.log('[Checkra API] show() called - emitting showViewerRequest event.');
         eventEmitter.emit('showViewerRequest');
       },
       hide: () => {
-        console.log('[Checkra API] hide() called - emitting hideViewerRequest event.');
         eventEmitter.emit('hideViewerRequest');
       },
       showSettings: () => {
         if (settingsModalInstance) {
-          console.log('[Checkra API] showSettings() called.');
           settingsModalInstance.showModal();
         } else {
-          console.warn('[Checkra API] Settings modal instance not found for showSettings().');
+          customWarn('[Checkra API] Settings modal instance not found for showSettings().');
         }
       },
       destroy: () => {
-        console.log('[Checkra API] destroy() called.');
         if (feedbackViewerInstance) {
           feedbackViewerInstance.destroy();
           feedbackViewerInstance = null;
-          console.log('[Checkra Core] FeedbackViewer instance destroyed.');
         }
         if (settingsModalInstance) {
           settingsModalInstance.destroy();
           settingsModalInstance = null;
-          console.log('[Checkra Core] SettingsModal instance destroyed.');
         }
-        console.log('[Checkra API] Cleanup complete.');
       },
       // Auth methods
       startLogin: Auth.startLogin,
@@ -204,7 +191,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     return api;
 
   } catch (error) {
-    console.error('[Checkra Core] Failed to initialize:', error);
+    customError('[Checkra Core] Failed to initialize:', error);
     // Ensure cleanup on error
     if (feedbackViewerInstance) feedbackViewerInstance.destroy();
     if (settingsModalInstance) settingsModalInstance.destroy();
