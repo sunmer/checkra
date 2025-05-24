@@ -43,9 +43,11 @@
   <script>
     localStorage.clear(); // Keep this if it's for specific playground testing unrelated to Checkra init
   </script>
-  <link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
-  <script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer data-checkra-config='{"isVisible": true}'></script>
-  <!-- Removed manual init script block for UNPKG, library now auto-initializes -->
+  <!-- Placeholder for Checkra library CSS (injected by Vite plugin) -->
+  %CHECKRA_CSS_LINK%
+
+  <!-- Placeholder for Checkra library SCRIPT (injected by Vite plugin) -->
+  %CHECKRA_SCRIPT_TAG%
 </head>
 
 <body>
