@@ -116,6 +116,14 @@ export class FeedbackViewerImpl {
     domManager: FeedbackViewerDOM,
     settingsModal: SettingsModal
   ): void {
+    // --- ALWAYS reset conversation history and onboarding flag on page load ---
+    try {
+      localStorage.removeItem(CONVERSATION_HISTORY_KEY);
+      localStorage.removeItem('checkra_onboarded');
+    } catch (e) {
+      // Failing silently is acceptable; some environments block localStorage
+    }
+
     // Get elements from domManager inside initialize
     const handleClose = () => this.hide(true, true);
     this.domElements = domManager.create(handleClose);
@@ -439,6 +447,8 @@ export class FeedbackViewerImpl {
     
     if (initiatedByUser && fromCloseButton) {
       localStorage.setItem(this.PANEL_CLOSED_BY_USER_KEY, 'true');
+      // Show availability toast again to remind user of shortcut
+      this.domManager?.showAvailabilityToast();
     }
     eventEmitter.emit('viewerDidHide'); // Emit after hiding
   }

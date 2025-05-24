@@ -159,7 +159,7 @@ export class FeedbackViewerDOM {
     const closeViewerButton = document.createElement('button');
     closeViewerButton.id = 'checkra-close-viewer-btn';
     closeViewerButton.innerHTML = '&times;'; // Simple multiplication sign for X
-    closeViewerButton.title = 'Close Panel (Cmd/Ctrl + L)';
+    closeViewerButton.title = 'Close Panel (Press Shift key twice)';
     responseHeader.appendChild(closeViewerButton);
 
     responseHeader.appendChild(actionButtonsContainer);
@@ -657,7 +657,7 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   private createAvailabilityToast(): HTMLDivElement {
     const toast = document.createElement('div');
     toast.id = 'checkra-availability-toast';
-    toast.textContent = 'Checkra is active! Press Shift twice to open.';
+    toast.textContent = 'Press Shift twice to open Checkra';
     // CSS handles initial hidden state
     document.body.appendChild(toast);
     return toast;
@@ -666,14 +666,27 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   public showAvailabilityToast(): void {
     if (!this.elements?.availabilityToast) return;
     const toast = this.elements.availabilityToast;
+    console.warn('[Checkra DOM] Showing availability toast');
+    // Ensure toast exists and is not detached
+    if (!document.body.contains(toast)) {
+      document.body.appendChild(toast);
+    }
+    // Reset any previous state so animation can replay
+    toast.classList.remove('visible', 'hiding');
+    // Force reflow to restart transition
+    void toast.offsetWidth;
+
     toast.classList.add('visible');
-    toast.classList.remove('hiding');
+
+    // Fallback inline styles (in case CSS classes fail to apply due to specificity)
+    toast.style.opacity = '1';
+    toast.style.visibility = 'visible';
 
     // Automatically hide after a few seconds
     setTimeout(() => {
       toast.classList.add('hiding');
-      // Optional: Remove from DOM after transition if not reused often
-      // setTimeout(() => toast.classList.remove('visible', 'hiding'), 500); 
-    }, 4000); // Show for 4 seconds
+      toast.style.opacity = '0';
+      toast.style.visibility = 'hidden';
+    }, 4000);
   }
 }

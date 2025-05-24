@@ -418,10 +418,8 @@
   color: #a0c8ff;
   font-size: 0.9em;
   display: none;
-  /* Replaced by visibility class */
   order: 1;
   margin-left: 5px;
-  /* Add a little space from settings button */
 }
 
 /* --- Resize Handle --- */
@@ -959,13 +957,13 @@
 }
 
 #checkra-availability-toast.visible {
-  opacity: 1;
-  visibility: visible;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 #checkra-availability-toast.hiding {
-  opacity: 0;
-  visibility: hidden;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
 #checkra-feedback-submit-button:disabled {
