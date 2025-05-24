@@ -87,7 +87,7 @@ export default defineConfig(({ command, mode }) => {
             formats: ['es', 'umd'], // Generate ES and UMD formats
             fileName: (format) => `checkra.${format === 'umd' ? 'umd.js' : 'js'}` // Changed to .js for UMD
           },
-          sourcemap: true, // Generate source maps for library
+          sourcemap: false, // Disable source maps to reduce package size
           rollupOptions: {
             // Bundle everything into a single file – avoids additional chunk requests and bare-specifier issues.
             output: {
