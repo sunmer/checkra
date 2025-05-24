@@ -307,7 +307,6 @@ export class FeedbackViewerImpl {
     if (this.queuedPromptText && this.domElements) {
       // Put the queued prompt into the textarea and submit automatically
       this.domElements.promptTextarea.value = this.queuedPromptText;
-      const promptToSubmit = this.queuedPromptText; // Capture for debugging if needed
       this.queuedPromptText = null; // Reset before submission to avoid re-entrance
       // Directly call handleSubmit which will read the textarea value we just set
       this.handleSubmit();
