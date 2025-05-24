@@ -51,8 +51,8 @@ export interface FeedbackViewerElements {
   availabilityToast?: HTMLDivElement;
 }
 
-const SUBMIT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -2 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
-const SELECT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="4"></circle><path d="m16 16-1.5-1.5"></path></svg>`;
+export const SUBMIT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -2 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
+export const SELECT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="4"></circle><path d="m16 16-1.5-1.5"></path></svg>`;
 
 /**
  * Manages the DOM elements, styling, positioning, dragging, and resizing
@@ -258,7 +258,6 @@ export class FeedbackViewerDOM {
     }
     this.elements = null;
     this.closeButtonCallback = null;
-    console.log('[FeedbackViewerDOM] Instance destroyed.');
   }
 
   // --- Resizing Handlers ---
@@ -327,7 +326,6 @@ export class FeedbackViewerDOM {
     if (!this.elements) return;
     this.elements.viewer.classList.add('hidden');
     this.elements.viewer.classList.remove('visible-flex');
-    console.log('[FeedbackViewerDOM] Viewer hidden.');
   }
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
@@ -354,7 +352,6 @@ export class FeedbackViewerDOM {
 
   public clearAIResponseContent(): void {
     if (!this.elements) return;
-    console.log('[DOM.clearAIResponseContent] Clearing all messages from AI response area.');
     this.elements.responseContent.innerHTML = ''; // Clear all children
     this.elements.responseContent.classList.add('hidden');
     this.elements.responseContent.classList.remove('visible');
@@ -362,7 +359,6 @@ export class FeedbackViewerDOM {
 
   public clearUserMessage(): void {
     if (!this.elements) return;
-    console.log('[DOM.clearUserMessage] Clearing user message container.');
     this.elements.userMessageContainer.innerHTML = '';
     this.elements.userMessageContainer.classList.add('hidden');
     this.elements.userMessageContainer.classList.remove('visible');
@@ -483,10 +479,8 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   private createMessageElement(item: ConversationItem): HTMLDivElement {
     const messageDiv = document.createElement('div');
     
-    // REVERTED to original logic
-    messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
-
-    if (item.type === 'ai' || item.type === 'usermessage') { 
+    // Use innerHTML for ai, usermessage, and error types to allow HTML/SVG rendering
+    if (item.type === 'ai' || item.type === 'usermessage' || item.type === 'error') { 
       messageDiv.innerHTML = item.content; 
     } else {
       messageDiv.textContent = item.content;
@@ -496,12 +490,12 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
       messageDiv.classList.add('streaming');
     }
     // TODO: Add data-id for easier updates if needed
+    messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
     return messageDiv;
   }
 
   public renderFullHistory(history: ConversationItem[]): void {
     if (!this.elements) return;
-    console.log(`[DOM] renderFullHistory: Rendering ${history.length} items.`);
     this.clearAIResponseContent();
     this.elements.responseContent.classList.remove('hidden');
     this.elements.responseContent.classList.add('visible');
@@ -524,7 +518,6 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 
   public appendHistoryItem(item: ConversationItem): void {
     if (!this.elements) return;
-    console.log(`[DOM] appendHistoryItem: TYPE=${item.type}, CONTENT_START=${item.content?.substring(0, 30)}`);
     this.elements.responseContent.classList.remove('hidden');
     this.elements.responseContent.classList.add('visible');
 
@@ -547,7 +540,6 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
     const { responseContent } = this.elements;
     const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
 
-    console.log(`[DOM] updateLastAIMessage: Found bubble=${!!lastAiMessageBubble}, CurrentHTML_Len=${lastAiMessageBubble?.innerHTML?.length ?? 0}, NewContent_Len=${newContent.length}, Streaming=${isStreaming}`);
 
     if (lastAiMessageBubble) {
       lastAiMessageBubble.innerHTML = marked.parse(newContent) as string;

@@ -32,7 +32,6 @@
 
     async function onCheckraReady() {
       const messageEl = document.getElementById('message');
-      console.log('[AuthCallbackPage] checkra is ready or assumed ready. Verifying login status...');
 
       // The Checkra library (src/index.ts) auto-initializes and sets window.checkra and window.checkraInitialized.
       // It also dispatches 'checkraReady'.
@@ -51,7 +50,6 @@
         const loginSuccess = await window.checkra.handleAuthCallback(); 
 
         if (loginSuccess) {
-          console.log('[AuthCallbackPage] Login successful (confirmed by handleAuthCallback).');
           if (messageEl) {
             messageEl.textContent = 'Login successful! Redirecting...';
             messageEl.className = 'success';
@@ -80,12 +78,9 @@
     // after it has initialized the Supabase client and exposed the API (window.checkra).
     function attemptAuthCallback() {
         if (window.checkraInitialized && window.checkra) {
-            console.log('[AuthCallbackPage] Checkra already initialized. Proceeding with auth callback handling.');
             onCheckraReady();
         } else {
-            console.log('[AuthCallbackPage] Waiting for checkraReady event...');
             document.addEventListener('checkraReady', () => {
-                console.log('[AuthCallbackPage] checkraReady event received. Proceeding.');
                 onCheckraReady(); // Now window.checkra should be available
             }, { once: true });
         }

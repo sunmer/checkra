@@ -1,5 +1,5 @@
 import { fetchFeedback } from '../services/ai-service';
-import type { FeedbackViewerElements } from './feedback-viewer-dom';
+import { SELECT_SVG_ICON, type FeedbackViewerElements } from './feedback-viewer-dom';
 import type { FeedbackViewerDOM } from './feedback-viewer-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
@@ -379,13 +379,32 @@ export class FeedbackViewerImpl {
   }
 
   public showError(error: Error | string): void {
-    if (!this.domManager || !this.domElements) return; // Guard
-    const errorMessage = error instanceof Error ? error.message : error;
-    const errorItem: ConversationItem = { type: 'error', content: errorMessage };
+    let errorHtmlContent: string;
+
+    if (typeof error === 'string' && error.includes(SELECT_SVG_ICON)) {
+      // If it's the specific error message with the SVG placeholder,
+      // leave it as is, assuming it's already formatted with the SVG string.
+      errorHtmlContent = error;
+    } else {
+      // For other errors (Error objects or plain strings without the specific SVG placeholder)
+      const errorTextMessage = error instanceof Error ? error.message : error;
+      // Escape HTML for general errors to prevent XSS if the error message itself contains HTML
+      const escapedErrorMessage = new Option(errorTextMessage).innerHTML;
+      errorHtmlContent = escapedErrorMessage;
+      customError('[Checkra AI Error]', errorTextMessage); // Log the plain text version
+    }
+
+    const errorItem: ConversationItem = {
+      type: 'error',
+      content: errorHtmlContent, // This will be HTML
+    };
+
     this.conversationHistory.push(errorItem);
-    this.domManager.appendHistoryItem(errorItem);
-    this.domManager.setPromptState(true);
-    this.activeStreamingAiItem = null; // Reset active streaming item on error
+    this.saveHistory(errorItem); // Pass the new item to save incrementally
+
+    if (this.domManager) {
+      this.domManager.appendHistoryItem(errorItem); // Use appendHistoryItem
+    }
   }
 
   public hide(initiatedByUser: boolean, fromCloseButton: boolean = false): void {
@@ -493,7 +512,7 @@ export class FeedbackViewerImpl {
 
     // Existing guards for regular feedback submission
     if (!this.domManager || !this.domElements || !this.originalOuterHTMLForCurrentCycle || !this.currentFixId) {
-      this.showError('Missing context for submission (original HTML or Fix ID). Please select an element again.');
+      this.showError(`First select an element on your website using the${SELECT_SVG_ICON}`);
       return;
     }
 
@@ -1225,7 +1244,7 @@ export class FeedbackViewerImpl {
 
     this.domManager.appendHistoryItem({
       type: 'ai', 
-      content: `Fetching ${queryName.replace(/_/g, ' ')}...`,
+      content: `Fetching ${getFriendlyQueryName(queryName)}...`,
       isStreaming: true 
     });
 
@@ -1240,7 +1259,8 @@ export class FeedbackViewerImpl {
       const data = await response.json();
 
       if (!data.rows || data.rows.length === 0) {
-        this.saveHistory({ type: 'ai', content: "No data available for this query." });
+        const noDataMessage = "No data available for this query.";
+        this.saveHistory({ type: 'usermessage', content: noDataMessage });
         return;
       }
 
@@ -1260,7 +1280,8 @@ export class FeedbackViewerImpl {
       if (markdownTable) {
         this.domManager.updateLastAIMessage(markdownTable, false);
       } else {
-        this.saveHistory({ type: 'ai', content: "Could not format data for display." });
+        const formatErrorMessage = "Could not format data for display.";
+        this.saveHistory({ type: 'usermessage', content: formatErrorMessage });
       }
 
     } catch (error: any) {
@@ -1366,7 +1387,7 @@ export class FeedbackViewerImpl {
           break;
         case 'fetchStats':
           if (actionData && typeof actionData.queryName === 'string') {
-            this.renderUserMessage(`Resuming stats fetch for ${actionData.queryName} after login...`);
+            this.renderUserMessage(`Resuming stats fetch for ${getFriendlyQueryName(actionData.queryName)} after login...`);
             await this.fetchAndDisplayStats(actionData.queryName);
           } else {
             customError('[FeedbackViewerImpl] Invalid or missing queryName for pending fetchStats action.');
@@ -1398,5 +1419,19 @@ export class FeedbackViewerImpl {
       const newUrl = `${location.pathname}${params.toString() ? '?' + params.toString() : ''}${location.hash}`;
       history.replaceState(null, '', newUrl);
     }
+  }
+}
+
+// Helper function to get a user-friendly display name for a query
+function getFriendlyQueryName(queryName: string): string {
+  switch (queryName) {
+    case 'metrics_1d':
+      return 'Stats (last 24h)';
+    case 'metrics_7d':
+      return 'Stats (last 7d)';
+    case 'geo_top5_7d':
+      return 'Top Countries (last 7d)';
+    default:
+      return queryName.replace(/_/g, ' '); // Default fallback
   }
 }
