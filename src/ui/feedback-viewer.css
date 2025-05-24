@@ -987,6 +987,7 @@
   color: #c8d3f5;
   display: inline-block;
   line-height: 1.4;
+  cursor: pointer !important;
 }
 
 /* --- ADDED: Stats Command Badge Styles --- */
@@ -1029,4 +1030,13 @@
 #checkra-feedback-viewer input[type="submit"],
 #checkra-feedback-viewer input[type="reset"] {
   cursor: pointer !important;
+}
+
+#checkra-feedback-submit-button.loading {
+  pointer-events: none !important;
+  opacity: 0.8;
+}
+
+#checkra-feedback-submit-button .button-loader {
+  animation: spin 1s linear infinite;
 }

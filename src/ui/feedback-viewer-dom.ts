@@ -1,5 +1,6 @@
 import './feedback-viewer.css';
 import { marked } from 'marked';
+import { eventEmitter } from '../core/index';
 
 const DEFAULT_WIDTH = 450;
 const MIN_WIDTH = 300;
@@ -21,6 +22,10 @@ const IMAGE_GENERATION_LOADER_SVG = `
     <animate id="svgload3" attributeName="r" from="1" to="1" begin="svgload2.end" dur="0.8s" values="3;1;3" calcMode="linear"/>
   </circle>
 </svg>`;
+
+// Loader SVG reused inside submit button
+const BUTTON_LOADER_SVG = `
+<svg class="button-loader" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -67,6 +72,9 @@ export class FeedbackViewerDOM {
   private isResizing: boolean = false;
   private resizeStartX: number = 0;
   private initialWidth: number = 0;
+
+  // Track loading state so we don't constantly reset spinner animation
+  private isLoading: boolean = false;
 
   constructor() {
     // Bind resize handlers
@@ -240,6 +248,19 @@ export class FeedbackViewerDOM {
     // Use the bound method for the listener
     this.elements.closeViewerButton?.addEventListener('click', this.handleCloseClick);
 
+    // Attach event delegation for onboarding suggestion clicks
+    if (onboardingContainer) {
+      onboardingContainer.addEventListener('click', (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target && target.classList.contains('onboarding-suggestion')) {
+          const promptText = target.dataset.prompt || target.textContent || '';
+          if (promptText.trim()) {
+            eventEmitter.emit('onboardingSuggestionClicked', promptText.trim());
+          }
+        }
+      });
+    }
+
     return this.elements;
   }
 
@@ -330,18 +351,30 @@ export class FeedbackViewerDOM {
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
     if (!this.elements) return;
-    const { loadingIndicator, loadingIndicatorText, responseHeader } = this.elements;
 
-    responseHeader.classList.remove('hidden');
-    responseHeader.classList.add('visible-flex');
+    // Prevent unnecessary DOM churn (and animation reset) if state unchanged
+    if (visible === this.isLoading) {
+      return;
+    }
 
+    this.isLoading = visible;
+
+    // Always hide the old header loader (kept for backward-compatibility but unused)
+    if (this.elements.loadingIndicator) {
+      this.elements.loadingIndicator.style.display = 'none';
+    }
+
+    const submitBtn = this.elements.submitButton;
     if (visible) {
-      loadingIndicatorText.textContent = text || 'Processing...';
-      loadingIndicator.classList.remove('hidden');
-      loadingIndicator.classList.add('visible-flex');
+      submitBtn.disabled = true;
+      submitBtn.classList.add('loading');
+      submitBtn.innerHTML = BUTTON_LOADER_SVG;
+      submitBtn.title = text || 'Processing...';
     } else {
-      loadingIndicator.classList.add('hidden');
-      loadingIndicator.classList.remove('visible-flex');
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('loading');
+      submitBtn.innerHTML = SUBMIT_SVG_ICON;
+      submitBtn.title = 'Submit Feedback (Ctrl/Cmd + Enter)';
     }
   }
 
@@ -444,11 +477,11 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 
 **How to get started:**
 * ${selectButtonRepresentation} Select any element on your page
-* Then, type what you want to change or improve, such as:
+* Then, try one of these prompts:
 
-* <span class="onboarding-suggestion">Change this headline to be more exciting</span>
-* <span class="onboarding-suggestion">Add an abstract background image</span>
-* <span class="onboarding-suggestion">Rewrite this hero section</span>
+* <span class="onboarding-suggestion" data-prompt="Change this headline to be more exciting">Change this headline to be more exciting</span>
+* <span class="onboarding-suggestion" data-prompt="Add an abstract background image">Add an abstract background image</span>
+* <span class="onboarding-suggestion" data-prompt="Rewrite this hero section">Rewrite this hero section</span>
 
 * Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/publish</kbd> to get a shareable url for your changes
 * Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> for all commands.

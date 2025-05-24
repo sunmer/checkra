@@ -66,6 +66,9 @@ export class FeedbackViewerImpl {
   private svgPlaceholderCounter: number = 0;
   private activeStreamingAiItem: ConversationItem | null = null; // ADDED: To track the current AI message being streamed
 
+  // --- Quick Suggestion Flow ---
+  private queuedPromptText: string | null = null; // Stores prompt chosen before element selection
+
   // --- Global Tracking for Applied Fixes ---
   private appliedFixes: Map<string, AppliedFixInfo> = new Map();
   // Store listeners for applied fixes to clean them up later
@@ -84,6 +87,7 @@ export class FeedbackViewerImpl {
   private boundFinalizeResponse = this.finalizeResponse.bind(this);
   private boundToggle = this.toggle.bind(this); // ADDED: Bound toggle method
   private boundShowFromApi = this.showFromApi.bind(this); // ADDED: Bound method for API show
+  private boundHandleSuggestionClick = this.handleSuggestionClick.bind(this); // NEW: Bound handler for onboarding suggestion
   private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
   private conversationHistory: ConversationItem[] = [];
   private boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
@@ -138,6 +142,8 @@ export class FeedbackViewerImpl {
     eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
     eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
     eventEmitter.on('aiImageGenerationStart', this.boundHandleImageGenerationStart);
+    // Listen for onboarding suggestion clicks
+    eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
 
     // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -215,6 +221,7 @@ export class FeedbackViewerImpl {
     eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
     eventEmitter.off('aiImageGenerationStart', this.boundHandleImageGenerationStart);
+    eventEmitter.off('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
 
     this.domElements = null;
     this.domManager = null;
@@ -295,6 +302,16 @@ export class FeedbackViewerImpl {
     if (this.domElements) { }
 
     this.domElements?.promptTextarea.focus();
+
+    // --- AUTO SUBMIT FLOW (if prompt was chosen before selection) ---
+    if (this.queuedPromptText && this.domElements) {
+      // Put the queued prompt into the textarea and submit automatically
+      this.domElements.promptTextarea.value = this.queuedPromptText;
+      const promptToSubmit = this.queuedPromptText; // Capture for debugging if needed
+      this.queuedPromptText = null; // Reset before submission to avoid re-entrance
+      // Directly call handleSubmit which will read the textarea value we just set
+      this.handleSubmit();
+    }
   }
 
   public updateResponse(chunk: string): void {
@@ -1418,6 +1435,26 @@ export class FeedbackViewerImpl {
       params.delete('error_description');
       const newUrl = `${location.pathname}${params.toString() ? '?' + params.toString() : ''}${location.hash}`;
       history.replaceState(null, '', newUrl);
+    }
+  }
+
+  // --- QUICK SUGGESTION HANDLER ---
+  private handleSuggestionClick(promptText: string): void {
+    if (!promptText) return;
+
+    // Store the prompt to be auto-submitted after element selection
+    this.queuedPromptText = promptText;
+
+    // Initiate element selection (same logic as mini-select button)
+    if (this.domElements?.viewer) {
+      screenCapture.startCapture(this.prepareForInput.bind(this), this.domElements.viewer);
+    } else {
+      customError('[FeedbackViewerImpl] Cannot start quick suggestion flow: viewer element not available.');
+      // Fallback: Just put prompt into textarea as a regular flow
+      if (this.domElements?.promptTextarea) {
+        this.domElements.promptTextarea.value = promptText;
+        this.domElements.promptTextarea.focus();
+      }
     }
   }
 }
