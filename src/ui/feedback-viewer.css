@@ -135,17 +135,17 @@
 
 /* Specific positioning */
 .checkra-feedback-applied-fix .feedback-fix-close-btn {
-  right: 3px;
+  right: 0px;
   /* Furthest right */
 }
 
 .checkra-feedback-applied-fix .feedback-fix-copy-btn {
-  right: 28px;
+  right: 46px;
   /* Next to close */
 }
 
 .checkra-feedback-applied-fix .feedback-fix-toggle {
-  right: 25px;
+  right: 22px;
   /* Next to copy */
 }
 
@@ -1037,4 +1037,32 @@
 
 #checkra-feedback-submit-button .button-loader {
   animation: spin 1s linear infinite;
+}
+
+#checkra-copy-toast {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  background-color: #333 !important;
+  color: #eee !important;
+  padding: 14px 24px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35) !important;
+  z-index: 20000 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 15px !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: opacity 0.4s ease-in-out, visibility 0.4s ease-in-out !important;
+}
+
+#checkra-copy-toast.visible {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#checkra-copy-toast.hiding {
+  opacity: 0 !important;
+  visibility: hidden !important;
 }

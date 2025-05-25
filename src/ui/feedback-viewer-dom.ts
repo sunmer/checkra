@@ -54,6 +54,7 @@ export interface FeedbackViewerElements {
   settingsButton: HTMLButtonElement;
   imageGenerationStatusElement?: HTMLDivElement;
   availabilityToast?: HTMLDivElement;
+  copyToast?: HTMLDivElement;
 }
 
 export const SUBMIT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -2 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
@@ -242,7 +243,8 @@ export class FeedbackViewerDOM {
       miniSelectButton,
       settingsButton,
       imageGenerationStatusElement,
-      availabilityToast: this.createAvailabilityToast()
+      availabilityToast: this.createAvailabilityToast(),
+      copyToast: this.createCopyToast()
     };
 
     // Use the bound method for the listener
@@ -688,5 +690,41 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
       toast.style.opacity = '0';
       toast.style.visibility = 'hidden';
     }, 4000);
+  }
+
+  private createCopyToast(): HTMLDivElement {
+    const toast = document.createElement('div');
+    toast.id = 'checkra-copy-toast';
+    toast.textContent = 'Prompt copied to clipboard';
+    // CSS handles initial hidden state
+    document.body.appendChild(toast);
+    return toast;
+  }
+
+  public showCopyPromptToast(): void {
+    if (!this.elements?.copyToast) return;
+    const toast = this.elements.copyToast;
+    console.warn('[Checkra DOM] Showing copy prompt toast');
+    // Ensure toast exists and is not detached
+    if (!document.body.contains(toast)) {
+      document.body.appendChild(toast);
+    }
+    // Reset any previous state so animation can replay
+    toast.classList.remove('visible', 'hiding');
+    // Force reflow to restart transition
+    void toast.offsetWidth;
+
+    toast.classList.add('visible');
+
+    // Fallback inline styles (in case CSS classes fail to apply due to specificity)
+    toast.style.opacity = '1';
+    toast.style.visibility = 'visible';
+
+    // Automatically hide after a few seconds
+    setTimeout(() => {
+      toast.classList.add('hiding');
+      toast.style.opacity = '0';
+      toast.style.visibility = 'hidden';
+    }, 1500);
   }
 }

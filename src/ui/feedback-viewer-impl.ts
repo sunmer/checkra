@@ -29,6 +29,7 @@ const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
 const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/svg>/g;
 const DISPLAY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const HIDE_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>`;
+const COPY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
 
 // --- Interface for Applied Fix Data ---
 interface AppliedFixInfo {
@@ -72,7 +73,7 @@ export class FeedbackViewerImpl {
   // --- Global Tracking for Applied Fixes ---
   private appliedFixes: Map<string, AppliedFixInfo> = new Map();
   // Store listeners for applied fixes to clean them up later
-  private appliedFixListeners: Map<string, { close: EventListener; toggle: EventListener }> = new Map();
+  private appliedFixListeners: Map<string, { close: EventListener; toggle: EventListener; copy: EventListener }> = new Map();
 
   // --- Listeners ---
 
@@ -208,6 +209,8 @@ export class FeedbackViewerImpl {
         const toggleBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-toggle');
         closeBtn?.removeEventListener('click', listeners.close);
         toggleBtn?.removeEventListener('click', listeners.toggle);
+        const copyBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-copy-btn');
+        copyBtn?.removeEventListener('click', listeners.copy);
       }
     });
     this.appliedFixListeners.clear();
@@ -713,6 +716,89 @@ export class FeedbackViewerImpl {
     }
   }
 
+  /**
+   * Copies a ready-to-use LLM prompt for the selected fix to the clipboard.
+   */
+  private async handleAppliedFixCopy(fixId: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    const fixInfo = this.appliedFixes.get(fixId);
+    if (!fixInfo) {
+      customError(`[FeedbackViewerLogic] Copy prompt failed – fix ${fixId} not found in map.`);
+      return;
+    }
+
+    try {
+      const prompt = this.buildFixPrompt(fixInfo);
+      await navigator.clipboard.writeText(prompt);
+      console.info('[Checkra] Prompt copied to clipboard for fix', fixId);
+      this.domManager?.showCopyPromptToast();
+    } catch (err) {
+      customError('[FeedbackViewerLogic] Failed to copy prompt to clipboard:', err);
+      this.showError('Unable to copy prompt to clipboard.');
+    }
+  }
+
+  /**
+   * Generates a framework-agnostic prompt describing how to apply this fix.
+   * The prompt can be fed to an LLM or shared with another developer.
+   */
+  private buildFixPrompt(fix: AppliedFixInfo): string {
+    const { stableTargetSelector, originalOuterHTML, fixedOuterHTML } = fix;
+
+    const getTextContentFromHtml = (html: string): string => {
+      try {
+        const template = document.createElement('template');
+        template.innerHTML = html.trim();
+        return template.content.textContent || '';
+      } catch (e) {
+        customError('[buildFixPrompt] Error parsing HTML for textContent:', e);
+        return '';
+      }
+    };
+
+    const originalTextContent = getTextContentFromHtml(originalOuterHTML);
+
+    const jsonPayload = {
+      op: "replaceOuterHTML",
+      uniqueSelector: stableTargetSelector,
+      originalOuterHTMLSnippet: originalOuterHTML.substring(0, 250) + (originalOuterHTML.length > 250 ? '...' : ''),
+      originalTextContentSnippet: originalTextContent.substring(0, 150) + (originalTextContent.length > 150 ? '...' : ''),
+      // Provide full HTML for the assistant to work with, snippets are for quick identification aids.
+      originalOuterHTML: originalOuterHTML,
+      proposedOuterHTML: fixedOuterHTML
+    };
+
+    const jsonPayloadString = JSON.stringify(jsonPayload, null, 2);
+
+    // Construct the full prompt including instructions for the AI coding assistant
+    const fullPrompt = `
+You are an autonomous coding agent with read-write access to the repository.
+
+Input patch (JSON) ⬇
+\`\`\`json
+${jsonPayloadString}
+\`\`\`
+
+Your job:
+1. Locate the source code file and specific section that produces the HTML matching the \`uniqueSelector\` and resembling the \`originalOuterHTMLSnippet\` or \`originalTextContentSnippet\` from the JSON payload.
+   - First, try a direct search for the \`originalOuterHTMLSnippet\`
+   - If not found, try searching for the \`originalTextContentSnippet\`
+   - Use the \`uniqueSelector\` to confirm you've found the correct element if the live application can be run and inspected (e.g., via browser devtools and \`document.querySelector(\`${stableTargetSelector}\`)\`).
+
+2. Apply the necessary changes to this source code so that its rendered output will exactly match the \`proposedOuterHTML\` from the JSON payload.
+   - Make the changes idiomatically according to the project's framework (React, Vue, Svelte, Angular, plain HTML, etc.) and existing coding patterns.
+   - This might involve changing component props, updating template syntax, modifying class lists (e.g., for Tailwind CSS), or altering attributes.
+
+3. Aim for semantic and minimal changes. For example, if only a class name changed, update the class, don't replace the entire HTML block if avoidable.
+
+4. If the changes involve CSS classes that are not utility classes (like Tailwind), ensure that any necessary new CSS definitions are added or existing ones are updated to match the visual intent of the \`proposedOuterHTML\`
+
+5. IMPORTANT: Return only the modified code block(s) or the diff. Do not include explanations unless the changes are complex and warrant it.
+`;
+
+    return fullPrompt;
+  }
+
   // --- HTML Processing & Injection Logic ---
 
   /**
@@ -851,8 +937,10 @@ export class FeedbackViewerImpl {
 
       const closeBtn = this.createAppliedFixButton('close', fixId);
       const toggleBtn = this.createAppliedFixButton('toggle', fixId);
+      const copyBtn = this.createAppliedFixButton('copy', fixId);
       wrapper.appendChild(closeBtn);
       wrapper.appendChild(toggleBtn);
+      wrapper.appendChild(copyBtn);
 
       insertionParent.insertBefore(wrapper, insertionBeforeNode);
 
@@ -875,11 +963,13 @@ export class FeedbackViewerImpl {
 
       const listeners = {
         close: (e: Event) => this.handleAppliedFixClose(fixId, e),
-        toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e)
-      };
-      this.appliedFixListeners.set(fixId, listeners);
+        toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e),
+        copy: (e: Event) => this.handleAppliedFixCopy(fixId, e)
+      } as const;
+      this.appliedFixListeners.set(fixId, listeners as any);
       closeBtn.addEventListener('click', listeners.close);
       toggleBtn.addEventListener('click', listeners.toggle);
+      copyBtn.addEventListener('click', listeners.copy);
 
       // After successful application, clear the current cycle's fix proposal
       // to prevent re-application on next finalizeResponse without new AI feedback.
@@ -916,7 +1006,7 @@ export class FeedbackViewerImpl {
   }
 
   /** Creates a button for the applied fix wrapper */
-  private createAppliedFixButton(type: 'close' | 'toggle', fixId: string): HTMLButtonElement {
+  private createAppliedFixButton(type: 'close' | 'toggle' | 'copy', fixId: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.setAttribute('data-fix-id', fixId);
 
@@ -930,6 +1020,11 @@ export class FeedbackViewerImpl {
         button.className = 'feedback-fix-toggle';
         button.innerHTML = HIDE_FIX_SVG; // Icon to toggle TO original
         button.title = 'Toggle Original Version';
+        break;
+      case 'copy':
+        button.className = 'feedback-fix-copy-btn';
+        button.innerHTML = COPY_FIX_SVG;
+        button.title = 'Copy prompt for this fix';
         break;
     }
     return button;
