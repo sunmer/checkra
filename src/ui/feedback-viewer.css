@@ -101,7 +101,7 @@
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
 .checkra-feedback-applied-fix .feedback-fix-toggle {
   position: absolute;
-  top: -20px;
+  top: 20px;
   /* Adjust positioning */
   width: 20px;
   /* Adjust size */
@@ -185,9 +185,7 @@
   position: fixed;
   top: 0;
   right: 0;
-  width: 300px; /* Consider if this should be dynamic or use min/max */
-  min-width: 300px;
-  max-width: 450px;
+  width: var(--checkra-panel-width); /* Use the CSS variable */
   height: 100vh;
   background: linear-gradient(rgb(21 29 54 / 90%), rgb(4 6 9 / 95%));
   backdrop-filter: blur(2px); /* May need -webkit-backdrop-filter for Safari */
@@ -198,8 +196,7 @@
   line-height: 1.5 !important; /* Base line height */
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box !important; /* Crucial for layout consistency */
-  transform: translateX(100%); /* For initial hidden state */
-  transition: transform 0.3s ease-in-out; /* For sliding animation */
+  transform: translateX(0); /* If panel is always 'rendered' and visibility controlled by class on html/body */
   padding: 5px 15px;
   
   /* Base font size variable */
@@ -247,7 +244,9 @@
 }
 
 #checkra-feedback-viewer.visible-flex {
-  transform: translateX(0);
+  /* If you still use transform for slide-in with docking, it might be redundant */
+  /* or could be used if the docking is optional */
+  /* transform: translateX(0); */
 }
 
 #checkra-feedback-viewer textarea,
@@ -861,10 +860,6 @@
 }
 
 .checkra-message-bubble.message-ai pre .checkra-code-copy-btn svg.check-icon {
-  display: none;
-}
-
-.checkra-message-bubble.message-ai pre .checkra-code-copy-btn.copied svg.check-icon {
   display: inline-block;
   width: 14px;
   height: 14px;
@@ -1065,4 +1060,34 @@
 #checkra-copy-toast.hiding {
   opacity: 0 !important;
   visibility: hidden !important;
+}
+
+/* --- NEW: Docking Behavior & Panel Width Variable --- */
+:root {
+  --checkra-panel-width: 360px; /* Default width, can be adjusted */
+}
+
+/* Class to be added to <html> or <body> when panel is open */
+.checkra-panel-open {
+  margin-right: var(--checkra-panel-width);
+  overflow-x: hidden; /* Prevent horizontal scrollbars from the margin */
+  transition: margin-right 0.25s ease-in-out; /* Smooth transition */
+}
+/* --- END NEW Docking Behavior --- */
+
+/* --- Responsive adjustments for docking --- */
+@media (max-width: 768px) {
+  /* On smaller screens, revert to overlay behavior */
+  .checkra-panel-open {
+    margin-right: 0; /* No push for overlay */
+  }
+
+  #checkra-feedback-viewer {
+    width: 100vw; /* Full width for overlay on small screens */
+    /* Optional: Add a bit of top offset if there are mobile browser bars */
+    /* top: env(safe-area-inset-top, 0px); */
+    /* height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); */
+    border-left: none; /* No border needed if full width */
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.2); /* Shadow might be from bottom */
+  }
 }

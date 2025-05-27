@@ -5,7 +5,7 @@ import { customWarn, customError } from '../utils/logger';
 // import html2canvas from 'html2canvas'; // Eager import removed
 
 // Type for the html2canvas function itself
-type Html2CanvasStatic = (element: HTMLElement, options?: Partial<any>) => Promise<HTMLCanvasElement>; 
+type Html2CanvasStatic = (element: HTMLElement, options?: Partial<any>) => Promise<HTMLCanvasElement>;
 // The above 'any' for options is a simplification; you might want to import Options type from html2canvas if needed elsewhere
 
 let h2cModule: Html2CanvasStatic | null = null;
@@ -17,9 +17,9 @@ async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
     // html2canvas is a default export which is the function itself
     h2cModule = imported.default;
     if (typeof h2cModule !== 'function') {
-        customError('[AI Service] html2canvas loaded but is not a function. Loaded:', h2cModule);
-        h2cModule = null; // Reset if not valid
-        return null;
+      customError('[AI Service] html2canvas loaded but is not a function. Loaded:', h2cModule);
+      h2cModule = null; // Reset if not valid
+      return null;
     }
     return h2cModule;
   } catch (error) {
@@ -63,7 +63,7 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
       if (a < 200) continue;
       if (r > 240 && g > 240 && b > 240) continue;
       if (r < 15 && g < 15 && b < 15) continue;
-      
+
       const quantR = Math.round(r / 32) * 32;
       const quantG = Math.round(g / 32) * 32;
       const quantB = Math.round(b / 32) * 32;
@@ -79,13 +79,13 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
     const primary = sortedColors[0][0];
     let accent;
     if (sortedColors.length > 1) {
-        for (let i = 1; i < sortedColors.length; i++) {
-            if (sortedColors[i][0] !== primary) {
-                 accent = sortedColors[i][0];
-                 break;
-            }
+      for (let i = 1; i < sortedColors.length; i++) {
+        if (sortedColors[i][0] !== primary) {
+          accent = sortedColors[i][0];
+          break;
         }
-        if (!accent) accent = sortedColors.length > 1 ? sortedColors[1][0] : undefined;
+      }
+      if (!accent) accent = sortedColors.length > 1 ? sortedColors[1][0] : undefined;
     }
 
     return { primary, accent };
@@ -111,6 +111,7 @@ interface PageMetadata {
     primary?: string | null;
     accent?: string | null;
   };
+  framework?: string; // e.g., 'tailwind', 'bootstrap', etc.
 }
 
 /**
@@ -140,6 +141,62 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   const h1Tag = document.querySelector('h1');
   metadata.h1 = h1Tag ? h1Tag.textContent?.trim() || null : null;
 
+  // Attempt to detect CSS framework
+  try {
+    let detectedFramework: string | undefined = undefined;
+
+    // Check for Tailwind CSS (common indicators)
+    if (
+      (window as any).tailwind || // Check for tailwind global object (less common now with JIT)
+      document.querySelector('style[id^="tailwind"]') || // Check for tailwind style tags
+      Array.from(document.styleSheets).some(sheet =>
+        sheet.href?.includes('tailwind') || // CDN link
+        (sheet.ownerNode instanceof HTMLStyleElement && sheet.ownerNode.textContent?.includes('@tailwind base')) // Inline tailwind directives
+      ) ||
+      (document.body && Array.from(document.body.classList).some(cls => /^bg-/.test(cls) || /^text-/.test(cls) || /^p[xy]?-/.test(cls) || /^m[xy]?-/.test(cls))) // Common utility classes
+    ) {
+      detectedFramework = 'tailwind';
+    }
+    // Check for Bootstrap (common indicators)
+    else if (
+      (window as any).bootstrap || // Check for bootstrap global object
+      document.querySelector('link[href*="bootstrap.min.css"]') || // Bootstrap CSS link
+      (document.body && (document.body.classList.contains('bootstrap') || Array.from(document.body.classList).some(cls => cls.startsWith('container') || cls.startsWith('row') || cls.startsWith('col-')))) // Common Bootstrap classes
+    ) {
+      detectedFramework = 'bootstrap';
+    }
+    // Check for Bulma
+    else if (
+      document.querySelector('link[href*="bulma.min.css"]') || // Bulma CSS link
+      (document.documentElement && document.documentElement.classList.contains('has-navbar-fixed-top')) || // Bulma specific class
+      document.querySelector('.is-ancestor') // Another Bulma specific class
+    ) {
+      detectedFramework = 'bulma';
+    }
+    // Check for Foundation
+    else if (
+      document.querySelector('link[href*="foundation.min.css"]') || // Foundation CSS link
+      (window as any).Foundation || // Foundation global object
+      document.querySelector('[data-orbit]') // Foundation component attribute
+    ) {
+      detectedFramework = 'foundation';
+    }
+    // Check for Materialize CSS
+    else if (
+      document.querySelector('link[href*="materialize.min.css"]') || // Materialize CSS link
+      (window as any).M // Materialize global object
+    ) {
+      detectedFramework = 'materialize';
+    }
+    // Add more checks for other frameworks as needed
+
+    if (detectedFramework) {
+      metadata.framework = detectedFramework;
+    }
+  } catch (e) {
+    customWarn('[Checkra Service] Error detecting CSS framework:', e);
+  }
+
   // Attempt to extract brand colors
   try {
     const computedStyles = getComputedStyle(document.documentElement);
@@ -148,7 +205,7 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
 
     // Fallback logic if CSS variables are not found or are empty
     if (!primaryColor || !accentColor) {
-      
+
       const buttons = document.querySelectorAll('button, a[role="button"], input[type="submit"], input[type="button"]');
       let firstVisibleButton: HTMLElement | null = null;
       for (const btn of Array.from(buttons)) {
@@ -166,38 +223,38 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
         // Use button background if --primary was missing
         if (!primaryColor && btnBgColor && !['transparent', 'rgba(0, 0, 0, 0)'].includes(btnBgColor)) {
           primaryColor = btnBgColor;
-          
+
         }
         // Use button text color if --accent was missing and different from primary
         if (!accentColor && btnTextColor && !['transparent', 'rgba(0, 0, 0, 0)'].includes(btnTextColor) && btnTextColor !== primaryColor) {
           accentColor = btnTextColor;
-          
+
         }
       } else {
-        
+
       }
     }
-    
+
     if (primaryColor || accentColor) {
-        metadata.brand = {};
-        if (primaryColor) metadata.brand.primary = primaryColor;
-        if (accentColor) metadata.brand.accent = accentColor;
+      metadata.brand = {};
+      if (primaryColor) metadata.brand.primary = primaryColor;
+      if (accentColor) metadata.brand.accent = accentColor;
     }
   } catch (e) {
     customWarn('[Checkra Service] Could not retrieve brand colors:', e);
   }
   if (!metadata.brand?.primary || !metadata.brand?.accent) {
-    
+
     const screenshotColors = await extractColorsFromElement(document.body);
     if (screenshotColors) {
       if (!metadata.brand) metadata.brand = {};
       if (!metadata.brand.primary && screenshotColors.primary) {
         metadata.brand.primary = screenshotColors.primary;
-        
+
       }
       if (!metadata.brand.accent && screenshotColors.accent) {
         metadata.brand.accent = screenshotColors.accent;
-        
+
       }
     }
   }
@@ -212,12 +269,13 @@ const fetchFeedbackBase = async (
   apiUrl: string,
   promptText: string,
   selectedHtml: string | null,
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
   imageDataUrl?: string | null
 ): Promise<void> => {
   try {
     const metadata = await getPageMetadata();
     const currentAiSettings = getCurrentAiSettings();
-    
+
 
     const requestBody: {
       prompt: string;
@@ -225,10 +283,12 @@ const fetchFeedbackBase = async (
       metadata: PageMetadata;
       aiSettings: AiSettings;
       image?: string | null;
+      insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
     } = {
       prompt: promptText,
       metadata: metadata,
-      aiSettings: currentAiSettings
+      aiSettings: currentAiSettings,
+      insertionMode: insertionMode
     };
 
     if (selectedHtml) {
@@ -237,7 +297,7 @@ const fetchFeedbackBase = async (
     if (imageDataUrl) {
       requestBody.image = imageDataUrl;
     }
-    
+
 
     const currentApiKey = getEffectiveApiKey();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
@@ -247,7 +307,7 @@ const fetchFeedbackBase = async (
       customWarn('[Checkra Service] API key/anonymous ID not available for request.');
     }
 
-    
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: headers,
@@ -259,10 +319,10 @@ const fetchFeedbackBase = async (
       try {
         const errorBodyText = await response.text();
         if (errorBodyText) {
-            const errorJson = JSON.parse(errorBodyText);
-            if (errorJson && errorJson.error) {
-                specificErrorMessage = errorJson.error;
-            }
+          const errorJson = JSON.parse(errorBodyText);
+          if (errorJson && errorJson.error) {
+            specificErrorMessage = errorJson.error;
+          }
         }
       } catch (parseError) {
         customWarn("[Checkra Service] Failed to parse error response body:", parseError);
@@ -271,7 +331,7 @@ const fetchFeedbackBase = async (
     }
 
     if (!response.body) {
-        throw new Error("Response body is null, cannot process stream.");
+      throw new Error("Response body is null, cannot process stream.");
     }
 
     const reader = response.body.getReader();
@@ -286,7 +346,7 @@ const fetchFeedbackBase = async (
         if (buffer.trim()) {
           // Simplified final processing, assuming event context might be lost or irrelevant for trailing data
           // For robustness, one might need to process the last event/data pair here if buffer holds them.
-          
+
           // Basic attempt to parse if it looks like a data line, otherwise log it.
           if (buffer.startsWith('data:')) {
             try {
@@ -304,11 +364,11 @@ const fetchFeedbackBase = async (
               customError("[SSE Parser] Error processing final buffer as data line:", e, buffer);
             }
           } else if (buffer.trim()) { // Log if it's not empty and not a data line
-            
+
           }
         }
         eventEmitter.emit('aiFinalized');
-        
+
         break;
       }
 
@@ -319,18 +379,18 @@ const fetchFeedbackBase = async (
       for (const line of lines) {
         if (line.startsWith('event:')) {
           currentEventType = line.substring(6).trim();
-          
+
         } else if (line.startsWith('data:')) {
           try {
             const jsonString = line.substring(5).trim();
             if (jsonString) {
               const parsedData = JSON.parse(jsonString);
-              
+
 
               if (currentEventType) {
                 // If we have a specific event type, emit that with the parsed data as payload
                 eventEmitter.emit(currentEventType, parsedData);
-                
+
                 currentEventType = null;
               } else {
                 // Default behavior: check for known structures in the data payload
@@ -359,7 +419,7 @@ const fetchFeedbackBase = async (
           // currentEventType = null; // Not strictly needed to reset here as data line resets it.
         } else if (line.trim() !== '') {
           // Log lines that are not event, data, or empty (could be comments or malformed)
-          
+
         }
       }
     }
@@ -376,10 +436,9 @@ const fetchFeedbackBase = async (
 export const fetchFeedback = async (
   imageDataUrl: string | null,
   promptText: string,
-  selectedHtml: string | null
+  selectedHtml: string | null,
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'
 ): Promise<void> => {
-  // NOTE: _imageDataUrl is ignored here as the base function doesn't handle it.
-  // If image sending is needed for this specific endpoint later, logic must be added here.
   const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/feedback`;
-  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, imageDataUrl);
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl);
 };
