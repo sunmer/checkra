@@ -1,7 +1,7 @@
 import { initCheckra } from './core/index';
 import './core/shortcut-handler';
 import { CheckraOptions } from './types';
-import { CDN_DOMAIN, API_BASE } from './config';
+import { API_BASE } from './config';
 import { initAnalytics } from './analytics/analytics';
 import { customWarn, customError } from './utils/logger';
 import { fetchProtected, isLoggedIn } from './auth/auth';
