@@ -1,6 +1,79 @@
 import html2canvas from 'html2canvas';
 
 const MIN_HEIGHT_FOR_INSERT_ZONES = 50; // Minimum element height in pixels for top/bottom 10% zones
+const MIN_WIDTH_FOR_SECTION = 150; // Minimum element width in pixels to be considered for section-like behavior
+const SECTION_WIDTH_THRESHOLD_PERCENTAGE = 0.6; // Element width must be >= 60% of available content width
+
+/**
+ * Checks if an element is likely a "section" suitable for before/after insertions.
+ */
+function isLikelySection(element: HTMLElement | null, availableContentWidth: number): boolean {
+  if (!element) return false;
+
+  const feedbackViewerElement = document.getElementById('checkra-feedback-viewer');
+  if (element.id === 'checkra-feedback-viewer' || (feedbackViewerElement && feedbackViewerElement.contains(element))) {
+    return false; // Ignore the feedback viewer itself
+  }
+
+  const style = window.getComputedStyle(element);
+  const tagName = element.tagName.toLowerCase();
+  const rect = element.getBoundingClientRect();
+
+  // Basic exclusions for common inline or small elements, or non-visible ones
+  if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) {
+    return false;
+  }
+  if (['span', 'a', 'img', 'strong', 'em', 'br', 'hr', 'label', 'input', 'button', 'svg', 'path', 'i', 'link', 'script', 'style', 'meta'].includes(tagName)) {
+     // Allow buttons/links if they are visually very large blocks, otherwise exclude
+    if ((tagName === 'button' || tagName === 'a') && (rect.height > MIN_HEIGHT_FOR_INSERT_ZONES * 1.5 && rect.width > MIN_WIDTH_FOR_SECTION * 1.5)) {
+      // It's a large button/link, could be a section-like CTA block
+    } else {
+      return false;
+    }
+  }
+  if (style.position === 'absolute' || style.position === 'fixed' || style.position === 'sticky') {
+    // Allow sticky if it's also very wide (like a sticky nav/header that is section-like)
+    if (style.position === 'sticky' && rect.width >= availableContentWidth * SECTION_WIDTH_THRESHOLD_PERCENTAGE && rect.height >= MIN_HEIGHT_FOR_INSERT_ZONES) {
+      // Potentially a sticky section header/footer
+    } else {
+      return false; // Exclude other absolute/fixed/non-wide-sticky
+    }
+  }
+  if (rect.height < MIN_HEIGHT_FOR_INSERT_ZONES) {
+    return false;
+  }
+  if (rect.width < MIN_WIDTH_FOR_SECTION) {
+    return false;
+  }
+
+  // Strong positive signals for semantic sectioning elements
+  if (['main', 'section', 'article', 'body'].includes(tagName)) {
+    return true;
+  }
+  // Nav, header, footer are sections if they are reasonably wide
+  if (['nav', 'header', 'footer', 'aside'].includes(tagName) && rect.width >= availableContentWidth * (SECTION_WIDTH_THRESHOLD_PERCENTAGE - 0.1)) { // 50% width for these
+    return true;
+  }
+
+  // General heuristic for other elements (like divs) based on width relative to available content width
+  if (rect.width >= availableContentWidth * SECTION_WIDTH_THRESHOLD_PERCENTAGE) {
+    // Further check: avoid direct children of tight grids/flex containers if the item itself isn't a major block
+    const parent = element.parentElement;
+    if (parent) {
+      const parentStyle = window.getComputedStyle(parent);
+      if (parentStyle.display === 'grid' || parentStyle.display === 'flex') {
+        // If parent is grid/flex, the element needs to be more substantial or be one of few children
+        if (parent.children.length < 4 || rect.width >= availableContentWidth * (SECTION_WIDTH_THRESHOLD_PERCENTAGE + 0.15)) { // Be more generous if fewer children, or require wider if many
+          return true;
+        }
+        return false; // Likely an item in a denser grid/flex layout, not a standalone section for insert before/after
+      }
+    }
+    return true; // Is wide and not in a problematic grid/flex parent scenario
+  }
+
+  return false; // Default to not a section if no strong signals met
+}
 
 /**
  * Handles capturing a selected DOM element.
@@ -93,13 +166,28 @@ class ScreenCapture {
   }
 
   private highlightElement(element: HTMLElement | null, event?: MouseEvent): void {
+    const viewerPanelElement = document.getElementById('checkra-feedback-viewer');
+    let availableContentWidth = document.documentElement.clientWidth;
+    if (viewerPanelElement) {
+        const panelRect = viewerPanelElement.getBoundingClientRect(); // Corrected variable name
+        if (panelRect.width > 0) {
+            if (panelRect.left > document.documentElement.clientWidth / 2) { // Panel on right
+                availableContentWidth = panelRect.left;
+            } else { // Panel on left
+                availableContentWidth = document.documentElement.clientWidth - panelRect.right;
+            }
+        }
+    }
+
+    const elementIsLikelySection = isLikelySection(element, availableContentWidth);
+
     if (this.currentHighlight === element && element && event) {
       const rect = element.getBoundingClientRect();
       const mouseYRelative = event.clientY - rect.top;
       const elementHeight = rect.height;
       let newMode: 'replace' | 'insertBefore' | 'insertAfter' = 'replace';
 
-      if (elementHeight >= MIN_HEIGHT_FOR_INSERT_ZONES) {
+      if (elementIsLikelySection && elementHeight >= MIN_HEIGHT_FOR_INSERT_ZONES) {
         if (mouseYRelative < elementHeight * 0.1) {
           newMode = 'insertBefore';
         } else if (mouseYRelative > elementHeight * 0.9) {
@@ -143,7 +231,7 @@ class ScreenCapture {
     const elementHeight = rect.height;
     this.currentInsertionMode = 'replace'; // Default to replace
 
-    if (elementHeight >= MIN_HEIGHT_FOR_INSERT_ZONES) {
+    if (elementIsLikelySection && elementHeight >= MIN_HEIGHT_FOR_INSERT_ZONES) {
       if (mouseYRelative < elementHeight * 0.1) {
         this.currentInsertionMode = 'insertBefore';
         element.classList.add('checkra-hover-top');

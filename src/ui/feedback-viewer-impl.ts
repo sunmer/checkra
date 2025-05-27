@@ -515,6 +515,20 @@ export class FeedbackViewerImpl {
       return; 
     }
 
+    // ADDED: Handle /save command
+    if (promptText?.toLowerCase() === '/save') {
+      if (this.appliedFixes.size === 0) {
+        this.renderUserMessage("No changes have been applied to save as a draft.");
+        this.domManager?.setPromptState(true, '');
+        this.domManager?.updateSubmitButtonState(true);
+        return;
+      }
+      this.saveSnapshotAsDraft(); // New method to handle saving logic
+      this.domManager?.setPromptState(true, '');
+      this.domManager?.updateSubmitButtonState(true);
+      return;
+    }
+
     // ADDED: Handle /logout command
     if (promptText?.toLowerCase() === '/logout') {
       this.renderUserMessage("Logging out..."); // Provide immediate feedback
@@ -1269,32 +1283,38 @@ Your job:
       this.renderUserMessage("No changes have been applied to publish.");
       return;
     }
-    const changes = Array.from(this.appliedFixes.entries()); // Get data for potential storage
+    const changesToPublish = Array.from(this.appliedFixes.values()).map(fixInfo => ({
+      targetSelector: fixInfo.stableTargetSelector,
+      appliedHtml: fixInfo.fixedOuterHTML,
+      sessionFixId: fixInfo.originalElementId
+    }));
     const siteId = getSiteId();
-    const clientGeneratedSnapshotId = crypto.randomUUID();
-    const snapshotData = {
-      siteId, snapshotId: clientGeneratedSnapshotId, timestamp: new Date().toISOString(),
-      pageUrl: window.location.href, changes: this.appliedFixes.size > 0 ? Array.from(this.appliedFixes.values()).map(fixInfo => ({ 
-        targetSelector: fixInfo.stableTargetSelector, 
-        appliedHtml: fixInfo.fixedOuterHTML, 
-        sessionFixId: fixInfo.originalElementId 
-      })) : [],
+    const clientGeneratedSnapshotId = crypto.randomUUID(); // This is the key ID
+
+    const snapshotPayload = {
+      snapshotId: clientGeneratedSnapshotId,
+      timestamp: new Date().toISOString(),
+      pageUrl: window.location.href,
+      changes: changesToPublish,
+      publish: true // Mark for publishing
     };
+
     const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
 
     try {
-      this.renderUserMessage("Publishing changes...");
+      this.renderUserMessage("Preparing to publish changes...");
       const postResponse = await fetchProtected(postSnapshotUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snapshotData),
+        body: JSON.stringify(snapshotPayload),
       });
+
       if (!postResponse.ok) {
         const errorBody = await postResponse.text();
-        let specificErrorMessage = `Saving snapshot failed: ${postResponse.status} ${postResponse.statusText}`;
+        let specificErrorMessage = `Storing snapshot for publish failed: ${postResponse.status} ${postResponse.statusText}`;
         try {
             const errorJson = JSON.parse(errorBody);
-            if (errorJson && errorJson.message) { 
+            if (errorJson && errorJson.message) {
                 specificErrorMessage += ` - ${errorJson.message}`;
             }
         } catch (parseErr) {
@@ -1302,86 +1322,102 @@ Your job:
         }
         throw new Error(specificErrorMessage);
       }
-      const postResult = await postResponse.json(); 
-      if (postResult.publishedVariantId && postResult.snapshotId) {
-        const shortPublishedId = postResult.publishedVariantId; 
-        const fullSnapshotIdUUID = postResult.snapshotId; 
-        this.renderUserMessage(`Published ID: ${shortPublishedId}`);
-        const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${shortPublishedId}`;
-        try {
-          const promoteResponse = await fetchProtected(promoteUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ snapshotIdToPromote: fullSnapshotIdUUID }), 
-          });
-          if (!promoteResponse.ok) {
-            const promoteErrorBody = await promoteResponse.text();
-            let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
-            try {
-                const errorJson = JSON.parse(promoteErrorBody);
-                if (errorJson && errorJson.message) { 
-                    specificPromoteErrorMessage += ` - ${errorJson.message}`;
-                }
-            } catch (parseErr) {
-                specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
-            }
-            throw new Error(specificPromoteErrorMessage);
-          }
-          
-          const shareUrl = `${window.location.origin}${window.location.pathname}?checkra-variant-id=${shortPublishedId}`;
-          this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
-        } catch (promoteError) {
-          if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
-            await this.handleAuthenticationRequiredAndRedirect('publish', changes, promoteError as AuthenticationRequiredError); 
-          } else {
-            customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
-            if (promoteError instanceof Error) {
-              customError("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
-              customError("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
-              if (promoteError.stack) {
-                customError("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
+
+      const postResult = await postResponse.json();
+      // According to new API: postResult contains { message, snapshotId (clientGeneratedSnapshotId), accessUrl, s3SnapshotPath }
+      // We need clientGeneratedSnapshotId for the next step.
+
+      if (postResult.snapshotId !== clientGeneratedSnapshotId) {
+        customError("[FeedbackViewerImpl] Mismatch between client-generated snapshotId and server response.", { client: clientGeneratedSnapshotId, server: postResult.snapshotId });
+        this.renderUserMessage("Error: Snapshot ID mismatch after initial save. Cannot proceed with publishing.");
+        return;
+      }
+
+      this.renderUserMessage(`Snapshot ${clientGeneratedSnapshotId.substring(0,8)}... stored. Now promoting to live...`);
+
+      // The snapshotId in the path is the clientGeneratedSnapshotId
+      const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${clientGeneratedSnapshotId}`;
+
+      try {
+        const promoteResponse = await fetchProtected(promoteUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}), // Empty body as per new API
+        });
+
+        if (!promoteResponse.ok) {
+          const promoteErrorBody = await promoteResponse.text();
+          let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
+          try {
+              const errorJson = JSON.parse(promoteErrorBody);
+              if (errorJson && errorJson.message) {
+                  specificPromoteErrorMessage += ` - ${errorJson.message}`;
               }
-              if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
-                const response = (promoteError as any).response as Response;
-                customError("[FeedbackViewerImpl] Underlying promote response status:", response.status);
-                try {
-                   const responseBody = await response.text();
-                   customError("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
-                } catch (bodyError) {
-                   customError("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
-                }
-             }
-            } else {
-              customError("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
-            }
-            const shortPublishedId = snapshotData.snapshotId.substring(0,8); 
-            const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
-            this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
-            this.renderUserMessage(`Error promoting: ${displayErrorMessage}. Snapshot saved (ID: ${shortPublishedId}...) but not live.`);
+          } catch (parseErr) {
+              specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
           }
+          throw new Error(specificPromoteErrorMessage);
         }
-      } else {
-        customWarn("[FeedbackViewerImpl] Snapshot POST successful, but publishedVariantId or snapshotId missing in response:", postResult);
-        this.renderUserMessage("Snapshot saved, but could not get necessary IDs for promotion.");
+
+        const promoteResult = await promoteResponse.json();
+        // According to new API: promoteResult contains { message, siteId, snapshotId (promoted), promotedAt, cdnUrl }
+        if (promoteResult.cdnUrl && promoteResult.snapshotId) {
+          this.renderUserMessage(`Published successfully! Snapshot ID: ${promoteResult.snapshotId.substring(0,8)}...`);
+          const shareUrl = promoteResult.cdnUrl; // Use the cdnUrl directly
+          this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank" rel="noopener noreferrer">${shareUrl}</a>`);
+        } else {
+          customWarn("[FeedbackViewerImpl] Promotion successful, but cdnUrl or snapshotId missing in response:", promoteResult);
+          this.renderUserMessage(`Snapshot ${clientGeneratedSnapshotId.substring(0,8)}... promoted, but could not get the public share URL.`);
+        }
+
+      } catch (promoteError) {
+        if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
+          // Pass the original 'publish' action type and the full snapshotPayload (or relevant parts)
+          // so it can be retried. For simplicity, passing the fact that it was a publish action.
+          // The 'changesToPublish' might be too large for localStorage if not careful.
+          // Let's store a simplified marker for publish and rely on this.appliedFixes to be re-evaluated.
+          await this.handleAuthenticationRequiredAndRedirect('publish', { /* minimal data or rely on current state */ }, promoteError as AuthenticationRequiredError);
+          this.renderUserMessage("Authentication required to promote. Please log in to continue.");
+        } else {
+          customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
+          if (promoteError instanceof Error) {
+            customError("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
+            customError("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
+            if (promoteError.stack) customError("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
+            if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
+              const response = (promoteError as any).response as Response;
+              customError("[FeedbackViewerImpl] Underlying promote response status:", response.status);
+              try {
+                 const responseBody = await response.text();
+                 customError("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
+              } catch (bodyError) {
+                 customError("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
+              }
+           }
+          } else {
+            customError("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
+          }
+          const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
+          this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
+          this.renderUserMessage(`Error promoting snapshot ${clientGeneratedSnapshotId.substring(0,8)}...: ${displayErrorMessage}. It was stored but is not live.`);
+        }
       }
     } catch (error) {
       if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        await this.handleAuthenticationRequiredAndRedirect('publish', changes, error as AuthenticationRequiredError); 
+        // Store a simplified marker for publish action.
+        await this.handleAuthenticationRequiredAndRedirect('publish', { /* minimal data or rely on current state */ }, error as AuthenticationRequiredError);
+        this.renderUserMessage("Authentication required to publish. Please log in to continue.");
       } else {
-        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot. Error details follow.");
+        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot for publish. Error details follow.");
         if (error instanceof Error) {
           customError("[FeedbackViewerImpl] Error Name:", error.name);
           customError("[FeedbackViewerImpl] Error Message:", error.message);
-          if (error.stack) {
-            customError("[FeedbackViewerImpl] Error Stack:", error.stack);
-          }
-          // Check if we have a response object attached to the error, common in HTTP error wrappers
-          // This is a common pattern but not standard for all Error objects.
+          if (error.stack) customError("[FeedbackViewerImpl] Error Stack:", error.stack);
           if ((error as any).response && typeof (error as any).response.status === 'number') {
              const response = (error as any).response as Response;
              customError("[FeedbackViewerImpl] Underlying response status:", response.status);
              try {
-                const responseBody = await response.text(); // Attempt to read body if not already read
+                const responseBody = await response.text();
                 customError("[FeedbackViewerImpl] Underlying response body:", responseBody);
              } catch (bodyError) {
                 customError("[FeedbackViewerImpl] Could not read underlying response body:", bodyError);
@@ -1390,9 +1426,8 @@ Your job:
         } else {
           customError("[FeedbackViewerImpl] Caught a non-Error object:", error);
         }
-
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
-        this.showError(`Failed to save snapshot: ${displayErrorMessage}`);
+        this.showError(`Failed to save snapshot for publishing: ${displayErrorMessage}`);
       }
     }
   }
@@ -1658,6 +1693,97 @@ Your job:
     }
     this.selectionPlusIconElement.style.left = `${parentRect.left + window.scrollX + parentRect.width / 2 - 11}px`;
     this.selectionPlusIconElement.style.display = 'flex';
+  }
+
+  // Method to save the current changes as a private draft
+  private async saveSnapshotAsDraft(): Promise<void> {
+    if (this.appliedFixes.size === 0) {
+      customWarn("[FeedbackViewerImpl] No fixes applied. Nothing to save as draft.");
+      // User message is handled by the caller (handleSubmit) for this specific case
+      return;
+    }
+
+    const changesToSave = Array.from(this.appliedFixes.values()).map(fixInfo => ({
+      targetSelector: fixInfo.stableTargetSelector,
+      appliedHtml: fixInfo.fixedOuterHTML,
+      sessionFixId: fixInfo.originalElementId
+    }));
+    const siteId = getSiteId();
+    const clientGeneratedSnapshotId = crypto.randomUUID();
+
+    const snapshotPayload = {
+      snapshotId: clientGeneratedSnapshotId,
+      timestamp: new Date().toISOString(),
+      pageUrl: window.location.href,
+      changes: changesToSave,
+      publish: false // Explicitly save as draft
+    };
+
+    const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
+
+    try {
+      this.renderUserMessage("Saving draft...");
+      const postResponse = await fetchProtected(postSnapshotUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshotPayload),
+      });
+
+      if (!postResponse.ok) {
+        const errorBody = await postResponse.text();
+        let specificErrorMessage = `Saving draft failed: ${postResponse.status} ${postResponse.statusText}`;
+        try {
+            const errorJson = JSON.parse(errorBody);
+            if (errorJson && errorJson.message) {
+                specificErrorMessage += ` - ${errorJson.message}`;
+            }
+        } catch (parseErr) {
+            specificErrorMessage += ` - ${errorBody}`;
+        }
+        throw new Error(specificErrorMessage);
+      }
+
+      const postResult = await postResponse.json();
+      // Expected response: { message, snapshotId, accessUrl, s3SnapshotPath }
+
+      if (postResult.snapshotId === clientGeneratedSnapshotId && postResult.accessUrl) {
+        this.renderUserMessage(`Draft saved successfully! Snapshot ID: ${postResult.snapshotId.substring(0,8)}...`);
+        this.renderUserMessage(`Access your draft (owner only): <a href="${postResult.accessUrl}" target="_blank" rel="noopener noreferrer">${postResult.accessUrl}</a>`);
+      } else {
+        customWarn("[FeedbackViewerImpl] Save draft successful, but snapshotId or accessUrl missing/mismatched in response:", postResult);
+        this.renderUserMessage("Draft saved, but could not get the access URL. Snapshot ID: " + (postResult.snapshotId || clientGeneratedSnapshotId).substring(0,8) + "...");
+      }
+
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
+        // For saving drafts, we might just inform the user they need to log in.
+        // Or, we could try to store the 'save' action similar to 'publish', but it's less critical.
+        // For now, inform and let them retry manually after login.
+        await this.handleAuthenticationRequiredAndRedirect('saveDraft', { /* minimal data */ }, error as AuthenticationRequiredError);
+        this.renderUserMessage("Authentication required to save draft. Please log in and try again.");
+      } else {
+        customError("[FeedbackViewerImpl] Error during saving draft. Error details follow.");
+        if (error instanceof Error) {
+          customError("[FeedbackViewerImpl] Draft Save Error Name:", error.name);
+          customError("[FeedbackViewerImpl] Draft Save Error Message:", error.message);
+          if (error.stack) customError("[FeedbackViewerImpl] Draft Save Error Stack:", error.stack);
+          if ((error as any).response && typeof (error as any).response.status === 'number') {
+             const response = (error as any).response as Response;
+             customError("[FeedbackViewerImpl] Underlying draft save response status:", response.status);
+             try {
+                const responseBody = await response.text();
+                customError("[FeedbackViewerImpl] Underlying draft save response body:", responseBody);
+             } catch (bodyError) {
+                customError("[FeedbackViewerImpl] Could not read underlying draft save response body:", bodyError);
+             }
+          }
+        } else {
+          customError("[FeedbackViewerImpl] Caught a non-Error object during draft save:", error);
+        }
+        const displayErrorMessage = error instanceof Error ? error.message : String(error);
+        this.showError(`Failed to save draft: ${displayErrorMessage}`);
+      }
+    }
   }
 }
 

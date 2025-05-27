@@ -101,7 +101,7 @@
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
 .checkra-feedback-applied-fix .feedback-fix-toggle {
   position: absolute;
-  top: 20px;
+  right: 0;
   /* Adjust positioning */
   width: 20px;
   /* Adjust size */
@@ -135,17 +135,17 @@
 
 /* Specific positioning */
 .checkra-feedback-applied-fix .feedback-fix-close-btn {
-  right: 0px;
+  top: 0;
   /* Furthest right */
 }
 
 .checkra-feedback-applied-fix .feedback-fix-copy-btn {
-  right: 46px;
+  top: 45px;
   /* Next to close */
 }
 
 .checkra-feedback-applied-fix .feedback-fix-toggle {
-  right: 22px;
+  top: 22px;
   /* Next to copy */
 }
 
