@@ -836,7 +836,7 @@ Your job:
    - Use the \`uniqueSelector\` to confirm you've found the correct element if the live application can be run and inspected (e.g., via browser devtools and \`document.querySelector(\`${stableTargetSelector}\`)\`).
 
 2. Apply the necessary changes to this source code so that its rendered output will exactly match the \`proposedOuterHTML\` from the JSON payload.
-   - Make the changes idiomatically according to the project's framework (React, Vue, Svelte, Angular, plain HTML, etc.) and existing coding patterns.
+   - Make the changes idiomatically according to the project's existing coding patterns and technologies.
    - This might involve changing component props, updating template syntax, modifying class lists (e.g., for Tailwind CSS), or altering attributes.
 
 3. Aim for semantic and minimal changes. For example, if only a class name changed, update the class, don't replace the entire HTML block if avoidable.

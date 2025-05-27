@@ -111,7 +111,7 @@ interface PageMetadata {
     primary?: string | null;
     accent?: string | null;
   };
-  framework?: string; // e.g., 'tailwind', 'bootstrap', etc.
+  // framework?: string; // REMOVED as per user request
 }
 
 /**
@@ -141,61 +141,7 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   const h1Tag = document.querySelector('h1');
   metadata.h1 = h1Tag ? h1Tag.textContent?.trim() || null : null;
 
-  // Attempt to detect CSS framework
-  try {
-    let detectedFramework: string | undefined = undefined;
-
-    // Check for Tailwind CSS (common indicators)
-    if (
-      (window as any).tailwind || // Check for tailwind global object (less common now with JIT)
-      document.querySelector('style[id^="tailwind"]') || // Check for tailwind style tags
-      Array.from(document.styleSheets).some(sheet =>
-        sheet.href?.includes('tailwind') || // CDN link
-        (sheet.ownerNode instanceof HTMLStyleElement && sheet.ownerNode.textContent?.includes('@tailwind base')) // Inline tailwind directives
-      ) ||
-      (document.body && Array.from(document.body.classList).some(cls => /^bg-/.test(cls) || /^text-/.test(cls) || /^p[xy]?-/.test(cls) || /^m[xy]?-/.test(cls))) // Common utility classes
-    ) {
-      detectedFramework = 'tailwind';
-    }
-    // Check for Bootstrap (common indicators)
-    else if (
-      (window as any).bootstrap || // Check for bootstrap global object
-      document.querySelector('link[href*="bootstrap.min.css"]') || // Bootstrap CSS link
-      (document.body && (document.body.classList.contains('bootstrap') || Array.from(document.body.classList).some(cls => cls.startsWith('container') || cls.startsWith('row') || cls.startsWith('col-')))) // Common Bootstrap classes
-    ) {
-      detectedFramework = 'bootstrap';
-    }
-    // Check for Bulma
-    else if (
-      document.querySelector('link[href*="bulma.min.css"]') || // Bulma CSS link
-      (document.documentElement && document.documentElement.classList.contains('has-navbar-fixed-top')) || // Bulma specific class
-      document.querySelector('.is-ancestor') // Another Bulma specific class
-    ) {
-      detectedFramework = 'bulma';
-    }
-    // Check for Foundation
-    else if (
-      document.querySelector('link[href*="foundation.min.css"]') || // Foundation CSS link
-      (window as any).Foundation || // Foundation global object
-      document.querySelector('[data-orbit]') // Foundation component attribute
-    ) {
-      detectedFramework = 'foundation';
-    }
-    // Check for Materialize CSS
-    else if (
-      document.querySelector('link[href*="materialize.min.css"]') || // Materialize CSS link
-      (window as any).M // Materialize global object
-    ) {
-      detectedFramework = 'materialize';
-    }
-    // Add more checks for other frameworks as needed
-
-    if (detectedFramework) {
-      metadata.framework = detectedFramework;
-    }
-  } catch (e) {
-    customWarn('[Checkra Service] Error detecting CSS framework:', e);
-  }
+  // FRAMEWORK DETECTION LOGIC REMOVED HERE
 
   // Attempt to extract brand colors
   try {
@@ -273,14 +219,13 @@ const fetchFeedbackBase = async (
   imageDataUrl?: string | null
 ): Promise<void> => {
   try {
-    const metadata = await getPageMetadata();
+    const metadata = await getPageMetadata(); // metadata will no longer contain .framework
     const currentAiSettings = getCurrentAiSettings();
-
 
     const requestBody: {
       prompt: string;
       html?: string | null;
-      metadata: PageMetadata;
+      metadata: PageMetadata; // This PageMetadata type no longer has framework
       aiSettings: AiSettings;
       image?: string | null;
       insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
@@ -298,7 +243,6 @@ const fetchFeedbackBase = async (
       requestBody.image = imageDataUrl;
     }
 
-
     const currentApiKey = getEffectiveApiKey();
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (currentApiKey) {
@@ -306,7 +250,6 @@ const fetchFeedbackBase = async (
     } else {
       customWarn('[Checkra Service] API key/anonymous ID not available for request.');
     }
-
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -342,18 +285,12 @@ const fetchFeedbackBase = async (
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
-        // Process final buffer chunk if any
         if (buffer.trim()) {
-          // Simplified final processing, assuming event context might be lost or irrelevant for trailing data
-          // For robustness, one might need to process the last event/data pair here if buffer holds them.
-
-          // Basic attempt to parse if it looks like a data line, otherwise log it.
           if (buffer.startsWith('data:')) {
             try {
               const jsonString = buffer.substring(5).trim();
               if (jsonString) {
                 const data = JSON.parse(jsonString);
-                // Default to aiResponseChunk for any un-event-typed final data with content
                 if (data.content) {
                   eventEmitter.emit('aiResponseChunk', data.content);
                 } else {
@@ -363,12 +300,11 @@ const fetchFeedbackBase = async (
             } catch (e) {
               customError("[SSE Parser] Error processing final buffer as data line:", e, buffer);
             }
-          } else if (buffer.trim()) { // Log if it's not empty and not a data line
-
+          } else if (buffer.trim()) {
+            // customWarn("[SSE Parser] Final buffer contained non-data line content:", buffer);
           }
         }
         eventEmitter.emit('aiFinalized');
-
         break;
       }
 
@@ -379,21 +315,15 @@ const fetchFeedbackBase = async (
       for (const line of lines) {
         if (line.startsWith('event:')) {
           currentEventType = line.substring(6).trim();
-
         } else if (line.startsWith('data:')) {
           try {
             const jsonString = line.substring(5).trim();
             if (jsonString) {
               const parsedData = JSON.parse(jsonString);
-
-
               if (currentEventType) {
-                // If we have a specific event type, emit that with the parsed data as payload
                 eventEmitter.emit(currentEventType, parsedData);
-
                 currentEventType = null;
               } else {
-                // Default behavior: check for known structures in the data payload
                 if (parsedData.userMessage) {
                   eventEmitter.emit('aiUserMessage', parsedData.userMessage);
                 } else if (parsedData.content) {
@@ -412,18 +342,12 @@ const fetchFeedbackBase = async (
             currentEventType = null;
           }
         } else if (line.trim() === '' && currentEventType) {
-          // An empty line typically signifies the end of an event block in SSE.
-          // If we had an event type, but no data followed before an empty line,
-          // it might be an event without data or a separator. Reset currentEventType.
-          // console.log("[SSE Parser] Empty line after event type, resetting currentEventType.");
-          // currentEventType = null; // Not strictly needed to reset here as data line resets it.
+          // currentEventType = null; // Not strictly needed
         } else if (line.trim() !== '') {
-          // Log lines that are not event, data, or empty (could be comments or malformed)
-
+          // customWarn("[SSE Parser] Received non-empty, non-event, non-data line:", line);
         }
       }
     }
-
   } catch (error) {
     customError("Error in fetchFeedbackBase:", error);
     eventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
