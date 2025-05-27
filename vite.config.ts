@@ -134,7 +134,8 @@ export default defineConfig(({ command, mode }) => {
               main: resolve(__dirname, 'demo/index.html'),
               privacy: resolve(__dirname, 'demo/privacy.html'),
               setup: resolve(__dirname, 'demo/setup.html'),
-              playground: resolve(__dirname, 'demo/playground.html'),
+              playground_fintech: resolve(__dirname, 'demo/playground-fintech.html'),
+              playground_ecom: resolve(__dirname, 'demo/playground-ecom.html'),
               callback: resolve(__dirname, 'demo/auth/callback.html')
             }
           }

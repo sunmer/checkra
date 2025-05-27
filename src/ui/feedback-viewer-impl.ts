@@ -18,6 +18,7 @@ interface ConversationItem {
     originalHtml: string;
     fixedHtml: string;
     fixId: string;
+    // insertionMode should NOT be here yet, it comes from backend at point of use.
   };
 }
 const CONVERSATION_HISTORY_KEY = 'checkra_conversation_history';
@@ -39,6 +40,7 @@ interface AppliedFixInfo {
   appliedWrapperElement: HTMLDivElement | null; // Reference to the '.checkra-feedback-applied-fix' wrapper
   isCurrentlyFixed: boolean; // Tracks if the displayed version in the wrapper is the fix
   stableTargetSelector: string; // ADDED: A stable selector for the original element
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'; // ADDED: How the fix was applied
 }
 
 // localStorage keys for pending actions
@@ -62,10 +64,12 @@ export class FeedbackViewerImpl {
   private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
   private currentFixId: string | null = null; // Unique ID for the element being worked on
   private stableSelectorForCurrentCycle: string | null = null; // ADDED: Stable selector for the current cycle
+  private currentElementInsertionMode: 'replace' | 'insertBefore' | 'insertAfter' = 'replace'; // Added
   private fixIdCounter: number = 0; // Counter for generating unique IDs
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
   private activeStreamingAiItem: ConversationItem | null = null; // ADDED: To track the current AI message being streamed
+  private selectionPlusIconElement: HTMLDivElement | null = null; // Added for persistent '+' icon
 
   // --- Quick Suggestion Flow ---
   private queuedPromptText: string | null = null; // Stores prompt chosen before element selection
@@ -240,8 +244,11 @@ export class FeedbackViewerImpl {
 
     // Optional: Clear history state if needed on full cleanup?
     // this.conversationHistory = []; 
-    this.removeSelectionHighlight();
-
+    this.removeSelectionHighlight(); // This will now also handle the persistent plus icon
+    if (this.selectionPlusIconElement && this.selectionPlusIconElement.parentNode) {
+      this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
+      this.selectionPlusIconElement = null;
+    }
   }
 
   // --- Public API ---
@@ -256,42 +263,40 @@ export class FeedbackViewerImpl {
   public prepareForInput(
     imageDataUrl: string | null,
     selectedHtml: string | null,
-    targetRect: DOMRect | null,
-    targetElement: Element | null
+    targetRect: DOMRect | null, 
+    targetElement: Element | null,
+    clickX: number, 
+    clickY: number,
+    effectiveBackgroundColor: string | null,
+    insertionMode: 'replace' | 'insertBefore' | 'insertAfter' 
   ): void {
     if (!this.domManager || !this.domElements) {
       customError("[FeedbackViewerLogic] Cannot prepare for input: DOM Manager or elements not initialized.");
       return;
     }
+    
+    this.removeSelectionHighlight(); // Clear previous selection visuals first
 
     this.currentImageDataUrl = imageDataUrl;
+    this.currentElementInsertionMode = insertionMode; 
 
-    const isElementSelected = !!(targetElement && targetElement !== document.body); // Ensure boolean
+    const isElementSelected = !!(targetElement && targetElement !== document.body); 
 
-    if (isElementSelected && targetElement) { // Added targetElement check for type safety
+    if (isElementSelected && targetElement) { 
       this.stableSelectorForCurrentCycle = generateStableSelector(targetElement);
-      this.originalOuterHTMLForCurrentCycle = selectedHtml; // Should only be set if an element is truly selected
-    } else {
-      // Handles null targetElement or document.body selection
-      this.stableSelectorForCurrentCycle = 'body';
-      this.originalOuterHTMLForCurrentCycle = document.body.outerHTML; // Fallback or default context
-      if (targetElement === document.body) {
-        // Removed: this.initialSelectedElement = document.body; // Explicitly set for clarity if it was body
-      }
-    }
-
-    // Generate a NEW fixId for this NEW interaction cycle
-    this.currentFixId = `checkra-fix-${this.fixIdCounter++}`;
-    this.removeSelectionHighlight(); // Remove from previous element
-
-    if (isElementSelected && targetElement) { // Ensure targetElement is not null here
-      targetElement.classList.add('checkra-selected-element-outline');
-      this.currentlyHighlightedElement = targetElement;
+      this.originalOuterHTMLForCurrentCycle = selectedHtml; 
+      this.currentlyHighlightedElement = targetElement; // Store the new one
+      this.updateSelectionVisuals(targetElement, insertionMode); // Apply new visuals
+      // currentFixId is now set correctly inside this block
+      this.currentFixId = `checkra-fix-${this.fixIdCounter++}`;
       targetElement.setAttribute('data-checkra-fix-id', this.currentFixId);
     } else {
-      this.currentlyHighlightedElement = null; // No highlight on body or if no selection
+      this.stableSelectorForCurrentCycle = 'body';
+      this.originalOuterHTMLForCurrentCycle = document.body.outerHTML; 
+      this.currentlyHighlightedElement = null; // No specific element highlighted
+      this.updateSelectionVisuals(null, 'replace'); // Clear any persistent visuals
+      this.currentFixId = `checkra-fix-${this.fixIdCounter++}`; // Still need a fix ID for body context
     }
-
 
     // Reset fix-specific state for this NEW cycle
     this.fixedOuterHTMLForCurrentCycle = null;
@@ -316,10 +321,8 @@ export class FeedbackViewerImpl {
 
     // --- AUTO SUBMIT FLOW (if prompt was chosen before selection) ---
     if (this.queuedPromptText && this.domElements) {
-      // Put the queued prompt into the textarea and submit automatically
       this.domElements.promptTextarea.value = this.queuedPromptText;
-      this.queuedPromptText = null; // Reset before submission to avoid re-entrance
-      // Directly call handleSubmit which will read the textarea value we just set
+      this.queuedPromptText = null; 
       this.handleSubmit();
     }
   }
@@ -373,7 +376,14 @@ export class FeedbackViewerImpl {
       if (lastHistoryAI) {
         customWarn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - found a different streaming AI item in history. Finalizing it.", lastHistoryAI);
         lastHistoryAI.isStreaming = false;
-        this.extractAndStoreFixHtml();
+        this.extractAndStoreFixHtml(); // Ensure fix HTML is extracted for this fallback case too
+        if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
+            lastHistoryAI.fix = { // Also store fix data if applicable
+                originalHtml: this.originalOuterHTMLForCurrentCycle,
+                fixedHtml: this.fixedOuterHTMLForCurrentCycle,
+                fixId: this.currentFixId
+            };
+        }
         this.saveHistory();
         this.domManager.updateLastAIMessage(lastHistoryAI.content, false);
       } else {
@@ -392,12 +402,15 @@ export class FeedbackViewerImpl {
 
     if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
       const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
+      // Use this.currentElementInsertionMode determined by the screen capture click zone
+      const modeToUse = this.currentElementInsertionMode;
+
       if (lastAiItem && lastAiItem.fix) {
-        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, this.stableSelectorForCurrentCycle || undefined);
+        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, modeToUse, this.stableSelectorForCurrentCycle || undefined);
       } else {
         customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
         if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle) {
-          this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, this.stableSelectorForCurrentCycle || undefined);
+          this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, modeToUse, this.stableSelectorForCurrentCycle || undefined);
         } else {
           customError('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
         }
@@ -441,19 +454,18 @@ export class FeedbackViewerImpl {
       return;
     }
 
-    eventEmitter.emit('viewerWillHide'); // Emit before hiding
+    eventEmitter.emit('viewerWillHide'); 
     this.domManager.hide();
     this.isVisible = false;
-    this.onToggleCallback(false); // Inform parent about visibility change
-    this.removeSelectionHighlight(); // Remove any active highlight
-    this.resetStateForNewSelection(); // Reset for next interaction cycle
+    this.onToggleCallback(false); 
+    this.removeSelectionHighlight(); // This will clear classes and the persistent plus icon
+    this.resetStateForNewSelection(); 
     
     if (initiatedByUser && fromCloseButton) {
       localStorage.setItem(this.PANEL_CLOSED_BY_USER_KEY, 'true');
-      // Show availability toast again to remind user of shortcut
       this.domManager?.showAvailabilityToast();
     }
-    eventEmitter.emit('viewerDidHide'); // Emit after hiding
+    eventEmitter.emit('viewerDidHide'); 
   }
 
   private resetStateForNewSelection(): void {
@@ -501,6 +513,20 @@ export class FeedbackViewerImpl {
       this.domManager?.setPromptState(true, ''); 
       this.domManager?.updateSubmitButtonState(true); 
       return; 
+    }
+
+    // ADDED: Handle /save command
+    if (promptText?.toLowerCase() === '/save') {
+      if (this.appliedFixes.size === 0) {
+        this.renderUserMessage("No changes have been applied to save as a draft.");
+        this.domManager?.setPromptState(true, '');
+        this.domManager?.updateSubmitButtonState(true);
+        return;
+      }
+      this.saveSnapshotAsDraft(); // New method to handle saving logic
+      this.domManager?.setPromptState(true, '');
+      this.domManager?.updateSubmitButtonState(true);
+      return;
     }
 
     // ADDED: Handle /logout command
@@ -559,13 +585,17 @@ export class FeedbackViewerImpl {
     this.domManager.showPromptInputArea(false, promptText);
 
     const imageKeywords = ["image", "photo", "picture", "screenshot", "visual", "look", "style", "design", "appearance", "graphic", "illustration", "background", "banner", "logo"];
-    const promptHasImageKeyword = imageKeywords.some(keyword => promptText.includes(keyword));
+    const promptHasImageKeyword = imageKeywords.some(keyword => promptText.toLowerCase().includes(keyword)); // Ensure keyword is already lowercase or use keyword.toLowerCase()
     let imageDataToSend: string | null = null;
 
     if (promptHasImageKeyword && this.currentImageDataUrl) {
       imageDataToSend = this.currentImageDataUrl;
-    } else if (promptHasImageKeyword) {
+    } else if (promptHasImageKeyword && !this.currentImageDataUrl) {
+      customWarn('[FeedbackViewerLogic] Prompt suggests a design request, but no screenshot was captured/available from element selection.');
+      // imageDataToSend remains null, so no image will be sent
     } else {
+      // Prompt is not design-related, or no screenshot desired by prompt.
+      // imageDataToSend remains null, so no image will be sent
     }
 
     this.saveHistory({ type: 'user', content: promptText });
@@ -591,7 +621,8 @@ export class FeedbackViewerImpl {
       return;
     }
 
-    fetchFeedback(imageDataToSend, promptText, processedHtmlForAI);
+    // Pass this.currentElementInsertionMode to fetchFeedback
+    fetchFeedback(imageDataToSend, promptText, processedHtmlForAI, this.currentElementInsertionMode);
     // After submitting, clear the textarea and reset button for general prompts too
     this.domManager?.setPromptState(true, ''); 
     this.domManager?.updateSubmitButtonState(true); // Re-enable submit, assuming selection is still valid or will be re-evaluated
@@ -613,36 +644,38 @@ export class FeedbackViewerImpl {
 
     if (fixInfo && wrapperElement) {
       try {
-        // --- Use Fragment for Revert (originalOuterHTML might be single element) ---
-        const originalFragment = this.createFragmentFromHTML(fixInfo.originalOuterHTML);
-        if (!originalFragment || originalFragment.childNodes.length === 0) {
-          throw new Error('Failed to parse original HTML into non-empty fragment for reverting.');
+        if (fixInfo.insertionMode === 'replace') {
+          const originalFragment = this.createFragmentFromHTML(fixInfo.originalOuterHTML);
+          if (!originalFragment || originalFragment.childNodes.length === 0) {
+            throw new Error('Failed to parse original HTML into non-empty fragment for reverting (replace mode).');
+          }
+          const firstOriginalElement = originalFragment.firstElementChild;
+          if (firstOriginalElement) {
+            firstOriginalElement.setAttribute('data-checkra-fix-id', fixId);
+          }
+          wrapperElement.replaceWith(originalFragment);
+        } else { // 'insertBefore' or 'insertAfter'
+          wrapperElement.remove(); // Simply remove the added adjacent section
         }
 
-        // Re-add ID to the first element of the fragment if it exists
-        const firstOriginalElement = originalFragment.firstElementChild;
-        if (firstOriginalElement) {
-          firstOriginalElement.setAttribute('data-checkra-fix-id', fixId); // Re-add ID temporarily
-        }
-
-        wrapperElement.replaceWith(originalFragment);
-        // --- END EDIT ---
-
-
-        // Clean up listeners and map entry
         const listeners = this.appliedFixListeners.get(fixId);
         if (listeners) {
+          // Detach listeners before removing from map to be safe, though wrapperElement.remove() might also do this for its children
+          const closeBtn = wrapperElement.querySelector('.feedback-fix-close-btn');
+          const toggleBtn = wrapperElement.querySelector('.feedback-fix-toggle');
+          const copyBtn = wrapperElement.querySelector('.feedback-fix-copy-btn');
+          closeBtn?.removeEventListener('click', listeners.close);
+          toggleBtn?.removeEventListener('click', listeners.toggle);
+          copyBtn?.removeEventListener('click', listeners.copy);
           this.appliedFixListeners.delete(fixId);
         }
         this.appliedFixes.delete(fixId);
 
       } catch (error) {
-        customError(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId}:`, error);
-        // Optionally show an error to the user?
+        customError(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId} (mode: ${fixInfo.insertionMode}):`, error);
       }
     } else {
       customWarn(`[FeedbackViewerLogic] Could not find fix info or wrapper element for Fix ID: ${fixId} during close.`);
-      // Attempt cleanup if possible
       if (wrapperElement) wrapperElement.remove();
       if (this.appliedFixes.has(fixId)) this.appliedFixes.delete(fixId);
       if (this.appliedFixListeners.has(fixId)) this.appliedFixListeners.delete(fixId);
@@ -658,57 +691,74 @@ export class FeedbackViewerImpl {
 
     if (fixInfo && wrapperElement && contentContainer && toggleButton) {
       try {
-        const htmlToInsert = fixInfo.isCurrentlyFixed
-          ? fixInfo.originalOuterHTML // Might be single element
-          : fixInfo.fixedOuterHTML; // Might be multiple
+        if (fixInfo.insertionMode === 'replace') {
+          const htmlToInsert = fixInfo.isCurrentlyFixed
+            ? fixInfo.originalOuterHTML
+            : fixInfo.fixedOuterHTML;
+          const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
+          if (!newContentFragment || newContentFragment.childNodes.length === 0) {
+            throw new Error('Failed to parse HTML into non-empty fragment for toggle (replace mode).');
+          }
+          if (!contentContainer) { 
+               throw new Error('Content container not found for replace mode toggle.');
+          }
+          contentContainer.innerHTML = '';
+          contentContainer.appendChild(newContentFragment);
+          fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
 
-        // --- Use Fragment for Toggle ---
-        const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
-        if (!newContentFragment || newContentFragment.childNodes.length === 0) {
-          throw new Error('Failed to parse HTML into non-empty fragment for toggle.');
+          if (fixInfo.isCurrentlyFixed) {
+            toggleButton.innerHTML = HIDE_FIX_SVG; 
+            toggleButton.title = "Toggle Original Version";
+            toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
+          } else {
+            toggleButton.innerHTML = DISPLAY_FIX_SVG; 
+            toggleButton.title = "Toggle Fixed Version";
+            toggleButton.style.backgroundColor = '';
+          }
+        } else { // 'insertBefore' or 'insertAfter'
+          fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed; 
+          // const contentOfWrapper = wrapperElement.querySelector('.checkra-applied-fix-content') as HTMLElement | null;
+          // contentContainer is already queried above and is the same as contentOfWrapper here.
+          if (contentContainer instanceof HTMLElement) { // Ensure contentContainer is an HTMLElement
+              if (fixInfo.isCurrentlyFixed) { // Show content
+                  contentContainer.style.display = '';
+                  toggleButton.innerHTML = HIDE_FIX_SVG;
+                  toggleButton.title = "Hide This Section Content"; // Title reflects content toggle
+                  toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
+              } else { // Hide content
+                  contentContainer.style.display = 'none';
+                  toggleButton.innerHTML = DISPLAY_FIX_SVG;
+                  toggleButton.title = "Show This Section Content"; // Title reflects content toggle
+                  toggleButton.style.backgroundColor = '';
+              }
+          } else {
+              customError(`[FeedbackViewerLogic] Content container not found or not HTMLElement within wrapper for fixId ${fixId} during insertBefore/After toggle.`);
+          }
         }
-
-        contentContainer.innerHTML = ''; // Clear existing content
-        contentContainer.appendChild(newContentFragment); // Append the fragment
-        // --- END EDIT ---
-
-
-        // Update state
-        fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
-
-        // --- Update toggle button appearance ---
-        if (fixInfo.isCurrentlyFixed) {
-          toggleButton.innerHTML = DISPLAY_FIX_SVG;
-          toggleButton.title = "Toggle Original Version";
-          toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // Active color
-        } else {
-          toggleButton.innerHTML = HIDE_FIX_SVG;
-          toggleButton.title = "Toggle Fixed Version";
-          toggleButton.style.backgroundColor = ''; // Reset to default CSS background
-        }
-
       } catch (error) {
-        customError(`[FeedbackViewerLogic] Error toggling fix ${fixId}:`, error);
-        // Attempt to restore a known state? Maybe revert to fixed?
-        if (!fixInfo.isCurrentlyFixed) { // If failed going back to fixed
+        customError(`[FeedbackViewerLogic] Error toggling fix ${fixId} (mode: ${fixInfo.insertionMode}):`, error);
+        // Simplified error handling for toggle; try to restore a consistent state if possible
+        if (fixInfo.insertionMode === 'replace' && !fixInfo.isCurrentlyFixed) {
           try {
-            // --- Use Fragment for Toggle Error Restore ---
             const fixedFragment = this.createFragmentFromHTML(fixInfo.fixedOuterHTML);
             if (fixedFragment && fixedFragment.childNodes.length > 0) {
               contentContainer.innerHTML = '';
               contentContainer.appendChild(fixedFragment);
               fixInfo.isCurrentlyFixed = true;
-              // Restore button state
               toggleButton.innerHTML = HIDE_FIX_SVG;
               toggleButton.title = "Toggle Original Version";
               toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
-            } else {
-              customError(`[FeedbackViewerLogic] Failed to parse fixed HTML during toggle error restore for ${fixId}.`);
             }
-            // --- END EDIT ---
           } catch (restoreError) {
-            customError(`[FeedbackViewerLogic] Failed to restore fixed state for ${fixId} after toggle error:`, restoreError);
+            customError(`[FeedbackViewerLogic] Failed to restore fixed state for ${fixId} after toggle error (replace):`, restoreError);
           }
+        } else if (fixInfo.insertionMode !== 'replace' && !fixInfo.isCurrentlyFixed) {
+           // If adjacent and failed while trying to show it, try to ensure it's shown
+           if (wrapperElement instanceof HTMLElement) wrapperElement.style.display = '';
+           fixInfo.isCurrentlyFixed = true;
+           toggleButton.innerHTML = HIDE_FIX_SVG;
+           toggleButton.title = "Hide This Section";
+           toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
         }
       }
     } else {
@@ -896,34 +946,29 @@ Your job:
       this.fixedOuterHTMLForCurrentCycle = null;
     }
   }
-  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, stableSelector?: string): void {
+  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, insertionMode: 'replace' | 'insertBefore' | 'insertAfter', stableSelector?: string): void {
     if (!this.domManager || !this.domElements) {
       customWarn('[FeedbackViewerLogic DEBUG] applyFixToPage: Cannot apply fix: Missing DOM Manager or elements.');
       return;
     }
 
     try {
-      let elementToReplace = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
+      const originalSelectedElement = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
 
-      let insertionParent: Node | null = null;
-      let insertionBeforeNode: Node | null = null;
-
-      if (elementToReplace) {
-        if (!elementToReplace.parentNode) {
-          customError(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} has no parent node.`);
-          throw new Error(`Original element with ID ${fixId} has no parent node.`);
-        }
-        insertionParent = elementToReplace.parentNode;
-        insertionBeforeNode = elementToReplace.nextSibling;
-        elementToReplace.remove(); 
-      } else {
+      if (!originalSelectedElement) {
         customError(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} not found. Cannot apply fix.`);
         this.showError(`Failed to apply fix: Original target element for fix ${fixId} not found.`);
         return;
       }
+      
+      if (!originalSelectedElement.parentNode) {
+        customError(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} has no parent node.`);
+        this.showError(`Failed to apply fix: Original target for fix ${fixId} has no parent.`);
+        return;
+      }
 
       const wrapper = document.createElement('div');
-      wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in'; // ADD fade-in class
+      wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in';
       wrapper.setAttribute('data-checkra-fix-id', fixId);
 
       const contentContainer = document.createElement('div');
@@ -942,22 +987,34 @@ Your job:
       wrapper.appendChild(toggleBtn);
       wrapper.appendChild(copyBtn);
 
-      insertionParent.insertBefore(wrapper, insertionBeforeNode);
+      const parent = originalSelectedElement.parentNode;
+
+      if (insertionMode === 'replace') {
+        parent.insertBefore(wrapper, originalSelectedElement.nextSibling);
+        originalSelectedElement.remove();
+      } else if (insertionMode === 'insertBefore') {
+        parent.insertBefore(wrapper, originalSelectedElement);
+      } else if (insertionMode === 'insertAfter') {
+        parent.insertBefore(wrapper, originalSelectedElement.nextSibling);
+      }
 
       const finalStableSelector = stableSelector || this.stableSelectorForCurrentCycle;
       if (!finalStableSelector) {
         customError(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}. Cannot reliably apply or store fix.`);
         this.showError(`Failed to apply fix: Stable target selector missing for fix ${fixId}.`);
+        // Attempt to remove wrapper if it was inserted, to prevent orphaned fix elements
+        if (wrapper.parentNode) wrapper.remove();
         return;
       }
 
       const fixInfo: AppliedFixInfo = {
-        originalElementId: fixId, // Session-specific ID
+        originalElementId: fixId,
         originalOuterHTML: originalHtml,
         fixedOuterHTML: fixedHtml,
         appliedWrapperElement: wrapper,
         isCurrentlyFixed: true,
-        stableTargetSelector: finalStableSelector // Use the determined stable selector
+        stableTargetSelector: finalStableSelector,
+        insertionMode: insertionMode // Store the mode used
       };
       this.appliedFixes.set(fixId, fixInfo);
 
@@ -1195,8 +1252,20 @@ Your job:
   }
   private removeSelectionHighlight(): void {
     if (this.currentlyHighlightedElement) {
-      this.currentlyHighlightedElement.classList.remove('checkra-selected-element-outline');
-      this.currentlyHighlightedElement = null;
+      this.currentlyHighlightedElement.classList.remove(
+        'checkra-selected-element-outline', // Old class for replace
+        'checkra-hover-top', // Old hover class, just in case
+        'checkra-hover-bottom', // Old hover class, just in case
+        'checkra-highlight-container',
+        // New persistent selection classes
+        'checkra-selected-insert-before',
+        'checkra-selected-insert-after',
+        'checkra-selected-replace'
+      );
+    }
+    if (this.selectionPlusIconElement && this.selectionPlusIconElement.parentNode) {
+      this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
+      this.selectionPlusIconElement = null;
     }
   }
   private handleImageGenerationStart(data: { prompt?: string }): void {
@@ -1214,32 +1283,38 @@ Your job:
       this.renderUserMessage("No changes have been applied to publish.");
       return;
     }
-    const changes = Array.from(this.appliedFixes.entries()); // Get data for potential storage
+    const changesToPublish = Array.from(this.appliedFixes.values()).map(fixInfo => ({
+      targetSelector: fixInfo.stableTargetSelector,
+      appliedHtml: fixInfo.fixedOuterHTML,
+      sessionFixId: fixInfo.originalElementId
+    }));
     const siteId = getSiteId();
-    const clientGeneratedSnapshotId = crypto.randomUUID();
-    const snapshotData = {
-      siteId, snapshotId: clientGeneratedSnapshotId, timestamp: new Date().toISOString(),
-      pageUrl: window.location.href, changes: this.appliedFixes.size > 0 ? Array.from(this.appliedFixes.values()).map(fixInfo => ({ 
-        targetSelector: fixInfo.stableTargetSelector, 
-        appliedHtml: fixInfo.fixedOuterHTML, 
-        sessionFixId: fixInfo.originalElementId 
-      })) : [],
+    const clientGeneratedSnapshotId = crypto.randomUUID(); // This is the key ID
+
+    const snapshotPayload = {
+      snapshotId: clientGeneratedSnapshotId,
+      timestamp: new Date().toISOString(),
+      pageUrl: window.location.href,
+      changes: changesToPublish,
+      publish: true // Mark for publishing
     };
+
     const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
 
     try {
-      this.renderUserMessage("Publishing changes...");
+      this.renderUserMessage("Preparing to publish changes...");
       const postResponse = await fetchProtected(postSnapshotUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snapshotData),
+        body: JSON.stringify(snapshotPayload),
       });
+
       if (!postResponse.ok) {
         const errorBody = await postResponse.text();
-        let specificErrorMessage = `Saving snapshot failed: ${postResponse.status} ${postResponse.statusText}`;
+        let specificErrorMessage = `Storing snapshot for publish failed: ${postResponse.status} ${postResponse.statusText}`;
         try {
             const errorJson = JSON.parse(errorBody);
-            if (errorJson && errorJson.message) { 
+            if (errorJson && errorJson.message) {
                 specificErrorMessage += ` - ${errorJson.message}`;
             }
         } catch (parseErr) {
@@ -1247,86 +1322,102 @@ Your job:
         }
         throw new Error(specificErrorMessage);
       }
-      const postResult = await postResponse.json(); 
-      if (postResult.publishedVariantId && postResult.snapshotId) {
-        const shortPublishedId = postResult.publishedVariantId; 
-        const fullSnapshotIdUUID = postResult.snapshotId; 
-        this.renderUserMessage(`Published ID: ${shortPublishedId}`);
-        const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${shortPublishedId}`;
-        try {
-          const promoteResponse = await fetchProtected(promoteUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ snapshotIdToPromote: fullSnapshotIdUUID }), 
-          });
-          if (!promoteResponse.ok) {
-            const promoteErrorBody = await promoteResponse.text();
-            let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
-            try {
-                const errorJson = JSON.parse(promoteErrorBody);
-                if (errorJson && errorJson.message) { 
-                    specificPromoteErrorMessage += ` - ${errorJson.message}`;
-                }
-            } catch (parseErr) {
-                specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
-            }
-            throw new Error(specificPromoteErrorMessage);
-          }
-          
-          const shareUrl = `${window.location.origin}${window.location.pathname}?checkra-variant-id=${shortPublishedId}`;
-          this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank">${shareUrl}</a>`);
-        } catch (promoteError) {
-          if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
-            await this.handleAuthenticationRequiredAndRedirect('publish', changes, promoteError as AuthenticationRequiredError); 
-          } else {
-            customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
-            if (promoteError instanceof Error) {
-              customError("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
-              customError("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
-              if (promoteError.stack) {
-                customError("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
+
+      const postResult = await postResponse.json();
+      // According to new API: postResult contains { message, snapshotId (clientGeneratedSnapshotId), accessUrl, s3SnapshotPath }
+      // We need clientGeneratedSnapshotId for the next step.
+
+      if (postResult.snapshotId !== clientGeneratedSnapshotId) {
+        customError("[FeedbackViewerImpl] Mismatch between client-generated snapshotId and server response.", { client: clientGeneratedSnapshotId, server: postResult.snapshotId });
+        this.renderUserMessage("Error: Snapshot ID mismatch after initial save. Cannot proceed with publishing.");
+        return;
+      }
+
+      this.renderUserMessage(`Snapshot ${clientGeneratedSnapshotId.substring(0,8)}... stored. Now promoting to live...`);
+
+      // The snapshotId in the path is the clientGeneratedSnapshotId
+      const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${clientGeneratedSnapshotId}`;
+
+      try {
+        const promoteResponse = await fetchProtected(promoteUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}), // Empty body as per new API
+        });
+
+        if (!promoteResponse.ok) {
+          const promoteErrorBody = await promoteResponse.text();
+          let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
+          try {
+              const errorJson = JSON.parse(promoteErrorBody);
+              if (errorJson && errorJson.message) {
+                  specificPromoteErrorMessage += ` - ${errorJson.message}`;
               }
-              if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
-                const response = (promoteError as any).response as Response;
-                customError("[FeedbackViewerImpl] Underlying promote response status:", response.status);
-                try {
-                   const responseBody = await response.text();
-                   customError("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
-                } catch (bodyError) {
-                   customError("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
-                }
-             }
-            } else {
-              customError("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
-            }
-            const shortPublishedId = snapshotData.snapshotId.substring(0,8); 
-            const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
-            this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
-            this.renderUserMessage(`Error promoting: ${displayErrorMessage}. Snapshot saved (ID: ${shortPublishedId}...) but not live.`);
+          } catch (parseErr) {
+              specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
           }
+          throw new Error(specificPromoteErrorMessage);
         }
-      } else {
-        customWarn("[FeedbackViewerImpl] Snapshot POST successful, but publishedVariantId or snapshotId missing in response:", postResult);
-        this.renderUserMessage("Snapshot saved, but could not get necessary IDs for promotion.");
+
+        const promoteResult = await promoteResponse.json();
+        // According to new API: promoteResult contains { message, siteId, snapshotId (promoted), promotedAt, cdnUrl }
+        if (promoteResult.cdnUrl && promoteResult.snapshotId) {
+          this.renderUserMessage(`Published successfully! Snapshot ID: ${promoteResult.snapshotId.substring(0,8)}...`);
+          const shareUrl = promoteResult.cdnUrl; // Use the cdnUrl directly
+          this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank" rel="noopener noreferrer">${shareUrl}</a>`);
+        } else {
+          customWarn("[FeedbackViewerImpl] Promotion successful, but cdnUrl or snapshotId missing in response:", promoteResult);
+          this.renderUserMessage(`Snapshot ${clientGeneratedSnapshotId.substring(0,8)}... promoted, but could not get the public share URL.`);
+        }
+
+      } catch (promoteError) {
+        if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
+          // Pass the original 'publish' action type and the full snapshotPayload (or relevant parts)
+          // so it can be retried. For simplicity, passing the fact that it was a publish action.
+          // The 'changesToPublish' might be too large for localStorage if not careful.
+          // Let's store a simplified marker for publish and rely on this.appliedFixes to be re-evaluated.
+          await this.handleAuthenticationRequiredAndRedirect('publish', { /* minimal data or rely on current state */ }, promoteError as AuthenticationRequiredError);
+          this.renderUserMessage("Authentication required to promote. Please log in to continue.");
+        } else {
+          customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
+          if (promoteError instanceof Error) {
+            customError("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
+            customError("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
+            if (promoteError.stack) customError("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
+            if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
+              const response = (promoteError as any).response as Response;
+              customError("[FeedbackViewerImpl] Underlying promote response status:", response.status);
+              try {
+                 const responseBody = await response.text();
+                 customError("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
+              } catch (bodyError) {
+                 customError("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
+              }
+           }
+          } else {
+            customError("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
+          }
+          const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
+          this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
+          this.renderUserMessage(`Error promoting snapshot ${clientGeneratedSnapshotId.substring(0,8)}...: ${displayErrorMessage}. It was stored but is not live.`);
+        }
       }
     } catch (error) {
       if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        await this.handleAuthenticationRequiredAndRedirect('publish', changes, error as AuthenticationRequiredError); 
+        // Store a simplified marker for publish action.
+        await this.handleAuthenticationRequiredAndRedirect('publish', { /* minimal data or rely on current state */ }, error as AuthenticationRequiredError);
+        this.renderUserMessage("Authentication required to publish. Please log in to continue.");
       } else {
-        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot. Error details follow.");
+        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot for publish. Error details follow.");
         if (error instanceof Error) {
           customError("[FeedbackViewerImpl] Error Name:", error.name);
           customError("[FeedbackViewerImpl] Error Message:", error.message);
-          if (error.stack) {
-            customError("[FeedbackViewerImpl] Error Stack:", error.stack);
-          }
-          // Check if we have a response object attached to the error, common in HTTP error wrappers
-          // This is a common pattern but not standard for all Error objects.
+          if (error.stack) customError("[FeedbackViewerImpl] Error Stack:", error.stack);
           if ((error as any).response && typeof (error as any).response.status === 'number') {
              const response = (error as any).response as Response;
              customError("[FeedbackViewerImpl] Underlying response status:", response.status);
              try {
-                const responseBody = await response.text(); // Attempt to read body if not already read
+                const responseBody = await response.text();
                 customError("[FeedbackViewerImpl] Underlying response body:", responseBody);
              } catch (bodyError) {
                 customError("[FeedbackViewerImpl] Could not read underlying response body:", bodyError);
@@ -1335,9 +1426,8 @@ Your job:
         } else {
           customError("[FeedbackViewerImpl] Caught a non-Error object:", error);
         }
-
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
-        this.showError(`Failed to save snapshot: ${displayErrorMessage}`);
+        this.showError(`Failed to save snapshot for publishing: ${displayErrorMessage}`);
       }
     }
   }
@@ -1558,6 +1648,140 @@ Your job:
       if (this.domElements?.promptTextarea) {
         this.domElements.promptTextarea.value = promptText;
         this.domElements.promptTextarea.focus();
+      }
+    }
+  }
+
+  private updateSelectionVisuals(element: Element | null, mode: 'replace' | 'insertBefore' | 'insertAfter'): void {
+    this.removeSelectionHighlight(); 
+
+    if (!element) {
+        this.currentlyHighlightedElement = null; 
+        return;
+    }
+    
+    this.currentlyHighlightedElement = element; 
+    element.classList.add('checkra-highlight-container'); 
+
+    if (mode === 'insertBefore') {
+      element.classList.add('checkra-selected-insert-before');
+      this.createPersistentPlusIcon('top', element as HTMLElement);
+    } else if (mode === 'insertAfter') {
+      element.classList.add('checkra-selected-insert-after');
+      this.createPersistentPlusIcon('bottom', element as HTMLElement);
+    } else { // replace
+      element.classList.add('checkra-selected-replace');
+      // No plus icon for replace mode
+    }
+  }
+
+  private createPersistentPlusIcon(position: 'top' | 'bottom', parentElement: HTMLElement): void {
+    if (!this.selectionPlusIconElement) {
+      this.selectionPlusIconElement = document.createElement('div');
+      this.selectionPlusIconElement.className = 'checkra-insert-indicator'; // Uses styles from screen-capture.ts
+      this.selectionPlusIconElement.textContent = '+';
+      document.body.appendChild(this.selectionPlusIconElement);
+    }
+    this.selectionPlusIconElement.classList.remove('top', 'bottom');
+    this.selectionPlusIconElement.classList.add(position);
+
+    const parentRect = parentElement.getBoundingClientRect();
+    if (position === 'top') {
+      this.selectionPlusIconElement.style.top = `${parentRect.top + window.scrollY - 11}px`;
+    } else { // bottom
+      this.selectionPlusIconElement.style.top = `${parentRect.bottom + window.scrollY - 11}px`;
+    }
+    this.selectionPlusIconElement.style.left = `${parentRect.left + window.scrollX + parentRect.width / 2 - 11}px`;
+    this.selectionPlusIconElement.style.display = 'flex';
+  }
+
+  // Method to save the current changes as a private draft
+  private async saveSnapshotAsDraft(): Promise<void> {
+    if (this.appliedFixes.size === 0) {
+      customWarn("[FeedbackViewerImpl] No fixes applied. Nothing to save as draft.");
+      // User message is handled by the caller (handleSubmit) for this specific case
+      return;
+    }
+
+    const changesToSave = Array.from(this.appliedFixes.values()).map(fixInfo => ({
+      targetSelector: fixInfo.stableTargetSelector,
+      appliedHtml: fixInfo.fixedOuterHTML,
+      sessionFixId: fixInfo.originalElementId
+    }));
+    const siteId = getSiteId();
+    const clientGeneratedSnapshotId = crypto.randomUUID();
+
+    const snapshotPayload = {
+      snapshotId: clientGeneratedSnapshotId,
+      timestamp: new Date().toISOString(),
+      pageUrl: window.location.href,
+      changes: changesToSave,
+      publish: false // Explicitly save as draft
+    };
+
+    const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
+
+    try {
+      this.renderUserMessage("Saving draft...");
+      const postResponse = await fetchProtected(postSnapshotUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshotPayload),
+      });
+
+      if (!postResponse.ok) {
+        const errorBody = await postResponse.text();
+        let specificErrorMessage = `Saving draft failed: ${postResponse.status} ${postResponse.statusText}`;
+        try {
+            const errorJson = JSON.parse(errorBody);
+            if (errorJson && errorJson.message) {
+                specificErrorMessage += ` - ${errorJson.message}`;
+            }
+        } catch (parseErr) {
+            specificErrorMessage += ` - ${errorBody}`;
+        }
+        throw new Error(specificErrorMessage);
+      }
+
+      const postResult = await postResponse.json();
+      // Expected response: { message, snapshotId, accessUrl, s3SnapshotPath }
+
+      if (postResult.snapshotId === clientGeneratedSnapshotId && postResult.accessUrl) {
+        this.renderUserMessage(`Draft saved successfully! Snapshot ID: ${postResult.snapshotId.substring(0,8)}...`);
+        this.renderUserMessage(`Access your draft (owner only): <a href="${postResult.accessUrl}" target="_blank" rel="noopener noreferrer">${postResult.accessUrl}</a>`);
+      } else {
+        customWarn("[FeedbackViewerImpl] Save draft successful, but snapshotId or accessUrl missing/mismatched in response:", postResult);
+        this.renderUserMessage("Draft saved, but could not get the access URL. Snapshot ID: " + (postResult.snapshotId || clientGeneratedSnapshotId).substring(0,8) + "...");
+      }
+
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
+        // For saving drafts, we might just inform the user they need to log in.
+        // Or, we could try to store the 'save' action similar to 'publish', but it's less critical.
+        // For now, inform and let them retry manually after login.
+        await this.handleAuthenticationRequiredAndRedirect('saveDraft', { /* minimal data */ }, error as AuthenticationRequiredError);
+        this.renderUserMessage("Authentication required to save draft. Please log in and try again.");
+      } else {
+        customError("[FeedbackViewerImpl] Error during saving draft. Error details follow.");
+        if (error instanceof Error) {
+          customError("[FeedbackViewerImpl] Draft Save Error Name:", error.name);
+          customError("[FeedbackViewerImpl] Draft Save Error Message:", error.message);
+          if (error.stack) customError("[FeedbackViewerImpl] Draft Save Error Stack:", error.stack);
+          if ((error as any).response && typeof (error as any).response.status === 'number') {
+             const response = (error as any).response as Response;
+             customError("[FeedbackViewerImpl] Underlying draft save response status:", response.status);
+             try {
+                const responseBody = await response.text();
+                customError("[FeedbackViewerImpl] Underlying draft save response body:", responseBody);
+             } catch (bodyError) {
+                customError("[FeedbackViewerImpl] Could not read underlying draft save response body:", bodyError);
+             }
+          }
+        } else {
+          customError("[FeedbackViewerImpl] Caught a non-Error object during draft save:", error);
+        }
+        const displayErrorMessage = error instanceof Error ? error.message : String(error);
+        this.showError(`Failed to save draft: ${displayErrorMessage}`);
       }
     }
   }

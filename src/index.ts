@@ -1,9 +1,11 @@
 import { initCheckra } from './core/index';
 import './core/shortcut-handler';
 import { CheckraOptions } from './types';
-import { CDN_DOMAIN } from './config';
+import { CDN_DOMAIN, API_BASE } from './config';
 import { initAnalytics } from './analytics/analytics';
 import { customWarn, customError } from './utils/logger';
+import { fetchProtected, isLoggedIn } from './auth/auth';
+import { getSiteId } from './utils/id';
 
 // Re-export core functions and types
 export { initCheckra } from './core/index';
@@ -92,63 +94,19 @@ function getFinalConfig(): CheckraOptions {
   };
 }
 
-// Check if running in a browser environment
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  checkForPublishedVersion(); // This handles ?checkra-variant-id for A/B testing
-  initAnalytics();
-
-  const initialize = () => {
-    // Check if already initialized
-    if (!(window as any).checkraInitialized) {
-      try {
-        const configFromSources = getFinalConfig(); // Gets script/global config merged with defaults
-        
-        // initCheckra is now imported from './core/index'
-        const api = initCheckra(configFromSources); 
-        
-        if (api) {
-          (window as any).checkra = api; // Expose API globally (lowercase 'c')
-          (window as any).checkraInitialized = true; // Use a consistent flag name
-          document.dispatchEvent(new CustomEvent('checkraReady'));
-        } else {
-          customError("[Checkra] Auto-initialization failed, API not returned.");
-        }
-      } catch (e) {
-        customError("[Checkra] Failed to auto-initialize:", e);
-      }
-    } else {
-    }
-  };
-
-  // Check if DOM is already loaded (e.g., script loaded async defer or at end of body)
-  if (document.readyState === 'loading') {
-    // Loading hasn't finished yet
-    document.addEventListener('DOMContentLoaded', initialize);
-  } else {
-    // `DOMContentLoaded` has already fired
-    initialize();
-  }
-}
-
-// Helper to inject a <link rel="preconnect"> for CDN
+// Helper to inject a <link rel="preconnect"> for a given URL origin
 function injectPreconnect(url: string): void {
-  if (document.head.querySelector(`link[rel="preconnect"][href="${url}"]`)) return;
-  const link = document.createElement('link');
-  link.rel = 'preconnect';
-  link.href = url;
-  link.crossOrigin = 'anonymous';
-  document.head.appendChild(link);
-}
-
-// Helper to inject a <link rel="prefetch"> for the variant JSON (high priority fetch hint)
-function injectPrefetch(url: string): void {
-  if (document.head.querySelector(`link[rel="prefetch"][href="${url}"]`)) return;
-  const link = document.createElement('link');
-  link.rel = 'prefetch';
-  link.as = 'fetch';
-  link.href = url;
-  link.crossOrigin = 'anonymous';
-  document.head.appendChild(link);
+  try {
+    const targetOrigin = new URL(url).origin;
+    if (document.head.querySelector(`link[rel="preconnect"][href="${targetOrigin}"]`)) return;
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = targetOrigin;
+    link.crossOrigin = 'anonymous'; // Often needed for cross-origin preconnects
+    document.head.appendChild(link);
+  } catch (e) {
+    customError("[Checkra] Failed to inject preconnect for URL:", url, e);
+  }
 }
 
 // Helper to temporarily hide body until patch applied
@@ -166,30 +124,49 @@ function removeFlickerGuard(styleEl: HTMLStyleElement | null): void {
   }
 }
 
-// Boot-loader logic for ?v= parameter
-async function applyPublishedSnapshot(variantId: string): Promise<void> {
-  const snapshotUrl = `https://${CDN_DOMAIN}/variants/${variantId}.json`;
+// Unified boot-loader logic for snapshots from API (?checkra-id=...)
+async function applySnapshotFromApi(snapshotId: string): Promise<void> {
+  // Ensure DOM is ready before auth checks or siteId retrieval, as these might depend on it.
+  if (document.readyState === 'loading') {
+    await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+  }
 
-  // Preconnect & prefetch hints (best-effort)
-  injectPreconnect(`https://${CDN_DOMAIN}`);
-  injectPrefetch(snapshotUrl);
+  const siteId = getSiteId();
+  if (!siteId) {
+    customError("[Checkra Bootloader] Site ID not found. Cannot fetch snapshot from API.");
+    return; // Cannot proceed without siteId for the API path
+  }
 
-  // Add flicker guard as early as possible
+  const apiUrl = `${API_BASE}/sites/${siteId}/snapshots/${snapshotId}`;
+  injectPreconnect(API_BASE); // Preconnect to the API base URL
   const guardStyle = addFlickerGuard();
+  let response: Response;
 
   try {
-    const response = await fetch(snapshotUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch snapshot: ${response.status} ${response.statusText}`);
+    const loggedIn = await isLoggedIn();
+
+    if (loggedIn) {
+      response = await fetchProtected(apiUrl, { method: 'GET' });
+    } else {
+      response = await fetch(apiUrl, { method: 'GET' });
     }
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        customWarn(`[Checkra Bootloader] Unauthorized (or not owner of private draft) for snapshot ${snapshotId}. Status: ${response.status}`);
+      } else if (response.status === 404) {
+        customWarn(`[Checkra Bootloader] Snapshot ${snapshotId} not found. Status: ${response.status}`);
+      } else {
+        customError(`[Checkra Bootloader] Failed to fetch snapshot ${snapshotId} from API: ${response.status} ${response.statusText}`);
+      }
+      removeFlickerGuard(guardStyle);
+      return;
+    }
+
     const snapshot = await response.json();
 
-    if (snapshot && snapshot.changes && Array.isArray(snapshot.changes)) {
-      if (document.readyState === 'loading') {
-        await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
-      }
-
-      // Batch DOM mutations inside a single frame for minimal layout thrash
+    if (snapshot && snapshot.changes && Array.isArray(snapshot.changes) && snapshot.changes.length > 0) {
+      // DOM should be ready here due to the check at the beginning of the function
       requestAnimationFrame(() => {
         for (const change of snapshot.changes) {
           if (change.targetSelector && typeof change.targetSelector === 'string' && typeof change.appliedHtml === 'string') {
@@ -210,30 +187,68 @@ async function applyPublishedSnapshot(variantId: string): Promise<void> {
           }
         }
         removeFlickerGuard(guardStyle);
+        // After successfully applying, update the URL to remove the checkra-id to prevent re-application on refresh/back nav
+        // And to provide a cleaner URL if the user shares it.
+        if (window.history.replaceState) {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('checkra-id');
+          window.history.replaceState({ path: cleanUrl.toString() }, '', cleanUrl.toString());
+        }
       });
     } else {
-      customWarn("[Checkra Bootloader] Snapshot data is invalid or has no changes.", snapshot);
+      customWarn("[Checkra Bootloader] Snapshot data from API is invalid, has no changes, or changes array is empty.", snapshot);
       removeFlickerGuard(guardStyle);
     }
   } catch (error) {
-    customError("[Checkra Bootloader] Error loading or applying snapshot:", error);
+    customError(`[Checkra Bootloader] Error loading or applying snapshot ${snapshotId} from API:`, error);
     removeFlickerGuard(guardStyle);
   }
 }
 
-function checkForPublishedVersion(): void {
+// Renamed and simplified function
+function checkForCheckraIdInUrl(): void {
   if (typeof window !== 'undefined' && window.location && window.location.search) {
     const urlParams = new URLSearchParams(window.location.search);
-    const variantId = urlParams.get('checkra-variant-id');
-    if (variantId) {
-      // Preconnect as early as possible
-      injectPreconnect(`https://${CDN_DOMAIN}`);
-      const prefetchUrl = `https://${CDN_DOMAIN}/variants/${variantId}.json`;
-      injectPrefetch(prefetchUrl);
+    const snapshotId = urlParams.get('checkra-id'); // Use 'checkra-id' consistently
 
-      applyPublishedSnapshot(variantId).catch(err => {
-        customError("[Checkra Bootloader] Unhandled error in applyPublishedSnapshot:", err);
+    if (snapshotId) {
+      // Preconnect to API_BASE is handled within applySnapshotFromApi
+      applySnapshotFromApi(snapshotId).catch(err => {
+        customError("[Checkra Bootloader] Unhandled error in applySnapshotFromApi:", err);
       });
     }
+  }
+}
+
+// Check if running in a browser environment
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  checkForCheckraIdInUrl(); // Updated function call
+  initAnalytics();
+
+  const initialize = () => {
+    // Check if already initialized
+    if (!(window as any).checkraInitialized) {
+      try {
+        const configFromSources = getFinalConfig();
+        const api = initCheckra(configFromSources);
+        if (api) {
+          (window as any).checkra = api;
+          (window as any).checkraInitialized = true;
+          document.dispatchEvent(new CustomEvent('checkraReady'));
+        } else {
+          customError("[Checkra] Auto-initialization failed, API not returned.");
+        }
+      } catch (e) {
+        customError("[Checkra] Failed to auto-initialize:", e);
+      }
+    } else {
+      // console.log("[Checkra] Already auto-initialized.");
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    initialize();
   }
 }

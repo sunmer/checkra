@@ -77,6 +77,12 @@ export class FeedbackViewerDOM {
   // Track loading state so we don't constantly reset spinner animation
   private isLoading: boolean = false;
 
+  // --- Helper to keep CSS variable in sync with actual panel width ---
+  private updateCssPanelWidth(widthPx: number): void {
+    const widthVal = Math.round(widthPx);
+    document.documentElement.style.setProperty('--checkra-panel-width', `${widthVal}px`);
+  }
+
   constructor() {
     // Bind resize handlers
     this.handleResizeStart = this.handleResizeStart.bind(this);
@@ -96,6 +102,8 @@ export class FeedbackViewerDOM {
 
     const viewer = document.createElement('div');
     viewer.id = 'checkra-feedback-viewer';
+    // Hide initially; becomes visible via show()
+    viewer.classList.add('hidden');
 
     // Add resize event listeners
     viewer.addEventListener('mousedown', this.handleResizeStart);
@@ -104,22 +112,21 @@ export class FeedbackViewerDOM {
     // viewer.style.width = '450px'; // Default handled by CSS now
     // viewer.style.height = '100vh'; // Default handled by CSS
 
+    let effectiveWidth = DEFAULT_WIDTH;
     try {
       const storedWidth = localStorage.getItem(LOCALSTORAGE_PANEL_WIDTH_KEY);
       if (storedWidth) {
         const width = parseInt(storedWidth, 10);
         if (width >= MIN_WIDTH && width <= (window.innerWidth * MAX_WIDTH_VW / 100)) {
-          viewer.style.width = `${width}px`;
-        } else {
-          viewer.style.width = `${DEFAULT_WIDTH}px`; // Fallback to default if stored is invalid
+          effectiveWidth = width;
         }
-      } else {
-        viewer.style.width = `${DEFAULT_WIDTH}px`; // Default if not stored
       }
     } catch (e) {
       console.warn('[FeedbackViewerDOM] Error reading panel width from localStorage:', e);
-      viewer.style.width = `${DEFAULT_WIDTH}px`; // Fallback on error
     }
+    viewer.style.width = `${effectiveWidth}px`;
+    // Sync the CSS variable for margin pushing
+    this.updateCssPanelWidth(effectiveWidth);
 
     // --- Header ---
     const responseHeader = document.createElement('div');
@@ -224,6 +231,9 @@ export class FeedbackViewerDOM {
 
     document.body.appendChild(viewer);
 
+    // Ensure CSS var matches after insertion (in case styles affect computed width)
+    this.updateCssPanelWidth(viewer.offsetWidth);
+
     this.elements = {
       viewer,
       promptTextarea,
@@ -313,6 +323,8 @@ export class FeedbackViewerDOM {
     newWidth = Math.max(300, Math.min(newWidth, 450));
 
     this.elements.viewer.style.width = `${newWidth}px`;
+    // Update CSS variable in real time for smoother layout shift
+    this.updateCssPanelWidth(newWidth);
   }
 
   private handleResizeEnd(): void {
@@ -325,6 +337,8 @@ export class FeedbackViewerDOM {
     this.elements.viewer.classList.remove('resizing');
     try {
       const currentWidth = this.elements.viewer.offsetWidth;
+      // Final sync of CSS variable
+      this.updateCssPanelWidth(currentWidth);
       localStorage.setItem(LOCALSTORAGE_PANEL_WIDTH_KEY, String(currentWidth));
     } catch (e) {
       console.warn('[FeedbackViewerDOM] Error saving panel width to localStorage:', e);
@@ -342,6 +356,9 @@ export class FeedbackViewerDOM {
 
     viewer.classList.remove('hidden');
     viewer.classList.add('visible-flex');
+    // Ensure margin matches actual width each time panel is shown
+    this.updateCssPanelWidth(viewer.offsetWidth);
+    document.documentElement.classList.add('checkra-panel-open'); // Add class to html element
     promptTextarea.focus();
   }
 
@@ -349,6 +366,7 @@ export class FeedbackViewerDOM {
     if (!this.elements) return;
     this.elements.viewer.classList.add('hidden');
     this.elements.viewer.classList.remove('visible-flex');
+    document.documentElement.classList.remove('checkra-panel-open'); // Remove class from html element
   }
 
   public updateLoaderVisibility(visible: boolean, text?: string): void {
