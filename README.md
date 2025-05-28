@@ -1,6 +1,6 @@
-# Checkra: Ship growth & UI experiments without a CMS or pull requests
+# Checkra: Your inline AI-based website editor
 
-Checkra empowers developers and teams to rapidly test and deploy UI changes, growth experiments, and content variations directly on their live website, bypassing traditional CMS limitations and lengthy pull request cycles.
+Ask for sharper design, stronger copy or entirely new sections for your existing website. Share the results and analyse the impact all from the same tool.
 
 
 ## Key Features
