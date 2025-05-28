@@ -9,7 +9,6 @@ export type EventName =
   | 'aiFinalized'
   | 'aiError'
   | 'aiUserMessage'
-  | 'aiImageGenerationStart'
   | 'toggleViewerShortcut'
   | 'showViewerRequest'      // Programmatic request to show the viewer
   | 'hideViewerRequest'      // Programmatic request to hide the viewer
@@ -33,7 +32,6 @@ export interface EventPayloads {
   'aiFinalized': void;
   'aiError': Error | string;
   'aiUserMessage': string;
-  'aiImageGenerationStart': { prompt?: string };
   'toggleViewerShortcut': void;
   'showViewerRequest': void;
   'hideViewerRequest': void;
@@ -50,12 +48,6 @@ export interface EventPayloads {
     rect: DOMRect | null;
   };
   'elementDeselected': void;
-
-  // DALL-E Image Events
-  'dalleImageLoading': { placeholderId: string; prompt: string; size?: string };
-  'dalleImageLoaded': { placeholderId: string; prompt: string; size?: string; url: string };
-  'dalleImageError': { placeholderId: string; prompt: string; size?: string; error: string };
-  'dalleImageRegenerate': { placeholderId: string; prompt: string; size?: string };
 }
 
 export class EventEmitter {

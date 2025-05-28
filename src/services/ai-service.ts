@@ -29,6 +29,29 @@ async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
   }
 }
 
+// Helper function to generate cssDigest
+const generateCssDigest = (htmlString: string): string => {
+  if (!htmlString) return '<!-- cssDigest: -->';
+
+  const classRegex = /class="([^"]*)"/g;
+  let match;
+  const allClasses = new Set<string>();
+
+  while ((match = classRegex.exec(htmlString)) !== null) {
+    const classes = match[1].split(/\s+/);
+    classes.forEach(cls => {
+      if (cls.trim()) {
+        allClasses.add(cls.trim());
+      }
+    });
+  }
+
+  if (allClasses.size === 0) {
+    return '<!-- cssDigest: -->';
+  }
+
+  return `<!-- cssDigest: ${Array.from(allClasses).join(',')} -->`;
+};
 
 const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary?: string; accent?: string } | null> => {
   const html2canvasRenderFunc = await getHtml2Canvas();
@@ -222,6 +245,12 @@ const fetchFeedbackBase = async (
     const metadata = await getPageMetadata(); // metadata will no longer contain .framework
     const currentAiSettings = getCurrentAiSettings();
 
+    let processedHtml = selectedHtml;
+    if (selectedHtml) {
+      const digest = generateCssDigest(selectedHtml);
+      processedHtml = `${digest}\n${selectedHtml}`;
+    }
+
     const requestBody: {
       prompt: string;
       html?: string | null;
@@ -237,7 +266,7 @@ const fetchFeedbackBase = async (
     };
 
     if (selectedHtml) {
-      requestBody.html = selectedHtml;
+      requestBody.html = processedHtml;
     }
     if (imageDataUrl) {
       requestBody.image = imageDataUrl;

@@ -10,19 +10,6 @@ const LOCALSTORAGE_PANEL_WIDTH_KEY = 'checkra_panel_width';
 // Define the settings SVG icon as a constant
 const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
-const IMAGE_GENERATION_LOADER_SVG = `
-<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="4" cy="12" r="3" fill="currentColor">
-    <animate id="svgload1" attributeName="r" from="3" to="3" begin="0s;svgload3.end" dur="0.8s" values="3;1;3" calcMode="linear"/>
-  </circle>
-  <circle cx="12" cy="12" r="1" fill="currentColor">
-    <animate id="svgload2" attributeName="r" from="1" to="1" begin="svgload1.end" dur="0.8s" values="3;1;3" calcMode="linear"/>
-  </circle>
-  <circle cx="20" cy="12" r="1" fill="currentColor">
-    <animate id="svgload3" attributeName="r" from="1" to="1" begin="svgload2.end" dur="0.8s" values="3;1;3" calcMode="linear"/>
-  </circle>
-</svg>`;
-
 // Loader SVG reused inside submit button
 const BUTTON_LOADER_SVG = `
 <svg class="button-loader" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
@@ -141,16 +128,6 @@ export class FeedbackViewerDOM {
     const loadingIndicatorText = loadingIndicator.querySelector<HTMLSpanElement>('#feedback-loading-indicator-text')!;
     responseHeader.appendChild(loadingIndicator);
 
-    const imageGenerationStatusElement = document.createElement('div');
-    imageGenerationStatusElement.id = 'checkra-image-generation-status';
-    imageGenerationStatusElement.classList.add('hidden'); // Hidden by default
-    imageGenerationStatusElement.innerHTML = `
-      <div class="image-gen-loader">${IMAGE_GENERATION_LOADER_SVG}</div>
-      <span class="image-gen-text">Generating image...</span>
-    `;
-    responseHeader.appendChild(imageGenerationStatusElement);
-    // END ADDED
-
     // --- Action Buttons (in Header) --- (Container remains for now, but buttons removed)
     const actionButtonsContainer = document.createElement('div');
     actionButtonsContainer.id = 'checkra-feedback-action-buttons';
@@ -252,7 +229,6 @@ export class FeedbackViewerDOM {
       footerCTAContainer,
       miniSelectButton,
       settingsButton,
-      imageGenerationStatusElement,
       availabilityToast: this.createAvailabilityToast(),
       copyToast: this.createCopyToast()
     };
@@ -655,24 +631,6 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 
     return button;
   }
-  public showImageGenerationStatus(isGenerating: boolean, promptText?: string | null): void {
-    if (!this.elements?.imageGenerationStatusElement) return;
-
-    const statusElement = this.elements.imageGenerationStatusElement;
-    const textSpan = statusElement.querySelector<HTMLSpanElement>('.image-gen-text');
-
-    if (isGenerating) {
-      if (textSpan) {
-        textSpan.textContent = promptText
-          ? `Generating image for: "${promptText.substring(0, 50)}${promptText.length > 50 ? '...' : ''}"`
-          : 'Generating image...';
-      }
-      statusElement.classList.remove('hidden');
-    } else {
-      statusElement.classList.add('hidden');
-    }
-  }
-  // END ADDED
 
   private createAvailabilityToast(): HTMLDivElement {
     const toast = document.createElement('div');
@@ -744,5 +702,9 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
       toast.style.opacity = '0';
       toast.style.visibility = 'hidden';
     }, 1500);
+  }
+
+  public getElements(): FeedbackViewerElements | null {
+    return this.elements;
   }
 }

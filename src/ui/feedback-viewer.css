@@ -86,6 +86,22 @@
   height: 100%;
 }
 
+/* --- NEW: Container for fix control buttons --- */
+.checkra-feedback-applied-fix .checkra-fix-controls-container {
+  position: absolute;
+  top: -15px; /* Position slightly above the element, adjust as needed */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px; /* Space between buttons */
+  padding: 3px; /* Small padding around the buttons */
+  background-color: rgba(40, 40, 40, 0.8); /* Subtle background for the control strip */
+  border-radius: 16px; /* Rounded corners for the container */
+  z-index: 12; /* Ensure it's above other content, and above applied-fix-content if it had a z-index */
+  pointer-events: auto; /* Make sure the container itself can receive pointer events if needed */
+}
+
 /* --- ADDED: Outline for actively selected element --- */
 .checkra-selected-element-outline {
   outline: 2px solid #2563eb !important;
@@ -96,15 +112,11 @@
 }
 
 /* --- Buttons on Applied Fix Wrapper --- */
-/* Position and style all buttons similarly */
+/* Common style for buttons, now without absolute positioning */
 .checkra-feedback-applied-fix .feedback-fix-close-btn,
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
 .checkra-feedback-applied-fix .feedback-fix-toggle {
-  position: absolute;
-  right: 0;
-  /* Adjust positioning */
   width: 20px;
-  /* Adjust size */
   height: 20px;
   background-color: rgba(50, 50, 50, 0.8);
   color: #eee;
@@ -114,39 +126,20 @@
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  /* For close button 'x' */
   font-weight: bold;
   line-height: 1;
-  z-index: 11;
-  /* Ensure buttons are above content */
   pointer-events: auto;
   transition: background-color 0.2s, color 0.2s, transform 0.1s;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   padding: 2px;
-  /* Add padding for SVGs */
   box-sizing: border-box;
+  flex-shrink: 0; /* Prevent buttons from shrinking in flex container */
 }
 
 .checkra-feedback-applied-fix .feedback-fix-close-btn:hover,
 .checkra-feedback-applied-fix .feedback-fix-copy-btn:hover,
 .checkra-feedback-applied-fix .feedback-fix-toggle:hover {
   transform: scale(1.1);
-}
-
-/* Specific positioning */
-.checkra-feedback-applied-fix .feedback-fix-close-btn {
-  top: 0;
-  /* Furthest right */
-}
-
-.checkra-feedback-applied-fix .feedback-fix-copy-btn {
-  top: 45px;
-  /* Next to close */
-}
-
-.checkra-feedback-applied-fix .feedback-fix-toggle {
-  top: 22px;
-  /* Next to copy */
 }
 
 /* Specific hover colors */
@@ -161,9 +154,20 @@
 }
 
 .checkra-feedback-applied-fix .feedback-fix-toggle:hover {
+  /* background-color: rgba(60, 180, 110, 0.9) !important; REMOVED - will be handled by a separate class */
+  /* Use !important to override inline style - Comment kept for context */
+  color: white; /* This can remain if desired for hover on non-toggled state */
+}
+
+/* NEW class for active/toggled-on state */
+.checkra-feedback-applied-fix .feedback-fix-toggle.toggled-on {
   background-color: rgba(60, 180, 110, 0.9) !important;
-  /* Use !important to override inline style */
   color: white;
+}
+
+/* Optional: if you want the toggled-on state to also have a specific hover different from default hover */
+.checkra-feedback-applied-fix .feedback-fix-toggle.toggled-on:hover {
+  background-color: rgba(50, 160, 90, 0.9) !important; /* Slightly darker green on hover when toggled */
 }
 
 /* Icon sizing within buttons */

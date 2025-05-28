@@ -95,7 +95,6 @@ export class FeedbackViewerImpl {
   private boundHandleSuggestionClick = this.handleSuggestionClick.bind(this); // NEW: Bound handler for onboarding suggestion
   private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
   private conversationHistory: ConversationItem[] = [];
-  private boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
@@ -114,7 +113,6 @@ export class FeedbackViewerImpl {
     this.boundRenderUserMessage = this.renderUserMessage.bind(this);
     this.boundShowError = this.showError.bind(this);
     this.boundFinalizeResponse = this.finalizeResponse.bind(this);
-    this.boundHandleImageGenerationStart = this.handleImageGenerationStart.bind(this);
   }
 
   public initialize(
@@ -154,7 +152,6 @@ export class FeedbackViewerImpl {
     eventEmitter.on('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
     eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
-    eventEmitter.on('aiImageGenerationStart', this.boundHandleImageGenerationStart);
     // Listen for onboarding suggestion clicks
     eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
 
@@ -235,7 +232,6 @@ export class FeedbackViewerImpl {
     eventEmitter.off('aiFinalized', this.boundFinalizeResponse);
     eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
-    eventEmitter.off('aiImageGenerationStart', this.boundHandleImageGenerationStart);
     eventEmitter.off('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
 
     this.domElements = null;
@@ -344,7 +340,6 @@ export class FeedbackViewerImpl {
       this.domManager.updateLastAIMessage(currentStreamItem.content, true);
 
       const hasHtmlCode = GENERIC_HTML_REGEX.test(currentStreamItem.content);
-      this.domManager.showImageGenerationStatus(false);
       this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Loading...');
     } else {
       customWarn(`[FeedbackViewerImpl] updateResponse called but currentStreamItem (activeStreamingAiItem) is not an AI message or not streaming. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}`);
@@ -395,7 +390,6 @@ export class FeedbackViewerImpl {
     this.domManager.updateLoaderVisibility(false);
     this.domManager.setPromptState(true);
     this.domManager.updateSubmitButtonState(true);
-    this.domManager.showImageGenerationStatus(false);
 
     const contentWrapper = this.domElements.contentWrapper;
     contentWrapper.scrollTop = contentWrapper.scrollHeight;
@@ -707,29 +701,31 @@ export class FeedbackViewerImpl {
           fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
 
           if (fixInfo.isCurrentlyFixed) {
-            toggleButton.innerHTML = HIDE_FIX_SVG; 
+            // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
+            toggleButton.classList.add('toggled-on');
             toggleButton.title = "Toggle Original Version";
-            toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
+            // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
           } else {
-            toggleButton.innerHTML = DISPLAY_FIX_SVG; 
+            // toggleButton.innerHTML = DISPLAY_FIX_SVG; // REMOVED SVG swap
+            toggleButton.classList.remove('toggled-on');
             toggleButton.title = "Toggle Fixed Version";
-            toggleButton.style.backgroundColor = '';
+            // toggleButton.style.backgroundColor = ''; // REMOVED direct style
           }
         } else { // 'insertBefore' or 'insertAfter'
           fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed; 
-          // const contentOfWrapper = wrapperElement.querySelector('.checkra-applied-fix-content') as HTMLElement | null;
-          // contentContainer is already queried above and is the same as contentOfWrapper here.
-          if (contentContainer instanceof HTMLElement) { // Ensure contentContainer is an HTMLElement
-              if (fixInfo.isCurrentlyFixed) { // Show content
+          if (contentContainer instanceof HTMLElement) { 
+              if (fixInfo.isCurrentlyFixed) { 
                   contentContainer.style.display = '';
-                  toggleButton.innerHTML = HIDE_FIX_SVG;
-                  toggleButton.title = "Hide This Section Content"; // Title reflects content toggle
-                  toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
-              } else { // Hide content
+                  // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
+                  toggleButton.classList.add('toggled-on');
+                  toggleButton.title = "Hide This Section Content"; 
+                  // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
+              } else { 
                   contentContainer.style.display = 'none';
-                  toggleButton.innerHTML = DISPLAY_FIX_SVG;
-                  toggleButton.title = "Show This Section Content"; // Title reflects content toggle
-                  toggleButton.style.backgroundColor = '';
+                  // toggleButton.innerHTML = DISPLAY_FIX_SVG; // REMOVED SVG swap
+                  toggleButton.classList.remove('toggled-on');
+                  toggleButton.title = "Show This Section Content"; 
+                  // toggleButton.style.backgroundColor = ''; // REMOVED direct style
               }
           } else {
               customError(`[FeedbackViewerLogic] Content container not found or not HTMLElement within wrapper for fixId ${fixId} during insertBefore/After toggle.`);
@@ -745,9 +741,10 @@ export class FeedbackViewerImpl {
               contentContainer.innerHTML = '';
               contentContainer.appendChild(fixedFragment);
               fixInfo.isCurrentlyFixed = true;
-              toggleButton.innerHTML = HIDE_FIX_SVG;
+              // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
+              toggleButton.classList.add('toggled-on');
               toggleButton.title = "Toggle Original Version";
-              toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
+              // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
             }
           } catch (restoreError) {
             customError(`[FeedbackViewerLogic] Failed to restore fixed state for ${fixId} after toggle error (replace):`, restoreError);
@@ -756,9 +753,10 @@ export class FeedbackViewerImpl {
            // If adjacent and failed while trying to show it, try to ensure it's shown
            if (wrapperElement instanceof HTMLElement) wrapperElement.style.display = '';
            fixInfo.isCurrentlyFixed = true;
-           toggleButton.innerHTML = HIDE_FIX_SVG;
+           // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
+           toggleButton.classList.add('toggled-on');
            toggleButton.title = "Hide This Section";
-           toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)';
+           // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
         }
       }
     } else {
@@ -980,12 +978,21 @@ Your job:
       contentContainer.appendChild(fixedContentFragment);
       wrapper.appendChild(contentContainer);
 
+      // Create the new controls container
+      const controlsContainer = document.createElement('div');
+      controlsContainer.className = 'checkra-fix-controls-container';
+
       const closeBtn = this.createAppliedFixButton('close', fixId);
       const toggleBtn = this.createAppliedFixButton('toggle', fixId);
       const copyBtn = this.createAppliedFixButton('copy', fixId);
-      wrapper.appendChild(closeBtn);
-      wrapper.appendChild(toggleBtn);
-      wrapper.appendChild(copyBtn);
+      
+      // Append buttons to the new controls container
+      controlsContainer.appendChild(copyBtn); // Order: Copy, Toggle, Close (or as desired)
+      controlsContainer.appendChild(toggleBtn);
+      controlsContainer.appendChild(closeBtn);
+
+      // Append the controls container to the main wrapper
+      wrapper.appendChild(controlsContainer);
 
       const parent = originalSelectedElement.parentNode;
 
@@ -1038,6 +1045,9 @@ Your job:
       // this.domManager?.clearAIResponseContent(); 
       // Consider what should happen in the panel UI after this.
 
+      // Clean up selection highlights after the fix is successfully applied
+      this.removeSelectionHighlight();
+
     } catch (error) {
       customError('[FeedbackViewerLogic] Error applying fix directly to page:', error);
       this.showError(`Failed to apply fix: ${error instanceof Error ? error.message : String(error)}`);
@@ -1074,9 +1084,9 @@ Your job:
         button.title = 'Discard Fix (Revert to Original)';
         break;
       case 'toggle':
-        button.className = 'feedback-fix-toggle';
-        button.innerHTML = HIDE_FIX_SVG; // Icon to toggle TO original
-        button.title = 'Toggle Original Version';
+        button.className = 'feedback-fix-toggle toggled-on'; // Add .toggled-on by default
+        button.innerHTML = DISPLAY_FIX_SVG; // Always use the "eye open" SVG
+        button.title = 'Toggle Original Version'; // Initial title assuming fix is shown first
         break;
       case 'copy':
         button.className = 'feedback-fix-copy-btn';
@@ -1267,13 +1277,6 @@ Your job:
       this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
       this.selectionPlusIconElement = null;
     }
-  }
-  private handleImageGenerationStart(data: { prompt?: string }): void {
-    if (!this.domManager) return;
-    // Hide general loading indicator if it's showing
-    this.domManager.updateLoaderVisibility(false);
-    // Show image generation specific status
-    this.domManager.showImageGenerationStatus(true, data.prompt);
   }
 
   // RENAMED and REIMPLEMENTED: from exportSnapshot and sendSnapshotToBackend
