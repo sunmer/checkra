@@ -281,6 +281,11 @@
   cursor: not-allowed;
 }
 
+/* ADDED: Ensure all buttons can have auto min-width */
+#checkra-feedback-viewer button {
+  min-width: auto !important;
+}
+
 /* --- MODIFIED Submit Button Styles (similar to mini-select) --- */
 #checkra-feedback-viewer #checkra-feedback-submit-button {
   appearance: none !important;
@@ -365,6 +370,7 @@
   appearance: none !important;
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
+  min-width: auto !important;
   width: 30px !important;
   height: 30px !important;
   border-radius: 50% !important;

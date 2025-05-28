@@ -6,7 +6,7 @@ Checkra empowers developers and teams to rapidly test and deploy UI changes, gro
 ## Key Features
 
 *   ✨ **AI Live Editor:** Instantly make, test and analyze UI & content changes using an intuitive AI sidebar – without leaving your own website. Say goodbye to slow PRs and clunky CMS workflows
-*   🚀 **Ship changes with one command:** Simply type `/publish` to generate a publicy shareable URL. A/B tests and demos made easy
+*   🚀 **Ship changes with one command:** Simply type `/publish` to generate a publicly shareable URL, or `/save` to create a private draft. A/B tests and demos made easy
 *   📊 **Built-in Analytics:** Automatically track variant performance and get key stats directly from the AI sidebar for quick, data-driven decisions
 
 ## Use cases
@@ -22,8 +22,8 @@ Add the following lines inside the `<head>` section of your HTML file:
 
 ```html
 <!-- Inside the <head> section -->
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/index.css">
-<script type="module" src="https://unpkg.com/checkra@latest/dist/checkra.js" defer></script>
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
+<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
 
 ```
 
@@ -40,7 +40,7 @@ pnpm add checkra
 
 **Note:** When installing via a package manager, you still need to include the CSS separately. Add the following line to the `<head>` of your HTML:
 ```html
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/index.css">
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
 ```
 
 **Basic Usage (ES Module / ESM CDN):**
@@ -81,7 +81,7 @@ If you are using the simple CDN script tag installation but need to configure Ch
 </script>
 
 <!-- Standard Checkra Scripts -->
-<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/index.css">
+<link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
 <script type="module" src="https://unpkg.com/checkra@latest/dist/checkra.js" defer></script>
 ```
 
