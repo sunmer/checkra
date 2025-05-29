@@ -246,15 +246,23 @@ const fetchFeedbackBase = async (
     const currentAiSettings = getCurrentAiSettings();
 
     let processedHtml = selectedHtml;
+    // Store original HTML if conditions for JSON patch are met
+    let originalSentHtmlForPatch: string | null = null;
+    let jsonPatchAccumulator: string = ''; // Accumulator for JSON patch NDJSON chunks
+
     if (selectedHtml) {
       const digest = generateCssDigest(selectedHtml);
       processedHtml = `${digest}\n${selectedHtml}`;
+      if (insertionMode === 'replace' && selectedHtml.length > 1000) {
+        originalSentHtmlForPatch = selectedHtml; // Store the original HTML, not the processed one
+      }
     }
 
     const requestBody: {
       prompt: string;
       html?: string | null;
-      metadata: PageMetadata; // This PageMetadata type no longer has framework
+      htmlCharCount?: number;
+      metadata: PageMetadata;
       aiSettings: AiSettings;
       image?: string | null;
       insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
@@ -267,6 +275,7 @@ const fetchFeedbackBase = async (
 
     if (selectedHtml) {
       requestBody.html = processedHtml;
+      requestBody.htmlCharCount = selectedHtml.length;
     }
     if (imageDataUrl) {
       requestBody.image = imageDataUrl;
@@ -320,10 +329,25 @@ const fetchFeedbackBase = async (
               const jsonString = buffer.substring(5).trim();
               if (jsonString) {
                 const data = JSON.parse(jsonString);
-                if (data.content) {
+                // Check for JSON patch in the final buffer as well
+                if (originalSentHtmlForPatch) {
+                  if (typeof data.content === 'string') {
+                    jsonPatchAccumulator += data.content;
+                  }
+                  // Do not emit aiResponseChunk here for patch mode
+                } else if (data.type === 'json-patch') {
+                  let parsedPayload: any = jsonPatchAccumulator;
+                  try {
+                    parsedPayload = JSON.parse(jsonPatchAccumulator);
+                  } catch (e) {
+                    customWarn('[AI Service] Failed to parse accumulated JSON patch; sending raw string', e);
+                  }
+                  customWarn('[AI Service] Emitting aiJsonPatch. Raw length:', jsonPatchAccumulator.length, 'Parsed type:', Array.isArray(parsedPayload) ? 'array' : typeof parsedPayload);
+                  eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
+                } else if (data.content) {
                   eventEmitter.emit('aiResponseChunk', data.content);
                 } else {
-                  customWarn("[SSE Parser] Final buffer data line did not contain 'content':", data);
+                  customWarn("[SSE Parser] Final buffer data line did not contain 'content' or valid 'json-patch':", data);
                 }
               }
             } catch (e) {
@@ -332,6 +356,16 @@ const fetchFeedbackBase = async (
           } else if (buffer.trim()) {
             // customWarn("[SSE Parser] Final buffer contained non-data line content:", buffer);
           }
+        }
+        if (originalSentHtmlForPatch && jsonPatchAccumulator.length > 0) {
+          let parsedPayload: any = jsonPatchAccumulator;
+          try {
+            parsedPayload = JSON.parse(jsonPatchAccumulator);
+          } catch (e) {
+            customWarn('[AI Service] Failed to parse accumulated JSON patch at stream end; sending raw string', e);
+          }
+          customWarn('[AI Service] Emitting aiJsonPatch at stream end. Raw length:', jsonPatchAccumulator.length);
+          eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
         }
         eventEmitter.emit('aiFinalized');
         break;
@@ -353,15 +387,25 @@ const fetchFeedbackBase = async (
                 eventEmitter.emit(currentEventType, parsedData);
                 currentEventType = null;
               } else {
-                if (parsedData.userMessage) {
+                if (parsedData.type === 'json-patch') {
+                  customWarn('[AI Service] Received inline json-patch event (not NDJSON). Emitting immediately.');
+                  eventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
+                  // After emitting, we can continue to wait for stream end.
+                } else if (originalSentHtmlForPatch) {
+                  // We're in JSON patch NDJSON accumulation mode – collect chunks.
+                  if (typeof parsedData.content === 'string') {
+                    jsonPatchAccumulator += parsedData.content;
+                    customWarn('[AI Service] Accum patch chunk, total length now', jsonPatchAccumulator.length);
+                  }
+                } else if (parsedData.userMessage) {
                   eventEmitter.emit('aiUserMessage', parsedData.userMessage);
                 } else if (parsedData.content) {
                   eventEmitter.emit('aiResponseChunk', parsedData.content);
                 } else if (parsedData.error) {
-                  customError("[SSE Parser] Received error object via SSE data line:", parsedData.error);
-                  eventEmitter.emit('aiError', `Stream Error: ${parsedData.error}`);
+                  customError("[SSE Parser] Received error object via SSE data line:", parsedData.error, parsedData.details);
+                  eventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
                 } else {
-                  customWarn("[SSE Parser] Received data line with unknown structure (no event type):");
+                  customWarn("[SSE Parser] Received data line with unknown structure (no event type):", parsedData);
                 }
               }
             }
