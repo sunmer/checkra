@@ -866,20 +866,24 @@ Your job:
       this.originalSvgsMap.set(placeholderId, svg.outerHTML);
 
       // Create placeholder element
-      const placeholder = doc.createElement('svg');
+      const placeholder = doc.createElement('svg'); // Create an actual SVG element as placeholder
       placeholder.setAttribute('data-checkra-id', placeholderId);
+      // Add some minimal content or attributes to ensure it's not empty if the parser is strict
+      placeholder.setAttribute('viewBox', '0 0 1 1'); 
       svg.parentNode?.replaceChild(placeholder, svg);
     });
 
-    // Return the modified HTML. Use body.innerHTML if the original was a fragment,
-    // or outerHTML of the root element if it was a full element.
-    // Assuming the original selection is likely a single element or fragment within body.
-    // If htmlString represents a full document fragment, doc.body.innerHTML is best.
-    // If htmlString is outerHTML of a single element, need to get that element.
-    // Let's default to body.innerHTML for simplicity, assuming fragments are common.
-    // If the input was outerHTML of a single node, this might add an extra container.
-    // A safer approach might be needed depending on exact `selectedHtml` content.
-    return doc.body.innerHTML;
+    // Determine the correct way to serialize back to string
+    let processedHtmlString;
+    if (doc.body.childNodes.length === 1 && doc.body.firstElementChild && htmlString.trim().startsWith(`<${doc.body.firstElementChild.tagName.toLowerCase()}`)) {
+      // Likely a single element was passed in, use its outerHTML
+      processedHtmlString = doc.body.firstElementChild.outerHTML;
+    } else {
+      // Likely a fragment or multiple elements, use body.innerHTML
+      processedHtmlString = doc.body.innerHTML;
+    }
+    customWarn('[FeedbackViewerImpl DEBUG] preprocessHtmlForAI output:', processedHtmlString.slice(0,300));
+    return processedHtmlString;
   }
 
   /**
@@ -1850,18 +1854,48 @@ Your job:
         customWarn('[FeedbackViewerImpl] postprocessHtmlFromAI failed on JSON patch HTML:', e);
       }
 
-      // Quick validation to ensure it parses into non-empty fragment
+      // Remove any leading comment or plaintext nodes that are not valid elements
+      const scrubLeadingNonElement = (html: string): string => {
+        const frag = this.createFragmentFromHTML(html);
+        if (!frag) return html;
+
+        // Remove nodes from the start until we hit an element node
+        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+          const textNode = frag.firstChild;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            // If it's just whitespace, remove; if it's visible text (human commentary), also drop it.
+            const textContent = textNode.textContent || '';
+            if (textContent.trim() === '') {
+              textNode.parentNode?.removeChild(textNode);
+            } else {
+              // For non-whitespace text, also remove – commentary should not be inserted into DOM
+              textNode.parentNode?.removeChild(textNode);
+            }
+          } else {
+            // Comment node – always remove
+            textNode.parentNode?.removeChild(textNode);
+          }
+        }
+
+        // Serialize back by creating a temporary container
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(frag);
+        return tempContainer.innerHTML;
+      };
+
+      updatedHtml = scrubLeadingNonElement(updatedHtml);
+
       const testFrag = this.createFragmentFromHTML(updatedHtml);
       if (!testFrag || testFrag.childNodes.length === 0) {
-        customError('[FeedbackViewerImpl] Parsed HTML from JSON patch is empty/invalid – will skip applying.');
+        customError('[FeedbackViewerImpl] Parsed HTML from JSON patch is empty/invalid after scrubbing – will skip applying.');
         return;
       }
 
       this.fixedOuterHTMLForCurrentCycle = updatedHtml;
 
-      // Ensure there is an active AI placeholder to mark as non-streaming
+      // Ensure there is an active AI placeholder to mark as non-streaming (content was already streamed)
       if (this.activeStreamingAiItem) {
-        this.activeStreamingAiItem.content = ''; // We don't show the patch JSON itself
+        // We simply keep whatever analysis content was streamed; no need to clear it.
       }
 
       // After storing fixed HTML, we rely on finalizeResponse (triggered by aiFinalized) to apply the fix.

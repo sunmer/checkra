@@ -246,15 +246,19 @@ const fetchFeedbackBase = async (
     const currentAiSettings = getCurrentAiSettings();
 
     let processedHtml = selectedHtml;
-    // Store original HTML if conditions for JSON patch are met
     let originalSentHtmlForPatch: string | null = null;
     let jsonPatchAccumulator: string = ''; // Accumulator for JSON patch NDJSON chunks
+    let patchStartSeen: boolean = false; // Flag to detect when PATCH_START marker has been encountered
+    let analysisAccumulator: string = ''; // Accumulate analysis chunks until marker detected
 
     if (selectedHtml) {
       const digest = generateCssDigest(selectedHtml);
       processedHtml = `${digest}\n${selectedHtml}`;
-      if (insertionMode === 'replace' && selectedHtml.length > 1000) {
-        originalSentHtmlForPatch = selectedHtml; // Store the original HTML, not the processed one
+      if (insertionMode === 'replace' && selectedHtml.length >= 500) {
+        originalSentHtmlForPatch = selectedHtml;
+        customWarn('[AI Service] JSON Patch mode activated: insertionMode is replace and selectedHtml.length >= 500.');
+      } else if (insertionMode === 'replace') {
+        customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
       }
     }
 
@@ -392,10 +396,30 @@ const fetchFeedbackBase = async (
                   eventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
                   // After emitting, we can continue to wait for stream end.
                 } else if (originalSentHtmlForPatch) {
-                  // We're in JSON patch NDJSON accumulation mode – collect chunks.
-                  if (typeof parsedData.content === 'string') {
-                    jsonPatchAccumulator += parsedData.content;
-                    customWarn('[AI Service] Accum patch chunk, total length now', jsonPatchAccumulator.length);
+                  // We're in JSON patch mode with analysis + patch. Detect PATCH_START marker.
+                  const raw = parsedData.content;
+                  const cleaned = raw.replace(/\u001b/g, ''); // Remove ESC char if present
+
+                  if (!patchStartSeen) {
+                    analysisAccumulator += cleaned;
+                    const markerIndex = analysisAccumulator.indexOf('[PATCH_START]');
+                    if (markerIndex !== -1) {
+                      const analysisPart = analysisAccumulator.substring(0, markerIndex);
+                      if (analysisPart.trim().length > 0) {
+                        eventEmitter.emit('aiResponseChunk', analysisPart);
+                        customWarn('[AI Service] Emitting analysis portion length', analysisPart.length);
+                      }
+                      patchStartSeen = true;
+                      const afterMarker = analysisAccumulator.substring(markerIndex + '[PATCH_START]'.length);
+                      if (afterMarker.length > 0) {
+                        jsonPatchAccumulator += afterMarker;
+                        customWarn('[AI Service] Accum patch chunk, total length now', jsonPatchAccumulator.length);
+                      }
+                      analysisAccumulator = '';
+                    }
+                  } else {
+                    // After marker -> accumulate patch
+                    jsonPatchAccumulator += cleaned;
                   }
                 } else if (parsedData.userMessage) {
                   eventEmitter.emit('aiUserMessage', parsedData.userMessage);
