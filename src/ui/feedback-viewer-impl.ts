@@ -1843,6 +1843,20 @@ Your job:
         updatedHtml = updatedHtml.slice(firstTagIndex);
       }
 
+      // Restore any SVG placeholders back to real SVGs
+      try {
+        updatedHtml = this.postprocessHtmlFromAI(updatedHtml);
+      } catch (e) {
+        customWarn('[FeedbackViewerImpl] postprocessHtmlFromAI failed on JSON patch HTML:', e);
+      }
+
+      // Quick validation to ensure it parses into non-empty fragment
+      const testFrag = this.createFragmentFromHTML(updatedHtml);
+      if (!testFrag || testFrag.childNodes.length === 0) {
+        customError('[FeedbackViewerImpl] Parsed HTML from JSON patch is empty/invalid – will skip applying.');
+        return;
+      }
+
       this.fixedOuterHTMLForCurrentCycle = updatedHtml;
 
       // Ensure there is an active AI placeholder to mark as non-streaming
