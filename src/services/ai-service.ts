@@ -4,8 +4,8 @@ import { AiSettings } from '../ui/settings-modal';
 import { customWarn, customError } from '../utils/logger';
 // import html2canvas from 'html2canvas'; // Eager import removed
 import { CSS_ATOMIC_MAP } from '../utils/css-map';
-import { detectCssFramework } from '../utils/framework-detector';
-import { detectUiKit } from '../utils/ui-kit-detector';
+import { detectCssFramework, DetectedFramework } from '../utils/framework-detector';
+import { detectUiKit, UiKitDetection } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
 
 // Type for the html2canvas function itself
@@ -178,6 +178,13 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
   }
 };
 
+// --- Updated and New Interfaces ---
+interface PageMetadataBrand {
+  primary?: string | null;
+  accent?: string | null;
+  palette?: string[];
+}
+
 interface PageMetadata {
   title: string | null;
   description: string | null;
@@ -189,12 +196,24 @@ interface PageMetadata {
     width: number;
     height: number;
   };
-  brand?: {
-    primary?: string | null;
-    accent?: string | null;
-  };
-  // framework?: string; // REMOVED as per user request
+  brand?: PageMetadataBrand;
 }
+
+interface BackendPayloadMetadata extends PageMetadata {
+  cssDigests?: any; // Consider defining a more specific type for cssDigests if possible
+  frameworkDetection?: DetectedFramework;
+  uiKitDetection?: UiKitDetection;
+}
+
+interface RequestBody {
+  prompt: string;
+  html?: string | null;
+  htmlCharCount?: number;
+  metadata: BackendPayloadMetadata;
+  aiSettings: AiSettings;
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
+}
+// --- End Updated and New Interfaces ---
 
 /**
  * Gathers metadata from the current page.
@@ -222,8 +241,6 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   metadata.language = document.documentElement.lang || null;
   const h1Tag = document.querySelector('h1');
   metadata.h1 = h1Tag ? h1Tag.textContent?.trim() || null : null;
-
-  // FRAMEWORK DETECTION LOGIC REMOVED HERE
 
   // Attempt to extract brand colors
   try {
@@ -307,45 +324,55 @@ const fetchFeedbackBase = async (
   imageDataUrl?: string | null
 ): Promise<void> => {
   try {
-    const metadata = await getPageMetadata(); // metadata will no longer contain .framework
+    const pageMeta = await getPageMetadata(); // Renamed to pageMeta for clarity
     const currentAiSettings = getCurrentAiSettings();
 
     let processedHtml = selectedHtml;
     let originalSentHtmlForPatch: string | null = null;
-    let jsonPatchAccumulator: string = ''; // Accumulator for JSON patch NDJSON chunks
-    let patchStartSeen: boolean = false; // Flag to detect when PATCH_START marker has been encountered
-    let analysisAccumulator: string = ''; // Accumulate analysis chunks until marker detected
-    let extraCssDigests: any = null;
-    let detectedFrameworkInfo: any = null;
-    let uiKitInfo: any = null;
+    let jsonPatchAccumulator: string = '';
+    let patchStartSeen: boolean = false;
+    let analysisAccumulator: string = '';
+    
+    // These will now be part of BackendPayloadMetadata
+    let cssDigestsForPayload: any = null;
+    let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
+    let uiKitDetectionForPayload: UiKitDetection | undefined = undefined;
 
     if (selectedHtml) {
       const cssCtx = produceCssContext(selectedHtml);
       processedHtml = `${cssCtx.comment}\n${selectedHtml}`;
-      extraCssDigests = cssCtx.cssDigests;
-      detectedFrameworkInfo = cssCtx.frameworkDetection;
-      uiKitInfo = detectUiKit(selectedHtml);
+      cssDigestsForPayload = cssCtx.cssDigests;
+      frameworkDetectionForPayload = cssCtx.frameworkDetection;
+      uiKitDetectionForPayload = detectUiKit(selectedHtml); // Moved here
+
       if (insertionMode === 'replace' && selectedHtml.length >= 500) {
         originalSentHtmlForPatch = selectedHtml;
         customWarn('[AI Service] JSON Patch mode activated: insertionMode is replace and selectedHtml.length >= 500.');
       } else if (insertionMode === 'replace') {
         customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
       }
+    } else {
+      // Even if no HTML is selected, we might want to send framework/UI kit info if detected globally
+      // For now, only produceCssContext is called if selectedHtml exists.
+      // If global detection is desired, detectCssFramework() and detectUiKit() could be called here.
+      // For simplicity, keeping existing logic: these are only populated if selectedHtml exists.
+      const globalFramework = detectCssFramework(); // Detect framework globally
+      frameworkDetectionForPayload = globalFramework;
+      // uiKitDetectionForPayload can be based on document.body.outerHTML if needed, but might be too broad.
+      // For now, uiKitDetectionForPayload will only be set if selectedHtml is present.
     }
+    
+    // Construct BackendPayloadMetadata
+    const backendMetadata: BackendPayloadMetadata = {
+      ...pageMeta, // Spread PageMetadata
+      cssDigests: cssDigestsForPayload,
+      frameworkDetection: frameworkDetectionForPayload,
+      uiKitDetection: uiKitDetectionForPayload
+    };
 
-    const requestBody: {
-      prompt: string;
-      html?: string | null;
-      htmlCharCount?: number;
-      metadata: PageMetadata;
-      aiSettings: AiSettings;
-      insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
-      cssDigests?: any;
-      frameworkDetection?: any;
-      uiKitDetection?: any;
-    } = {
+    const requestBody: RequestBody = {
       prompt: promptText,
-      metadata: metadata,
+      metadata: backendMetadata, // Use the consolidated metadata
       aiSettings: currentAiSettings,
       insertionMode: insertionMode
     };
@@ -353,9 +380,7 @@ const fetchFeedbackBase = async (
     if (selectedHtml) {
       requestBody.html = processedHtml;
       requestBody.htmlCharCount = selectedHtml.length;
-      if (extraCssDigests) requestBody.cssDigests = extraCssDigests;
-      if (detectedFrameworkInfo) requestBody.frameworkDetection = detectedFrameworkInfo;
-      if (uiKitInfo && uiKitInfo.name) requestBody.uiKitDetection = uiKitInfo;
+      // cssDigests, frameworkDetection, uiKitDetection are now part of requestBody.metadata
     }
 
     const currentApiKey = getEffectiveApiKey();
