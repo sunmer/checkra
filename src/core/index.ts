@@ -1,14 +1,14 @@
 import { CheckraOptions } from '../types';
 import { AiSettings as CoreAiSettings } from '../ui/settings-modal';
 import { SettingsModal } from '../ui/settings-modal';
-import FeedbackViewer from '../ui/feedback-viewer';
+import Checkra from '../ui/Checkra';
 import { EventEmitter } from './event-emitter';
 import * as Auth from '../auth/auth'; // Import auth functions
 import { customWarn, customError } from '../utils/logger';
 
 // Module-level instance variables
 let settingsModalInstance: SettingsModal | null = null;
-let feedbackViewerInstance: FeedbackViewer | null = null; // Keep a ref to the viewer instance
+let feedbackViewerInstance: Checkra | null = null; // Keep a ref to the viewer instance
 
 // Key Management
 let effectiveApiKey: string | null = null;
@@ -152,7 +152,7 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
     // Get/create the FeedbackViewer singleton instance, passing initial visibility
     // The FeedbackViewer.getInstance method needs to be adapted to accept initialVisibility
     if (!feedbackViewerInstance) {
-      feedbackViewerInstance = FeedbackViewer.getInstance(settingsModalInstance, finalOptions.isVisible);
+      feedbackViewerInstance = Checkra.getInstance(settingsModalInstance, finalOptions.isVisible);
     }
 
 

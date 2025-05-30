@@ -1,6 +1,6 @@
 import { fetchFeedback } from '../services/ai-service';
-import { SELECT_SVG_ICON, type FeedbackViewerElements } from './feedback-viewer-dom';
-import type { FeedbackViewerDOM } from './feedback-viewer-dom';
+import { SELECT_SVG_ICON, type CheckraViewerElements } from './checkra-dom';
+import type { CheckraDOM } from './checkra-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
@@ -49,9 +49,9 @@ const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
  */
-export class FeedbackViewerImpl {
-  private domElements: FeedbackViewerElements | null = null;
-  private domManager: FeedbackViewerDOM | null = null;
+export class CheckraImplementation {
+  private domElements: CheckraViewerElements | null = null;
+  private domManager: CheckraDOM | null = null;
   private settingsModal: SettingsModal | null = null;
   private optionsInitialVisibility: boolean; // To store the initial visibility from options
 
@@ -117,7 +117,7 @@ export class FeedbackViewerImpl {
   }
 
   public initialize(
-    domManager: FeedbackViewerDOM,
+    domManager: CheckraDOM,
     settingsModal: SettingsModal
   ): void {
     // --- ALWAYS reset conversation history and onboarding flag on page load ---

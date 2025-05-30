@@ -1,4 +1,4 @@
-import './feedback-viewer.css';
+import './checkra.css';
 import { marked } from 'marked';
 import { eventEmitter } from '../core/index';
 
@@ -21,7 +21,7 @@ interface ConversationItem {
   fix?: any;
 }
 
-export interface FeedbackViewerElements {
+export interface CheckraViewerElements {
   viewer: HTMLDivElement;
   promptTextarea: HTMLTextAreaElement;
   submitButton: HTMLButtonElement;
@@ -51,8 +51,8 @@ export const SELECT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox=
  * Manages the DOM elements, styling, positioning, dragging, and resizing
  * of the feedback viewer.
  */
-export class FeedbackViewerDOM {
-  private elements: FeedbackViewerElements | null = null;
+export class CheckraDOM {
+  private elements: CheckraViewerElements | null = null;
   private readonly originalPromptTitleText = '';
   private closeButtonCallback: (() => void) | null = null;
 
@@ -83,7 +83,7 @@ export class FeedbackViewerDOM {
     this.closeButtonCallback?.();
   }
 
-  public create(onCloseButtonClick: () => void): FeedbackViewerElements {
+  public create(onCloseButtonClick: () => void): CheckraViewerElements {
     if (this.elements) return this.elements;
     this.closeButtonCallback = onCloseButtonClick;
 
@@ -704,7 +704,7 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
     }, 1500);
   }
 
-  public getElements(): FeedbackViewerElements | null {
+  public getElements(): CheckraViewerElements | null {
     return this.elements;
   }
 }
