@@ -95,6 +95,8 @@ export class FeedbackViewerImpl {
   private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
   private conversationHistory: ConversationItem[] = [];
 
+  private boundHandleJsonPatch = this.handleJsonPatch.bind(this);
+
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
     initialVisibilityFromOptions: boolean = false // New parameter
@@ -153,6 +155,7 @@ export class FeedbackViewerImpl {
     eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
     // Listen for onboarding suggestion clicks
     eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
+    eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
 
     // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -232,6 +235,7 @@ export class FeedbackViewerImpl {
     eventEmitter.off('toggleViewerShortcut', this.boundToggle); // ADDED: Unsubscribe from toggle shortcut event
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
     eventEmitter.off('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
+    eventEmitter.off('aiJsonPatch', this.boundHandleJsonPatch);
 
     this.domElements = null;
     this.domManager = null;
@@ -862,20 +866,24 @@ Your job:
       this.originalSvgsMap.set(placeholderId, svg.outerHTML);
 
       // Create placeholder element
-      const placeholder = doc.createElement('svg');
+      const placeholder = doc.createElement('svg'); // Create an actual SVG element as placeholder
       placeholder.setAttribute('data-checkra-id', placeholderId);
+      // Add some minimal content or attributes to ensure it's not empty if the parser is strict
+      placeholder.setAttribute('viewBox', '0 0 1 1'); 
       svg.parentNode?.replaceChild(placeholder, svg);
     });
 
-    // Return the modified HTML. Use body.innerHTML if the original was a fragment,
-    // or outerHTML of the root element if it was a full element.
-    // Assuming the original selection is likely a single element or fragment within body.
-    // If htmlString represents a full document fragment, doc.body.innerHTML is best.
-    // If htmlString is outerHTML of a single element, need to get that element.
-    // Let's default to body.innerHTML for simplicity, assuming fragments are common.
-    // If the input was outerHTML of a single node, this might add an extra container.
-    // A safer approach might be needed depending on exact `selectedHtml` content.
-    return doc.body.innerHTML;
+    // Determine the correct way to serialize back to string
+    let processedHtmlString;
+    if (doc.body.childNodes.length === 1 && doc.body.firstElementChild && htmlString.trim().startsWith(`<${doc.body.firstElementChild.tagName.toLowerCase()}`)) {
+      // Likely a single element was passed in, use its outerHTML
+      processedHtmlString = doc.body.firstElementChild.outerHTML;
+    } else {
+      // Likely a fragment or multiple elements, use body.innerHTML
+      processedHtmlString = doc.body.innerHTML;
+    }
+    customWarn('[FeedbackViewerImpl DEBUG] preprocessHtmlForAI output:', processedHtmlString.slice(0,300));
+    return processedHtmlString;
   }
 
   /**
@@ -904,6 +912,10 @@ Your job:
    * and stores it in `fixedOuterHTMLForCurrentCycle`.
    */
   private extractAndStoreFixHtml(): void {
+    if (this.fixedOuterHTMLForCurrentCycle) {
+      // Already set via JSON patch handling; skip extraction
+      return;
+    }
     const aiItems = this.conversationHistory.filter(item => item.type === 'ai');
     const lastAiItem = aiItems.length > 0 ? aiItems[aiItems.length - 1] : null;
 
@@ -1785,6 +1797,112 @@ Your job:
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
         this.showError(`Failed to save draft: ${displayErrorMessage}`);
       }
+    }
+  }
+
+  private handleJsonPatch(patchEvent: { payload: any; originalHtml: string }): void {
+    try {
+      const { payload, originalHtml } = patchEvent;
+
+      let patchArray: any = null;
+      if (typeof payload === 'string') {
+        try {
+          patchArray = JSON.parse(payload);
+        } catch (e) {
+          customError('[FeedbackViewerImpl] Failed to parse JSON patch payload string:', e, payload);
+          this.showError('Failed to parse JSON patch from AI response.');
+          return;
+        }
+      } else {
+        patchArray = payload;
+      }
+
+      customWarn('[FeedbackViewerImpl] Received aiJsonPatch payload. Type:', typeof patchArray, 'Array?', Array.isArray(patchArray));
+ 
+      if (!Array.isArray(patchArray)) {
+        customError('[FeedbackViewerImpl] Patch payload is not an array:', patchArray);
+        this.showError('Invalid JSON patch received from AI.');
+        return;
+      }
+
+      customWarn('[FeedbackViewerImpl] Patch array length:', patchArray.length, 'First element snippet:', JSON.stringify(patchArray[0]).slice(0,150));
+ 
+      // Extract the replacement HTML from the patch (root-level replace op)
+      let updatedHtml: string | null = null;
+      for (const op of patchArray) {
+        if (op && op.op === 'replace' && (op.path === '' || op.path === '/')) {
+          updatedHtml = op.value as string;
+          break;
+        }
+      }
+
+      if (!updatedHtml || typeof updatedHtml !== 'string') {
+        customWarn('[FeedbackViewerImpl] No applicable replace op found in JSON patch. Falling back to originalHtml.');
+        updatedHtml = originalHtml;
+      }
+
+      // Clean up: if the value includes commentary or markdown before the real HTML, trim to first HTML tag
+      const firstTagIndex = updatedHtml.indexOf('<');
+      if (firstTagIndex > 0) {
+        updatedHtml = updatedHtml.slice(firstTagIndex);
+      }
+
+      // Restore any SVG placeholders back to real SVGs
+      try {
+        updatedHtml = this.postprocessHtmlFromAI(updatedHtml);
+      } catch (e) {
+        customWarn('[FeedbackViewerImpl] postprocessHtmlFromAI failed on JSON patch HTML:', e);
+      }
+
+      // Remove any leading comment or plaintext nodes that are not valid elements
+      const scrubLeadingNonElement = (html: string): string => {
+        const frag = this.createFragmentFromHTML(html);
+        if (!frag) return html;
+
+        // Remove nodes from the start until we hit an element node
+        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+          const textNode = frag.firstChild;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            // If it's just whitespace, remove; if it's visible text (human commentary), also drop it.
+            const textContent = textNode.textContent || '';
+            if (textContent.trim() === '') {
+              textNode.parentNode?.removeChild(textNode);
+            } else {
+              // For non-whitespace text, also remove – commentary should not be inserted into DOM
+              textNode.parentNode?.removeChild(textNode);
+            }
+          } else {
+            // Comment node – always remove
+            textNode.parentNode?.removeChild(textNode);
+          }
+        }
+
+        // Serialize back by creating a temporary container
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(frag);
+        return tempContainer.innerHTML;
+      };
+
+      updatedHtml = scrubLeadingNonElement(updatedHtml);
+
+      const testFrag = this.createFragmentFromHTML(updatedHtml);
+      if (!testFrag || testFrag.childNodes.length === 0) {
+        customError('[FeedbackViewerImpl] Parsed HTML from JSON patch is empty/invalid after scrubbing – will skip applying.');
+        return;
+      }
+
+      this.fixedOuterHTMLForCurrentCycle = updatedHtml;
+
+      // Ensure there is an active AI placeholder to mark as non-streaming (content was already streamed)
+      if (this.activeStreamingAiItem) {
+        // We simply keep whatever analysis content was streamed; no need to clear it.
+      }
+
+      // After storing fixed HTML, we rely on finalizeResponse (triggered by aiFinalized) to apply the fix.
+
+    } catch (err) {
+      customError('[FeedbackViewerImpl] Error handling aiJsonPatch event:', err);
+      this.showError('An error occurred while applying AI suggested changes.');
     }
   }
 }

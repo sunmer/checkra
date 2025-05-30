@@ -3,6 +3,10 @@ import { getEffectiveApiKey, getCurrentAiSettings, eventEmitter } from '../core/
 import { AiSettings } from '../ui/settings-modal';
 import { customWarn, customError } from '../utils/logger';
 // import html2canvas from 'html2canvas'; // Eager import removed
+import { CSS_ATOMIC_MAP } from '../utils/css-map';
+import { detectCssFramework } from '../utils/framework-detector';
+import { detectUiKit } from '../utils/ui-kit-detector';
+import { generateColorScheme } from '../utils/color-utils';
 
 // Type for the html2canvas function itself
 type Html2CanvasStatic = (element: HTMLElement, options?: Partial<any>) => Promise<HTMLCanvasElement>;
@@ -29,28 +33,83 @@ async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
   }
 }
 
-// Helper function to generate cssDigest
-const generateCssDigest = (htmlString: string): string => {
-  if (!htmlString) return '<!-- cssDigest: -->';
+const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): Record<string,string> => {
+  const map: Record<string,string> = {};
+  if (frameworkName === 'tailwind') {
+    classesUsed.forEach(cls => {
+      const decl = CSS_ATOMIC_MAP[cls];
+      if (decl) map[cls] = decl;
+    });
+  } else {
+    // Fallback: compute styles directly.
+    const probe = document.createElement('div');
+    document.body.appendChild(probe);
+    classesUsed.forEach(cls => {
+      probe.className = cls;
+      const style = getComputedStyle(probe);
+      const fs = style.fontSize ? `font-size:${style.fontSize};` : '';
+      const lh = style.lineHeight ? `line-height:${style.lineHeight};` : '';
+      const color = style.color && style.color !== 'rgba(0, 0, 0, 0)' ? `color:${style.color};` : '';
+      const bg = style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' ? `background-color:${style.backgroundColor};` : '';
+      const bs = style.boxShadow && style.boxShadow !== 'none' ? `box-shadow:${style.boxShadow};` : '';
+      const decl = `${fs}${lh}${color}${bg}${bs}`.replace(/;;+/g, ';');
+      if (decl) map[cls] = decl;
+    });
+    document.body.removeChild(probe);
+  }
+  return map;
+};
 
+interface CssContext {
+  comment: string;
+  cssDigests: any;
+  frameworkDetection: import('../utils/framework-detector').DetectedFramework;
+}
+
+const produceCssContext = (htmlString: string): CssContext => {
+  if (!htmlString) {
+    const fd = detectCssFramework();
+    const emptyDigest = {
+      [fd.name]: {
+        version: fd.version,
+        tokens: {}
+      }
+    };
+    return {
+      comment: '<!-- cssDigests: {} -->',
+      cssDigests: emptyDigest,
+      frameworkDetection: fd
+    };
+  }
+   
   const classRegex = /class="([^"]*)"/g;
   let match;
-  const allClasses = new Set<string>();
+  const classesUsed = new Set<string>();
 
   while ((match = classRegex.exec(htmlString)) !== null) {
     const classes = match[1].split(/\s+/);
     classes.forEach(cls => {
       if (cls.trim()) {
-        allClasses.add(cls.trim());
+        classesUsed.add(cls.trim());
       }
     });
   }
 
-  if (allClasses.size === 0) {
-    return '<!-- cssDigest: -->';
-  }
+  const framework = detectCssFramework();
+  const digestTokens = buildTokensMap(classesUsed, framework.name);
 
-  return `<!-- cssDigest: ${Array.from(allClasses).join(',')} -->`;
+  const cssDigests: any = {
+    [framework.name]: {
+      version: framework.version,
+      tokens: digestTokens
+    }
+  };
+
+  return {
+    comment: `<!-- cssDigests: ${JSON.stringify(cssDigests)} -->`,
+    cssDigests,
+    frameworkDetection: framework
+  };
 };
 
 const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary?: string; accent?: string } | null> => {
@@ -208,6 +267,9 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
       metadata.brand = {};
       if (primaryColor) metadata.brand.primary = primaryColor;
       if (accentColor) metadata.brand.accent = accentColor;
+      // Generate color scheme palette (5 colors)
+      const palette = generateColorScheme(primaryColor, accentColor);
+      if (palette.length === 5) (metadata.brand as any).palette = palette;
     }
   } catch (e) {
     customWarn('[Checkra Service] Could not retrieve brand colors:', e);
@@ -223,7 +285,10 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
       }
       if (!metadata.brand.accent && screenshotColors.accent) {
         metadata.brand.accent = screenshotColors.accent;
-
+        if (metadata.brand.primary) {
+          const palette = generateColorScheme(metadata.brand.primary, metadata.brand.accent ?? null);
+          if (palette.length === 5) (metadata.brand as any).palette = palette;
+        }
       }
     }
   }
@@ -246,18 +311,38 @@ const fetchFeedbackBase = async (
     const currentAiSettings = getCurrentAiSettings();
 
     let processedHtml = selectedHtml;
+    let originalSentHtmlForPatch: string | null = null;
+    let jsonPatchAccumulator: string = ''; // Accumulator for JSON patch NDJSON chunks
+    let patchStartSeen: boolean = false; // Flag to detect when PATCH_START marker has been encountered
+    let analysisAccumulator: string = ''; // Accumulate analysis chunks until marker detected
+    let extraCssDigests: any = null;
+    let detectedFrameworkInfo: any = null;
+    let uiKitInfo: any = null;
+
     if (selectedHtml) {
-      const digest = generateCssDigest(selectedHtml);
-      processedHtml = `${digest}\n${selectedHtml}`;
+      const cssCtx = produceCssContext(selectedHtml);
+      processedHtml = `${cssCtx.comment}\n${selectedHtml}`;
+      extraCssDigests = cssCtx.cssDigests;
+      detectedFrameworkInfo = cssCtx.frameworkDetection;
+      uiKitInfo = detectUiKit(selectedHtml);
+      if (insertionMode === 'replace' && selectedHtml.length >= 500) {
+        originalSentHtmlForPatch = selectedHtml;
+        customWarn('[AI Service] JSON Patch mode activated: insertionMode is replace and selectedHtml.length >= 500.');
+      } else if (insertionMode === 'replace') {
+        customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
+      }
     }
 
     const requestBody: {
       prompt: string;
       html?: string | null;
-      metadata: PageMetadata; // This PageMetadata type no longer has framework
+      htmlCharCount?: number;
+      metadata: PageMetadata;
       aiSettings: AiSettings;
-      image?: string | null;
       insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
+      cssDigests?: any;
+      frameworkDetection?: any;
+      uiKitDetection?: any;
     } = {
       prompt: promptText,
       metadata: metadata,
@@ -267,9 +352,10 @@ const fetchFeedbackBase = async (
 
     if (selectedHtml) {
       requestBody.html = processedHtml;
-    }
-    if (imageDataUrl) {
-      requestBody.image = imageDataUrl;
+      requestBody.htmlCharCount = selectedHtml.length;
+      if (extraCssDigests) requestBody.cssDigests = extraCssDigests;
+      if (detectedFrameworkInfo) requestBody.frameworkDetection = detectedFrameworkInfo;
+      if (uiKitInfo && uiKitInfo.name) requestBody.uiKitDetection = uiKitInfo;
     }
 
     const currentApiKey = getEffectiveApiKey();
@@ -320,10 +406,25 @@ const fetchFeedbackBase = async (
               const jsonString = buffer.substring(5).trim();
               if (jsonString) {
                 const data = JSON.parse(jsonString);
-                if (data.content) {
+                // Check for JSON patch in the final buffer as well
+                if (originalSentHtmlForPatch) {
+                  if (typeof data.content === 'string') {
+                    jsonPatchAccumulator += data.content;
+                  }
+                  // Do not emit aiResponseChunk here for patch mode
+                } else if (data.type === 'json-patch') {
+                  let parsedPayload: any = jsonPatchAccumulator;
+                  try {
+                    parsedPayload = JSON.parse(jsonPatchAccumulator);
+                  } catch (e) {
+                    customWarn('[AI Service] Failed to parse accumulated JSON patch; sending raw string', e);
+                  }
+                  customWarn('[AI Service] Emitting aiJsonPatch. Raw length:', jsonPatchAccumulator.length, 'Parsed type:', Array.isArray(parsedPayload) ? 'array' : typeof parsedPayload);
+                  eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
+                } else if (data.content) {
                   eventEmitter.emit('aiResponseChunk', data.content);
                 } else {
-                  customWarn("[SSE Parser] Final buffer data line did not contain 'content':", data);
+                  customWarn("[SSE Parser] Final buffer data line did not contain 'content' or valid 'json-patch':", data);
                 }
               }
             } catch (e) {
@@ -332,6 +433,16 @@ const fetchFeedbackBase = async (
           } else if (buffer.trim()) {
             // customWarn("[SSE Parser] Final buffer contained non-data line content:", buffer);
           }
+        }
+        if (originalSentHtmlForPatch && jsonPatchAccumulator.length > 0) {
+          let parsedPayload: any = jsonPatchAccumulator;
+          try {
+            parsedPayload = JSON.parse(jsonPatchAccumulator);
+          } catch (e) {
+            customWarn('[AI Service] Failed to parse accumulated JSON patch at stream end; sending raw string', e);
+          }
+          customWarn('[AI Service] Emitting aiJsonPatch at stream end. Raw length:', jsonPatchAccumulator.length);
+          eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
         }
         eventEmitter.emit('aiFinalized');
         break;
@@ -353,15 +464,45 @@ const fetchFeedbackBase = async (
                 eventEmitter.emit(currentEventType, parsedData);
                 currentEventType = null;
               } else {
-                if (parsedData.userMessage) {
+                if (parsedData.type === 'json-patch') {
+                  customWarn('[AI Service] Received inline json-patch event (not NDJSON). Emitting immediately.');
+                  eventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
+                  // After emitting, we can continue to wait for stream end.
+                } else if (originalSentHtmlForPatch) {
+                  // We're in JSON patch mode with analysis + patch. Detect PATCH_START marker.
+                  const raw = parsedData.content;
+                  const cleaned = raw.replace(/\u001b/g, ''); // Remove ESC char if present
+
+                  if (!patchStartSeen) {
+                    analysisAccumulator += cleaned;
+                    const markerIndex = analysisAccumulator.indexOf('[PATCH_START]');
+                    if (markerIndex !== -1) {
+                      const analysisPart = analysisAccumulator.substring(0, markerIndex);
+                      if (analysisPart.trim().length > 0) {
+                        eventEmitter.emit('aiResponseChunk', analysisPart);
+                        customWarn('[AI Service] Emitting analysis portion length', analysisPart.length);
+                      }
+                      patchStartSeen = true;
+                      const afterMarker = analysisAccumulator.substring(markerIndex + '[PATCH_START]'.length);
+                      if (afterMarker.length > 0) {
+                        jsonPatchAccumulator += afterMarker;
+                        customWarn('[AI Service] Accum patch chunk, total length now', jsonPatchAccumulator.length);
+                      }
+                      analysisAccumulator = '';
+                    }
+                  } else {
+                    // After marker -> accumulate patch
+                    jsonPatchAccumulator += cleaned;
+                  }
+                } else if (parsedData.userMessage) {
                   eventEmitter.emit('aiUserMessage', parsedData.userMessage);
                 } else if (parsedData.content) {
                   eventEmitter.emit('aiResponseChunk', parsedData.content);
                 } else if (parsedData.error) {
-                  customError("[SSE Parser] Received error object via SSE data line:", parsedData.error);
-                  eventEmitter.emit('aiError', `Stream Error: ${parsedData.error}`);
+                  customError("[SSE Parser] Received error object via SSE data line:", parsedData.error, parsedData.details);
+                  eventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
                 } else {
-                  customWarn("[SSE Parser] Received data line with unknown structure (no event type):");
+                  customWarn("[SSE Parser] Received data line with unknown structure (no event type):", parsedData);
                 }
               }
             }
@@ -376,6 +517,22 @@ const fetchFeedbackBase = async (
           // customWarn("[SSE Parser] Received non-empty, non-event, non-data line:", line);
         }
       }
+    }
+
+    // Flush analysis text if we expected patch but no marker was seen
+    if (originalSentHtmlForPatch && !patchStartSeen && analysisAccumulator.trim().length > 0) {
+      eventEmitter.emit('aiResponseChunk', analysisAccumulator);
+    }
+
+    if (originalSentHtmlForPatch && patchStartSeen && jsonPatchAccumulator.length > 0) {
+      let parsedPayload: any = jsonPatchAccumulator;
+      try {
+        parsedPayload = JSON.parse(jsonPatchAccumulator);
+      } catch (e) {
+        customWarn('[AI Service] Failed to parse accumulated JSON patch at stream end; sending raw string', e);
+      }
+      customWarn('[AI Service] Emitting aiJsonPatch at stream end. Raw length:', jsonPatchAccumulator.length);
+      eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
     }
   } catch (error) {
     customError("Error in fetchFeedbackBase:", error);
