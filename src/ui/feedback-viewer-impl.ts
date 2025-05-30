@@ -930,28 +930,60 @@ Your job:
       match = responseText.match(GENERIC_HTML_REGEX);
     }
 
-    if (match && match[1]) {
-      let extractedHtml = match[1].trim();
+    let extractedHtml: string | null = null;
+    let analysisPortion: string | null = null;
 
+    if (match && match[1]) {
+      extractedHtml = match[1].trim();
+      analysisPortion = responseText.replace(match[0], '').trim();
+    } else {
+      // Fallback: attempt to locate raw HTML outside of fences (common when LLM omitted code block)
+      // Heuristic: find first element tag that likely starts the intended HTML block.
+      // We search for common block-level tags but fall back to the very first '<' if needed.
+      const tagRegex = /<\s*(div|section|article|main|header|footer|nav|ul|ol|li|p|h[1-6]|details|summary)[^>]*>/i;
+      const tagMatch = tagRegex.exec(responseText);
+      const startIdx = tagMatch ? tagMatch.index : responseText.indexOf('<');
+      if (startIdx !== -1) {
+        extractedHtml = responseText.slice(startIdx).trim();
+        analysisPortion = responseText.slice(0, startIdx).trim();
+      }
+    }
+
+    if (extractedHtml) {
       try {
         extractedHtml = this.postprocessHtmlFromAI(extractedHtml);
-        
+
+        // Optionally scrub leading non-element/comment nodes similar to JSON patch flow
+        const scrubLeadingNonElement = (html: string): string => {
+          const frag = this.createFragmentFromHTML(html);
+          if (!frag) return html;
+          while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+            frag.firstChild.parentNode?.removeChild(frag.firstChild);
+          }
+          const temp = document.createElement('div');
+          temp.appendChild(frag);
+          return temp.innerHTML;
+        };
+        extractedHtml = scrubLeadingNonElement(extractedHtml);
+
         const tempFragment = this.createFragmentFromHTML(extractedHtml);
 
         if (tempFragment && tempFragment.childNodes.length > 0) {
           this.fixedOuterHTMLForCurrentCycle = extractedHtml;
+
+          // Clean the AI bubble to only show analysis portion (if any)
+          if (analysisPortion && lastAiItem) {
+            lastAiItem.content = analysisPortion;
+          }
         } else {
-          customWarn('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Failed to parse extracted HTML into a valid, non-empty fragment. Fix may not be applicable.');
+          customWarn('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Fallback extraction failed to produce valid HTML fragment.');
           this.fixedOuterHTMLForCurrentCycle = null;
         }
       } catch (e) {
-        customError('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Error during postprocessing/validation:', e);
+        customError('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Error during fallback postprocessing/validation:', e);
         this.fixedOuterHTMLForCurrentCycle = null;
       }
     } else {
-      if (!lastAiItem.isStreaming && !GENERIC_HTML_REGEX.test(responseText)) {
-      } else {
-      }
       this.fixedOuterHTMLForCurrentCycle = null;
     }
   }
