@@ -2,6 +2,8 @@ export interface DetectedFramework {
   name: 'tailwind' | 'bootstrap' | 'material-ui' | 'custom';
   version: string | 'unknown';
   confidence: number; // 0 (no confidence) -> 1 (high confidence)
+  utilityDensity: number;
+  type: 'utility-first' | 'component-based' | 'unknown';
 }
 
 /**
@@ -15,15 +17,15 @@ export function detectCssFramework(): DetectedFramework {
     const url = (el as any).href || (el as any).src || '';
     if (/tailwind/i.test(url)) {
       const m = url.match(/@([0-9]+\.[0-9]+\.[0-9]+)/);
-      return { name: 'tailwind', version: m ? m[1] : 'unknown', confidence: 0.95 };
+      return { name: 'tailwind', version: m ? m[1] : 'unknown', confidence: 0.95, utilityDensity: 0, type: 'utility-first' };
     }
     if (/bootstrap/i.test(url)) {
       const m = url.match(/v([0-9]+\.[0-9]+\.[0-9]+)/);
-      return { name: 'bootstrap', version: m ? m[1] : 'unknown', confidence: 0.95 };
+      return { name: 'bootstrap', version: m ? m[1] : 'unknown', confidence: 0.95, utilityDensity: 0, type: 'component-based' };
     }
     if (/mui|material-ui/i.test(url)) {
       const m = url.match(/@([0-9]+\.[0-9]+\.[0-9]+)/);
-      return { name: 'material-ui', version: m ? m[1] : 'unknown', confidence: 0.95 };
+      return { name: 'material-ui', version: m ? m[1] : 'unknown', confidence: 0.95, utilityDensity: 0, type: 'component-based' };
     }
   }
 
@@ -44,6 +46,11 @@ export function detectCssFramework(): DetectedFramework {
     }
   }
 
+  const totalClasses = bodyClassTokens.size;
+  let utilityMatches = 0;
+  bodyClassTokens.forEach(t => { if (/[a-z0-9-]+-[0-9]+$/.test(t)) utilityMatches++; });
+  const utilityDensity = totalClasses === 0 ? 0 : utilityMatches / totalClasses;
+
   // Simple scoring
   let tailwindScore = 0;
   let bootstrapScore = 0;
@@ -55,12 +62,12 @@ export function detectCssFramework(): DetectedFramework {
   });
 
   const maxScore = Math.max(tailwindScore, bootstrapScore, muiScore);
-  if (maxScore === 0) return { name: 'custom', version: new Date().toISOString().split('T')[0], confidence: 0.0 };
+  if (maxScore === 0) return { name: 'custom', version: new Date().toISOString().split('T')[0], confidence: 0.0, utilityDensity: 0, type: 'unknown' };
 
   const total = tailwindScore + bootstrapScore + muiScore;
   const conf = total > 0 ? maxScore / total : 0.0;
 
-  if (maxScore === tailwindScore) return { name: 'tailwind', version: 'unknown', confidence: conf };
-  if (maxScore === bootstrapScore) return { name: 'bootstrap', version: 'unknown', confidence: conf };
-  return { name: 'material-ui', version: 'unknown', confidence: conf };
+  const type = maxScore === tailwindScore ? 'utility-first' : maxScore === bootstrapScore ? 'component-based' : 'component-based';
+
+  return { name: maxScore === tailwindScore ? 'tailwind' : maxScore === bootstrapScore ? 'bootstrap' : 'material-ui', version: 'unknown', confidence: conf, utilityDensity, type };
 } 

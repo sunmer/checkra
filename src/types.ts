@@ -51,6 +51,7 @@ export interface PageMetadataBrand {
   primary?: string | null;
   accent?: string | null;
   palette?: string[];
+  inferred?: BrandInferred;
 }
 
 export interface PageMetadata {
@@ -71,6 +72,8 @@ export interface BackendPayloadMetadata extends PageMetadata {
   cssDigests?: any; // Consider defining a more specific type for cssDigests if possible
   frameworkDetection?: DetectedFramework;
   uiKitDetection?: UiKitDetection;
+  perfHints?: PerfHints;
+  leverValues?: LeverValues;
 }
 
 export interface GenerateSuggestionRequestbody {
@@ -84,5 +87,26 @@ export interface GenerateSuggestionRequestbody {
 
 export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
   rating: 1 | 2 | 3 | 4;
+}
+
+// --- New Shared Interfaces ---
+export interface BrandInferred {
+  primary: string;
+  accent: string;
+  source: 'class' | 'var' | 'computed' | 'screenshot';
+  contrastRatio: number;
+  wasLightnessTweaked: boolean;
+}
+
+export interface PerfHints {
+  branch: 'A' | 'B' | 'C' | 'D';
+  ms: number;
+  canvasMs?: number;
+}
+
+export interface LeverValues {
+  spacingStep?: string;
+  depthPreset?: string;
+  motionPreset?: string;
 }
 // --- End Updated and New Interfaces ---

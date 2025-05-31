@@ -217,72 +217,36 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   const h1Tag = document.querySelector('h1');
   metadata.h1 = h1Tag ? h1Tag.textContent?.trim() || null : null;
 
-  // Attempt to extract brand colors
+  // --- New brand colour & lever extraction ---
   try {
-    const computedStyles = getComputedStyle(document.documentElement);
-    let primaryColor = computedStyles.getPropertyValue('--primary').trim();
-    let accentColor = computedStyles.getPropertyValue('--accent').trim();
-
-    // Fallback logic if CSS variables are not found or are empty
-    if (!primaryColor || !accentColor) {
-
-      const buttons = document.querySelectorAll('button, a[role="button"], input[type="submit"], input[type="button"]');
-      let firstVisibleButton: HTMLElement | null = null;
-      for (const btn of Array.from(buttons)) {
-        if (btn instanceof HTMLElement && btn.offsetParent !== null) { // Check if visible
-          firstVisibleButton = btn;
-          break;
-        }
-      }
-
-      if (firstVisibleButton) {
-        const buttonStyles = getComputedStyle(firstVisibleButton);
-        const btnBgColor = buttonStyles.backgroundColor;
-        const btnTextColor = buttonStyles.color;
-
-        // Use button background if --primary was missing
-        if (!primaryColor && btnBgColor && !['transparent', 'rgba(0, 0, 0, 0)'].includes(btnBgColor)) {
-          primaryColor = btnBgColor;
-
-        }
-        // Use button text color if --accent was missing and different from primary
-        if (!accentColor && btnTextColor && !['transparent', 'rgba(0, 0, 0, 0)'].includes(btnTextColor) && btnTextColor !== primaryColor) {
-          accentColor = btnTextColor;
-
-        }
-      } else {
-
-      }
+    const frameworkInfo = detectCssFramework();
+    const { colours, lever, perf } = await (await import('../utils/design-tokens')).resolveBrandColors(
+      document.body,
+      frameworkInfo,
+      document.body.outerHTML,
+      extractColorsFromElement
+    );
+    if (colours) {
+      metadata.brand = {
+        inferred: colours,
+        primary: colours.primary,
+        accent: colours.accent,
+      } as any;
     }
-
-    if (primaryColor || accentColor) {
-      metadata.brand = {};
-      if (primaryColor) metadata.brand.primary = primaryColor;
-      if (accentColor) metadata.brand.accent = accentColor;
-      // Generate color scheme palette (5 colors)
-      const palette = generateColorScheme(primaryColor, accentColor);
+    if (lever) {
+      // @ts-ignore attach custom for now; will be forwarded later
+      (metadata as any).leverValues = lever;
+    }
+    // Attach perfHints so backend can debug slow paths
+    // @ts-ignore
+    (metadata as any).perfHints = perf;
+    // generate palette if not already done
+    if (colours?.primary && colours?.accent) {
+      const palette = generateColorScheme(colours.primary, colours.accent);
       if (palette.length === 5) (metadata.brand as any).palette = palette;
     }
-  } catch (e) {
-    customWarn('[Checkra Service] Could not retrieve brand colors:', e);
-  }
-  if (!metadata.brand?.primary || !metadata.brand?.accent) {
-
-    const screenshotColors = await extractColorsFromElement(document.body);
-    if (screenshotColors) {
-      if (!metadata.brand) metadata.brand = {};
-      if (!metadata.brand.primary && screenshotColors.primary) {
-        metadata.brand.primary = screenshotColors.primary;
-
-      }
-      if (!metadata.brand.accent && screenshotColors.accent) {
-        metadata.brand.accent = screenshotColors.accent;
-        if (metadata.brand.primary) {
-          const palette = generateColorScheme(metadata.brand.primary, metadata.brand.accent ?? null);
-          if (palette.length === 5) (metadata.brand as any).palette = palette;
-        }
-      }
-    }
+  } catch (err) {
+    customWarn('[Checkra Service] Brand extraction failed:', err);
   }
 
   return metadata as PageMetadata;
@@ -302,7 +266,8 @@ const fetchFeedbackBase = async (
     const pageMeta = await getPageMetadata(); // Renamed to pageMeta for clarity
     const currentAiSettings = getCurrentAiSettings();
 
-    let processedHtml = selectedHtml;
+    let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
+    let processedHtml = sanitizedHtml;
     let originalSentHtmlForPatch: string | null = null;
     let jsonPatchAccumulator: string = '';
     let patchStartSeen: boolean = false;
@@ -313,15 +278,15 @@ const fetchFeedbackBase = async (
     let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
     let uiKitDetectionForPayload: UiKitDetection | undefined = undefined;
 
-    if (selectedHtml) {
-      const cssCtx = produceCssContext(selectedHtml);
-      processedHtml = `${cssCtx.comment}\n${selectedHtml}`;
+    if (sanitizedHtml) {
+      const cssCtx = produceCssContext(sanitizedHtml || '');
+      processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
       cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
-      uiKitDetectionForPayload = detectUiKit(selectedHtml); // Moved here
+      uiKitDetectionForPayload = sanitizedHtml ? detectUiKit(sanitizedHtml) : undefined; // Moved here
 
-      if (insertionMode === 'replace' && selectedHtml.length >= 500) {
-        originalSentHtmlForPatch = selectedHtml;
+      if (insertionMode === 'replace' && sanitizedHtml && sanitizedHtml.length >= 500) {
+        originalSentHtmlForPatch = sanitizedHtml;
         customWarn('[AI Service] JSON Patch mode activated: insertionMode is replace and selectedHtml.length >= 500.');
       } else if (insertionMode === 'replace') {
         customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
@@ -352,9 +317,9 @@ const fetchFeedbackBase = async (
       insertionMode: insertionMode
     };
 
-    if (selectedHtml) {
+    if (sanitizedHtml) {
       requestBody.html = processedHtml;
-      requestBody.htmlCharCount = selectedHtml.length;
+      requestBody.htmlCharCount = sanitizedHtml.length;
       // cssDigests, frameworkDetection, uiKitDetection are now part of requestBody.metadata
     }
 
@@ -412,8 +377,8 @@ const fetchFeedbackBase = async (
                   }
                 } else if (data.type === 'json-patch') {
                   let parsedPayload: any = jsonPatchAccumulator;
-                  try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
+                  try { parsedPayload = JSON.parse(jsonPatchAccumulator || jsonString); } catch (e) { /* ... */ }
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: data.payload || parsedPayload, originalHtml: originalSentHtmlForPatch });
                 } else if (data.content) {
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', data.content);
                 } else { /* ... */ }
@@ -443,27 +408,54 @@ const fetchFeedbackBase = async (
             if (jsonString) {
               const parsedData = JSON.parse(jsonString);
               if (currentEventType) {
-                if (serviceEventEmitter) serviceEventEmitter.emit(currentEventType, parsedData);
+                if (currentEventType === 'domUpdateHtml') {
+                  if (parsedData.html && parsedData.insertionMode) {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: parsedData.html,
+                        insertionMode: parsedData.insertionMode,
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] Received domUpdateHtml event with missing html or insertionMode:', parsedData);
+                  }
+                } else {
+                  if (serviceEventEmitter) {
+                    serviceEventEmitter.emit(currentEventType, parsedData);
+                  }
+                }
                 currentEventType = null;
               } else {
                 if (parsedData.type === 'json-patch') {
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
                 } else if (originalSentHtmlForPatch) {
                   const raw = parsedData.content;
-                  const cleaned = raw.replace(/\u001b/g, '');
-                  if (!patchStartSeen) {
-                    analysisAccumulator += cleaned;
-                    const markerIndex = analysisAccumulator.indexOf('[PATCH_START]');
-                    if (markerIndex !== -1) {
-                      const analysisPart = analysisAccumulator.substring(0, markerIndex);
-                      if (analysisPart.trim().length > 0 && serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', analysisPart);
-                      patchStartSeen = true;
-                      const afterMarker = analysisAccumulator.substring(markerIndex + '[PATCH_START]'.length);
-                      if (afterMarker.length > 0) jsonPatchAccumulator += afterMarker;
-                      analysisAccumulator = '';
-                    }
-                  } else {
-                    jsonPatchAccumulator += cleaned;
+                  const cleaned = typeof raw === 'string' ? raw.replace(/\u001b/g, '') : '';
+
+                  if (patchStartSeen) { 
+                      jsonPatchAccumulator += cleaned;
+                  } else { // Still in analysis phase for this patch mode request
+                      analysisAccumulator += cleaned; // Accumulate for the complete record, potentially used by end-of-stream handler
+
+                      const markerIndexInCleaned = cleaned.indexOf('[PATCH_START]');
+
+                      if (markerIndexInCleaned !== -1) { // Marker is in the current chunk
+                          const preMarkerTextInChunk = cleaned.substring(0, markerIndexInCleaned);
+                          if (preMarkerTextInChunk.trim().length > 0 && serviceEventEmitter) {
+                              serviceEventEmitter.emit('aiResponseChunk', preMarkerTextInChunk); // Stream this part of analysis
+                          }
+                          patchStartSeen = true;
+                          const postMarkerTextInChunk = cleaned.substring(markerIndexInCleaned + '[PATCH_START]'.length);
+                          if (postMarkerTextInChunk.length > 0) {
+                              jsonPatchAccumulator += postMarkerTextInChunk;
+                          }
+                          // analysisAccumulator has served its purpose for streaming leading up to the marker found in *this chunk*.
+                          // The full analysisAccumulator (if stream ends before marker) is handled by end-of-stream logic.
+                      } else { // No marker in this specific 'cleaned' chunk, so it's purely analysis to be streamed
+                          if (cleaned.trim().length > 0 && serviceEventEmitter) {
+                              serviceEventEmitter.emit('aiResponseChunk', cleaned); // Stream this analysis chunk
+                          }
+                      }
                   }
                 } else if (parsedData.userMessage) {
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiUserMessage', parsedData.userMessage);
@@ -471,7 +463,9 @@ const fetchFeedbackBase = async (
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', parsedData.content);
                 } else if (parsedData.error) {
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
-                } else { /* ... */ }
+                } else { 
+                  // customWarn('[AI Service] Received unhandled data structure in SSE stream:', parsedData);
+                }
               }
             }
           } catch (e) {

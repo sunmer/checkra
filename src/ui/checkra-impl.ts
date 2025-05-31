@@ -73,6 +73,7 @@ export class CheckraImplementation {
   private svgPlaceholderCounter: number = 0;
   private activeStreamingAiItem: ConversationItem | null = null; // ADDED: To track the current AI message being streamed
   private selectionPlusIconElement: HTMLDivElement | null = null; // Added for persistent '+' icon
+  private pageReplaceLoaderElement: HTMLDivElement | null = null; // Loader for 'replace' mode
 
   // --- Quick Suggestion Flow ---
   private queuedPromptText: string | null = null; // Stores prompt chosen before element selection
@@ -100,6 +101,7 @@ export class CheckraImplementation {
   private conversationHistory: ConversationItem[] = [];
 
   private boundHandleJsonPatch = this.handleJsonPatch.bind(this);
+  private boundHandleDomUpdate = this.handleDomUpdate.bind(this); // NEW: Bound handler for direct DOM updates
 
   private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null; // ADDED: To store request body for the current fix cycle
 
@@ -164,6 +166,7 @@ export class CheckraImplementation {
     // Listen for onboarding suggestion clicks
     eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
+    eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Listen for direct DOM updates
 
     // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -246,6 +249,7 @@ export class CheckraImplementation {
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
     eventEmitter.off('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.off('aiJsonPatch', this.boundHandleJsonPatch);
+    eventEmitter.off('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Unsubscribe from direct DOM updates
 
     this.domElements = null;
     this.domManager = null;
@@ -362,6 +366,8 @@ export class CheckraImplementation {
   public finalizeResponse(): void {
     if (!this.domManager || !this.domElements) return;
 
+    this.hidePageLoaders(); // Hide page loaders when response is finalized
+
     const streamToFinalize = this.activeStreamingAiItem;
 
     if (streamToFinalize && streamToFinalize.type === 'ai' && streamToFinalize.isStreaming) {
@@ -429,6 +435,8 @@ export class CheckraImplementation {
   public showError(error: Error | string): void {
     let errorHtmlContent: string;
 
+    this.hidePageLoaders(); // Hide page loaders on error
+
     if (typeof error === 'string' && error.includes(SELECT_SVG_ICON)) {
       // If it's the specific error message with the SVG placeholder,
       // leave it as is, assuming it's already formatted with the SVG string.
@@ -483,11 +491,8 @@ export class CheckraImplementation {
     this.stableSelectorForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
-    this.activeStreamingAiItem = null; // Also reset any active streaming item
-
-    // Optionally, tell DOM to reset/clear certain parts if not handled by hide() or prepareForInput()
-    // For example, if there are specific UI elements tied to a fix proposal that aren't part of the general history.
-    // this.domManager?.clearCurrentFixProposalDisplay(); // Example if such a method existed
+    this.activeStreamingAiItem = null; 
+    this.hidePageLoaders(); // Hide page loaders on new selection
   }
 
   // --- Method to render user-facing messages (warnings, info) into history ---
@@ -513,7 +518,7 @@ export class CheckraImplementation {
   }
 
   private handleSubmit(): void {
-    const promptText = this.domElements?.promptTextarea.value.trim(); // Safely access promptTextarea
+    const promptText = this.domElements?.promptTextarea.value.trim(); 
 
     // Allow /publish even if other conditions aren't met
     if (promptText?.toLowerCase() === '/publish') {
@@ -588,9 +593,22 @@ export class CheckraImplementation {
 
     this.domManager.setPromptState(false);
     this.domManager.updateSubmitButtonState(false);
-    this.domManager.updateLoaderVisibility(true, 'Loading...');
+    this.domManager.updateLoaderVisibility(true, 'Loading...'); // This is the side panel loader
     this.domManager.clearUserMessage();
     this.domManager.showPromptInputArea(false, promptText);
+
+    // --- Show page-specific loaders ---
+    this.hidePageLoaders(); // Clear any previous loaders first
+    if (this.currentElementInsertionMode === 'insertBefore' || this.currentElementInsertionMode === 'insertAfter') {
+        if (this.selectionPlusIconElement) {
+            this.selectionPlusIconElement.classList.add('loading');
+        }
+    } else if (this.currentElementInsertionMode === 'replace') {
+        if (this.currentlyHighlightedElement) {
+            this.showReplaceLoader(this.currentlyHighlightedElement);
+        }
+    }
+    // --- End page-specific loaders ---
 
     const imageKeywords = ["image", "photo", "picture", "screenshot", "visual", "look", "style", "design", "appearance", "graphic", "illustration", "background", "banner", "logo"];
     const promptHasImageKeyword = imageKeywords.some(keyword => promptText.toLowerCase().includes(keyword)); // Ensure keyword is already lowercase or use keyword.toLowerCase()
@@ -1354,19 +1372,25 @@ Your job:
   private removeSelectionHighlight(): void {
     if (this.currentlyHighlightedElement) {
       this.currentlyHighlightedElement.classList.remove(
-        'checkra-selected-element-outline', // Old class for replace
-        'checkra-hover-top', // Old hover class, just in case
-        'checkra-hover-bottom', // Old hover class, just in case
+        'checkra-selected-element-outline',
+        'checkra-hover-top',
+        'checkra-hover-bottom',
         'checkra-highlight-container',
-        // New persistent selection classes
         'checkra-selected-insert-before',
         'checkra-selected-insert-after',
-        'checkra-selected-replace'
+        'checkra-selected-replace',
+        'checkra-element-dimmed' // Ensure dimmed is removed here too
       );
     }
     if (this.selectionPlusIconElement && this.selectionPlusIconElement.parentNode) {
+      this.selectionPlusIconElement.classList.remove('loading'); // Ensure loading is removed from plus icon
       this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
       this.selectionPlusIconElement = null;
+    }
+    // Also ensure replace loader is removed if selection is cleared while it was active
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove();
+        this.pageReplaceLoaderElement = null;
     }
   }
 
@@ -2016,7 +2040,7 @@ Your job:
       { value: 1, text: '★ Not OK' },
       { value: 2, text: '★★ OK' },
       { value: 3, text: '★★★ Pretty good' },
-      { value: 4, text: '★★★★ Wow' },
+      { value: 4, text: '★★★★ Wow!' },
     ];
 
     ratings.forEach(rating => {
@@ -2062,6 +2086,150 @@ Your job:
         fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer);
     }
   }
+
+  private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
+    customWarn('[CheckraImplementation] Received aiDomUpdateReceived', data);
+    if (!this.currentlyHighlightedElement) {
+      customError('[CheckraImplementation] No currentlyHighlightedElement to apply DOM update to.');
+      this.showError('No element was selected to apply the changes to.');
+      return;
+    }
+
+    const { html, insertionMode } = data;
+    let processedHtml = html;
+
+    const fenceRegex = /^```(?:html)?\n([\s\S]*?)\n```$/i;
+    const fenceMatch = processedHtml.match(fenceRegex);
+    if (fenceMatch && fenceMatch[1]) {
+      processedHtml = fenceMatch[1].trim();
+      customWarn('[CheckraImplementation] Stripped Markdown fences from domUpdateHtml content.');
+    }
+
+    try {
+      processedHtml = this.postprocessHtmlFromAI(processedHtml); 
+      const scrubLeadingNonElement = (incomingHtml: string): string => {
+        const frag = this.createFragmentFromHTML(incomingHtml);
+        if (!frag) return incomingHtml;
+        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+          const textNode = frag.firstChild;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            const textContent = textNode.textContent || '';
+            if (textContent.trim() === '') {
+              textNode.parentNode?.removeChild(textNode);
+            } else {
+              textNode.parentNode?.removeChild(textNode);
+            }
+          } else {
+            textNode.parentNode?.removeChild(textNode);
+          }
+        }
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(frag);
+        return tempContainer.innerHTML;
+      };
+      processedHtml = scrubLeadingNonElement(processedHtml);
+
+    } catch (e) {
+      customWarn('[CheckraImplementation] postprocessHtmlFromAI or scrubbing failed on domUpdateHtml:', e);
+    }
+
+    const finalHtmlToApply = processedHtml;
+
+    const testFrag = this.createFragmentFromHTML(finalHtmlToApply);
+    if (!testFrag || testFrag.childNodes.length === 0) {
+      customError('[CheckraImplementation] HTML for domUpdate is empty/invalid after processing. Aborting DOM update.');
+      this.showError('AI generated empty content, nothing to apply.');
+      return;
+    }
+
+    // Ensure necessary context is available before calling applyFixToPage
+    if (!this.currentFixId || !this.originalOuterHTMLForCurrentCycle || !this.requestBodyForCurrentCycle || !this.stableSelectorForCurrentCycle) {
+        customError('[CheckraImplementation] Missing context for applyFixToPage in handleDomUpdate.', {
+            fixId: this.currentFixId,
+            originalHtml: this.originalOuterHTMLForCurrentCycle,
+            requestBody: this.requestBodyForCurrentCycle,
+            stableSelector: this.stableSelectorForCurrentCycle
+        });
+        this.showError('Internal error: Could not apply changes due to missing context.');
+        // Fallback to direct insertion without controls if context is missing, to at least show the HTML.
+        // This is a degraded experience but better than nothing if context is somehow lost.
+        if (this.currentlyHighlightedElement) {
+          customWarn('[CheckraImplementation] Fallback: performing direct DOM insertion in handleDomUpdate due to missing context for controls.')
+          try {
+              switch (insertionMode) {
+                  case 'insertBefore': this.currentlyHighlightedElement.insertAdjacentHTML('beforebegin', finalHtmlToApply); break;
+                  case 'insertAfter': this.currentlyHighlightedElement.insertAdjacentHTML('afterend', finalHtmlToApply); break;
+                  case 'replace': this.currentlyHighlightedElement.outerHTML = finalHtmlToApply; this.currentlyHighlightedElement = null; break;
+              }
+              this.removeSelectionHighlight();
+          } catch (directInsertError) {
+              customError('[CheckraImplementation] Error during fallback direct DOM insertion:', directInsertError);
+          }
+        } else {
+          customError('[CheckraImplementation] Cannot perform fallback direct DOM insertion, currentlyHighlightedElement is null.');
+        }
+        return;
+    }
+
+    // Call applyFixToPage to ensure controls are added and fix is tracked
+    this.applyFixToPage(
+        this.currentFixId,
+        this.originalOuterHTMLForCurrentCycle,
+        finalHtmlToApply, // This is the fixedHTML
+        insertionMode,
+        this.requestBodyForCurrentCycle,
+        this.stableSelectorForCurrentCycle
+    );
+
+    customWarn(`[CheckraImplementation] DOM update via applyFixToPage initiated with mode: ${insertionMode}`);
+      
+    if (this.activeStreamingAiItem) {
+        this.activeStreamingAiItem.isStreaming = false;
+        this.domManager?.updateLastAIMessage(this.activeStreamingAiItem.content, false); 
+    }
+    this.activeStreamingAiItem = null;
+    this.requestBodyForCurrentCycle = null; // Clear after use, similar to finalizeResponse
+
+    // Note: applyFixToPage itself calls removeSelectionHighlight, so no need to call it here again.
+    // Also, if mode is 'replace', applyFixToPage doesn't nullify currentlyHighlightedElement directly,
+    // but the element with data-checkra-fix-id is removed and replaced by the wrapper.
+    // The original selection highlight should be gone due to applyFixToPage's own call.
+  }
+
+  private showReplaceLoader(targetElement: Element): void {
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove(); // Remove if already exists
+    }
+    this.pageReplaceLoaderElement = createCenteredLoaderElement(); // Uses the module-level helper
+    
+    if (!targetElement.classList.contains('checkra-highlight-container')) {
+        targetElement.classList.add('checkra-highlight-container');
+    }
+
+    targetElement.appendChild(this.pageReplaceLoaderElement);
+    targetElement.classList.add('checkra-element-dimmed');
+  }
+
+  private hidePageLoaders(): void {
+    if (this.selectionPlusIconElement) {
+        this.selectionPlusIconElement.classList.remove('loading');
+    }
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove();
+        this.pageReplaceLoaderElement = null;
+    }
+    const dimmedElements = document.querySelectorAll('.checkra-element-dimmed');
+    dimmedElements.forEach(el => el.classList.remove('checkra-element-dimmed'));
+  }
+
+  // --- End of CheckraImplementation class ---
+}
+
+// Helper function placed at module level
+function createCenteredLoaderElement(): HTMLDivElement {
+    const loader = document.createElement('div');
+    loader.className = 'checkra-replace-loader';
+    return loader;
 }
 
 // Helper function to get a user-friendly display name for a query

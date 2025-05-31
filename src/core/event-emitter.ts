@@ -21,7 +21,9 @@ export type EventName =
   | 'screenshotTaken'        // Added for screenshot data
   | 'elementSelected'        // Added for element selection
   | 'elementDeselected'     // Added for element deselection
-  | 'fixRated';             // Added for fix rating
+  | 'fixRated'
+  | 'aiJsonPatch' // Added for JSON patch data
+  | 'aiDomUpdateReceived'; // Added for direct DOM updates
 
 /**
  * Defines the payload types for each event.
@@ -51,6 +53,8 @@ export interface EventPayloads {
   };
   'elementDeselected': void;
   'fixRated': AddRatingRequestBody;
+  'aiJsonPatch': { payload: any; originalHtml: string }; // Added for JSON patch data
+  'aiDomUpdateReceived': { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }; // Added for direct DOM updates
 }
 
 export class EventEmitter {

@@ -1174,3 +1174,70 @@
     box-shadow: 0 -2px 10px rgba(0,0,0,0.2); /* Shadow might be from bottom */
   }
 }
+
+/* Persistent Plus Icon for Insertions (already exists) */
+.checkra-insert-indicator {
+  position: relative; /* Ensure it's a positioning context for the spinner */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden; /* Prevent spinner from showing if it somehow overflows bounds before rotating */
+}
+
+/* Loading state for the Plus Icon */
+.checkra-insert-indicator.loading::before {
+  content: '';
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px; /* Slightly larger for better visibility */
+  height: 16px;
+  margin-top: -8px; /* Half of height */
+  margin-left: -8px; /* Half of width */
+  border: 2px solid rgba(255, 255, 255, 0.3); /* Softer base border */
+  border-top-color: #2563eb; /* Blue spinner part - should match .checkra-replace-loader */
+  border-radius: 50%;
+  animation: checkra-spinner 0.8s linear infinite;
+}
+
+.checkra-insert-indicator.loading {
+  /* Hide the original '+' sign when loading */
+  color: transparent !important; /* Try with !important to ensure override */
+  font-size: 0 !important; /* Another way to hide text content if color transparent fails */
+}
+
+/* Centered Loader for Replace Mode */
+.checkra-replace-loader {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px; /* Adjust size */
+  height: 32px;
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: #2563eb; /* Blue spinner part */
+  border-radius: 50%;
+  animation: checkra-spinner 1s linear infinite;
+  z-index: 10001; /* Ensure it's above dimmed content but potentially below panel */
+}
+
+/* Dimming overlay for element being replaced */
+.checkra-element-dimmed {
+  opacity: 0.6;
+  position: relative; /* Needed if the loader is a child and absolutely positioned relative to this */
+  /* Add a pseudo-element overlay for better dimming if needed */
+}
+
+/* Shared Spinner Animation */
+@keyframes checkra-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Ensure highlighted element can be a positioning context */
+.checkra-highlight-container {
+    position: relative !important; /* Allow absolute positioning of loader inside */
+}
