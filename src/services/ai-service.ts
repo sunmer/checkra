@@ -1,12 +1,19 @@
 import Settings from '../settings';
-import { getEffectiveApiKey, getCurrentAiSettings, eventEmitter } from '../core/index';
-import { AiSettings } from '../ui/settings-modal';
+import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
 // import html2canvas from 'html2canvas'; // Eager import removed
 import { CSS_ATOMIC_MAP } from '../utils/css-map';
 import { detectCssFramework, DetectedFramework } from '../utils/framework-detector';
 import { detectUiKit, UiKitDetection } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
+import {
+  GenerateSuggestionRequestbody,
+  AddRatingRequestBody,
+  PageMetadata,
+  BackendPayloadMetadata
+} from '../types';
+
+let serviceEventEmitter: any = null; // Local reference to the event emitter
 
 // Type for the html2canvas function itself
 type Html2CanvasStatic = (element: HTMLElement, options?: Partial<any>) => Promise<HTMLCanvasElement>;
@@ -23,12 +30,17 @@ async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
     if (typeof h2cModule !== 'function') {
       customError('[AI Service] html2canvas loaded but is not a function. Loaded:', h2cModule);
       h2cModule = null; // Reset if not valid
+      if (serviceEventEmitter) { // Check if emitter is initialized
+        serviceEventEmitter.emit('error', { source: 'ai-service', error: new Error('html2canvas lib failed to load') });
+      }
       return null;
     }
     return h2cModule;
   } catch (error) {
     customError('[AI Service] Failed to dynamically load html2canvas:', error);
-    eventEmitter.emit('error', { source: 'ai-service', error: new Error('html2canvas lib failed to load') });
+    if (serviceEventEmitter) { // Check if emitter is initialized
+      serviceEventEmitter.emit('error', { source: 'ai-service', error: new Error('html2canvas lib failed to load') });
+    }
     return null;
   }
 }
@@ -177,43 +189,6 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
     return null;
   }
 };
-
-// --- Updated and New Interfaces ---
-interface PageMetadataBrand {
-  primary?: string | null;
-  accent?: string | null;
-  palette?: string[];
-}
-
-interface PageMetadata {
-  title: string | null;
-  description: string | null;
-  ogTitle: string | null;
-  url: string;
-  language: string | null;
-  h1: string | null;
-  viewport: {
-    width: number;
-    height: number;
-  };
-  brand?: PageMetadataBrand;
-}
-
-interface BackendPayloadMetadata extends PageMetadata {
-  cssDigests?: any; // Consider defining a more specific type for cssDigests if possible
-  frameworkDetection?: DetectedFramework;
-  uiKitDetection?: UiKitDetection;
-}
-
-interface RequestBody {
-  prompt: string;
-  html?: string | null;
-  htmlCharCount?: number;
-  metadata: BackendPayloadMetadata;
-  aiSettings: AiSettings;
-  insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
-}
-// --- End Updated and New Interfaces ---
 
 /**
  * Gathers metadata from the current page.
@@ -370,7 +345,7 @@ const fetchFeedbackBase = async (
       uiKitDetection: uiKitDetectionForPayload
     };
 
-    const requestBody: RequestBody = {
+    const requestBody: GenerateSuggestionRequestbody = {
       prompt: promptText,
       metadata: backendMetadata, // Use the consolidated metadata
       aiSettings: currentAiSettings,
@@ -431,45 +406,27 @@ const fetchFeedbackBase = async (
               const jsonString = buffer.substring(5).trim();
               if (jsonString) {
                 const data = JSON.parse(jsonString);
-                // Check for JSON patch in the final buffer as well
                 if (originalSentHtmlForPatch) {
                   if (typeof data.content === 'string') {
                     jsonPatchAccumulator += data.content;
                   }
-                  // Do not emit aiResponseChunk here for patch mode
                 } else if (data.type === 'json-patch') {
                   let parsedPayload: any = jsonPatchAccumulator;
-                  try {
-                    parsedPayload = JSON.parse(jsonPatchAccumulator);
-                  } catch (e) {
-                    customWarn('[AI Service] Failed to parse accumulated JSON patch; sending raw string', e);
-                  }
-                  customWarn('[AI Service] Emitting aiJsonPatch. Raw length:', jsonPatchAccumulator.length, 'Parsed type:', Array.isArray(parsedPayload) ? 'array' : typeof parsedPayload);
-                  eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
+                  try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
                 } else if (data.content) {
-                  eventEmitter.emit('aiResponseChunk', data.content);
-                } else {
-                  customWarn("[SSE Parser] Final buffer data line did not contain 'content' or valid 'json-patch':", data);
-                }
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', data.content);
+                } else { /* ... */ }
               }
-            } catch (e) {
-              customError("[SSE Parser] Error processing final buffer as data line:", e, buffer);
-            }
-          } else if (buffer.trim()) {
-            // customWarn("[SSE Parser] Final buffer contained non-data line content:", buffer);
+            } catch (e) { /* ... */ }
           }
         }
         if (originalSentHtmlForPatch && jsonPatchAccumulator.length > 0) {
           let parsedPayload: any = jsonPatchAccumulator;
-          try {
-            parsedPayload = JSON.parse(jsonPatchAccumulator);
-          } catch (e) {
-            customWarn('[AI Service] Failed to parse accumulated JSON patch at stream end; sending raw string', e);
-          }
-          customWarn('[AI Service] Emitting aiJsonPatch at stream end. Raw length:', jsonPatchAccumulator.length);
-          eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
+          try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
+          if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
         }
-        eventEmitter.emit('aiFinalized');
+        if (serviceEventEmitter) serviceEventEmitter.emit('aiFinalized');
         break;
       }
 
@@ -486,82 +443,59 @@ const fetchFeedbackBase = async (
             if (jsonString) {
               const parsedData = JSON.parse(jsonString);
               if (currentEventType) {
-                eventEmitter.emit(currentEventType, parsedData);
+                if (serviceEventEmitter) serviceEventEmitter.emit(currentEventType, parsedData);
                 currentEventType = null;
               } else {
                 if (parsedData.type === 'json-patch') {
-                  customWarn('[AI Service] Received inline json-patch event (not NDJSON). Emitting immediately.');
-                  eventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
-                  // After emitting, we can continue to wait for stream end.
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
                 } else if (originalSentHtmlForPatch) {
-                  // We're in JSON patch mode with analysis + patch. Detect PATCH_START marker.
                   const raw = parsedData.content;
-                  const cleaned = raw.replace(/\u001b/g, ''); // Remove ESC char if present
-
+                  const cleaned = raw.replace(/\u001b/g, '');
                   if (!patchStartSeen) {
                     analysisAccumulator += cleaned;
                     const markerIndex = analysisAccumulator.indexOf('[PATCH_START]');
                     if (markerIndex !== -1) {
                       const analysisPart = analysisAccumulator.substring(0, markerIndex);
-                      if (analysisPart.trim().length > 0) {
-                        eventEmitter.emit('aiResponseChunk', analysisPart);
-                        customWarn('[AI Service] Emitting analysis portion length', analysisPart.length);
-                      }
+                      if (analysisPart.trim().length > 0 && serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', analysisPart);
                       patchStartSeen = true;
                       const afterMarker = analysisAccumulator.substring(markerIndex + '[PATCH_START]'.length);
-                      if (afterMarker.length > 0) {
-                        jsonPatchAccumulator += afterMarker;
-                        customWarn('[AI Service] Accum patch chunk, total length now', jsonPatchAccumulator.length);
-                      }
+                      if (afterMarker.length > 0) jsonPatchAccumulator += afterMarker;
                       analysisAccumulator = '';
                     }
                   } else {
-                    // After marker -> accumulate patch
                     jsonPatchAccumulator += cleaned;
                   }
                 } else if (parsedData.userMessage) {
-                  eventEmitter.emit('aiUserMessage', parsedData.userMessage);
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiUserMessage', parsedData.userMessage);
                 } else if (parsedData.content) {
-                  eventEmitter.emit('aiResponseChunk', parsedData.content);
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', parsedData.content);
                 } else if (parsedData.error) {
-                  customError("[SSE Parser] Received error object via SSE data line:", parsedData.error, parsedData.details);
-                  eventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
-                } else {
-                  customWarn("[SSE Parser] Received data line with unknown structure (no event type):", parsedData);
-                }
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
+                } else { /* ... */ }
               }
             }
           } catch (e) {
-            customError("[SSE Parser] Error parsing SSE data line:", e, line);
-            eventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
+            if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
             currentEventType = null;
           }
-        } else if (line.trim() === '' && currentEventType) {
-          // currentEventType = null; // Not strictly needed
-        } else if (line.trim() !== '') {
-          // customWarn("[SSE Parser] Received non-empty, non-event, non-data line:", line);
         }
       }
     }
 
-    // Flush analysis text if we expected patch but no marker was seen
-    if (originalSentHtmlForPatch && !patchStartSeen && analysisAccumulator.trim().length > 0) {
-      eventEmitter.emit('aiResponseChunk', analysisAccumulator);
+    if (originalSentHtmlForPatch && !patchStartSeen && analysisAccumulator.trim().length > 0 && serviceEventEmitter) {
+      serviceEventEmitter.emit('aiResponseChunk', analysisAccumulator);
     }
 
-    if (originalSentHtmlForPatch && patchStartSeen && jsonPatchAccumulator.length > 0) {
+    if (originalSentHtmlForPatch && patchStartSeen && jsonPatchAccumulator.length > 0 && serviceEventEmitter) {
       let parsedPayload: any = jsonPatchAccumulator;
-      try {
-        parsedPayload = JSON.parse(jsonPatchAccumulator);
-      } catch (e) {
-        customWarn('[AI Service] Failed to parse accumulated JSON patch at stream end; sending raw string', e);
-      }
-      customWarn('[AI Service] Emitting aiJsonPatch at stream end. Raw length:', jsonPatchAccumulator.length);
-      eventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
+      try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
+      serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
     }
   } catch (error) {
     customError("Error in fetchFeedbackBase:", error);
-    eventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
+    if (serviceEventEmitter) { // Check if emitter is initialized
+      serviceEventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
+    }
   }
 };
 
@@ -574,6 +508,60 @@ export const fetchFeedback = async (
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter'
 ): Promise<void> => {
-  const apiUrl = `${Settings.API_URL}/checkraCompletions/suggest/feedback`;
+  const apiUrl = `${Settings.API_URL}/checkraCompletions/generate`;
   return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl);
 };
+
+/**
+ * Sends the rated fix to the backend.
+ */
+export const sendFixRating = async (feedbackPayload: AddRatingRequestBody): Promise<void> => {
+  const apiUrl = `${Settings.API_URL}/checkraCompletions/rating`;
+  const currentApiKey = getEffectiveApiKey();
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (currentApiKey) {
+    headers['Authorization'] = `Bearer ${currentApiKey}`;
+  }
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(feedbackPayload),
+    });
+
+    if (!response.ok) {
+      let specificErrorMessage = `Rating submission failed: ${response.status} ${response.statusText}`;
+      try {
+        const errorBodyText = await response.text();
+        if (errorBodyText) {
+          const errorJson = JSON.parse(errorBodyText);
+          if (errorJson && errorJson.error) {
+            specificErrorMessage = errorJson.error;
+          }
+        }
+      } catch (parseError) {
+        customWarn("[AI Service] Failed to parse error response body for rating submission:", parseError);
+      }
+      throw new Error(specificErrorMessage);
+    }
+    console.log('[AI Service] Fix rating submitted successfully.');
+
+  } catch (error) {
+    customError("Error in sendFixRating:", error);
+    if (serviceEventEmitter) { // Check if emitter is initialized
+      serviceEventEmitter.emit('aiError', error instanceof Error ? `Rating Submission Error: ${error.message}` : String(error));
+    }
+  }
+};
+
+/**
+ * Initializes event listeners for the AI service.
+ * @param emitter The event emitter instance from core.
+ */
+export function initializeAiServiceListeners(emitter: any): void {
+  serviceEventEmitter = emitter; // Store the passed emitter instance
+  serviceEventEmitter.on('fixRated', (payload: AddRatingRequestBody) => {
+    sendFixRating(payload);
+  });
+}

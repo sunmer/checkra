@@ -89,14 +89,14 @@
 /* --- NEW: Container for fix control buttons --- */
 .checkra-feedback-applied-fix .checkra-fix-controls-container {
   position: absolute;
-  top: -15px; /* Position slightly above the element, adjust as needed */
+  top: -10px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 5px; /* Space between buttons */
   padding: 3px; /* Small padding around the buttons */
-  background-color: rgba(40, 40, 40, 0.8); /* Subtle background for the control strip */
+  background-color: rgba(40, 40, 40, 0.5); /* Subtle background for the control strip */
   border-radius: 16px; /* Rounded corners for the container */
   z-index: 12; /* Ensure it's above other content, and above applied-fix-content if it had a z-index */
   pointer-events: auto; /* Make sure the container itself can receive pointer events if needed */
@@ -118,7 +118,7 @@
 .checkra-feedback-applied-fix .feedback-fix-toggle {
   width: 20px;
   height: 20px;
-  background-color: rgba(50, 50, 50, 0.8);
+  background-color: rgba(50, 50, 50, 0.5);
   color: #eee;
   border-radius: 50%;
   cursor: pointer !important;
@@ -174,9 +174,82 @@
 .checkra-feedback-applied-fix .feedback-fix-copy-btn svg,
 .checkra-feedback-applied-fix .feedback-fix-toggle svg {
   width: 12px;
-  /* Adjust SVG size */
   height: 12px;
   stroke: currentColor;
+}
+
+/* --- ADDED: Styles for the Rate Button --- */
+.checkra-feedback-applied-fix .feedback-fix-rate-btn {
+  width: 20px;
+  height: 20px;
+  background-color: rgba(50, 50, 50, 0.8);
+  color: #eee; /* Star color */
+  border-radius: 50%;
+  cursor: pointer !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px; /* Adjust if star looks too small/big */
+  font-weight: bold;
+  line-height: 1;
+  pointer-events: auto;
+  transition: background-color 0.2s, color 0.2s, transform 0.1s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  padding: 2px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.checkra-feedback-applied-fix .feedback-fix-rate-btn:hover {
+  transform: scale(1.1);
+  background-color: rgba(70, 70, 70, 0.9); /* Slightly different hover for rate */
+  color: #ffeb3b; /* Gold color for star on hover */
+}
+
+/* --- ADDED: Styles for the Rate Button when rated --- */
+.checkra-feedback-applied-fix .feedback-fix-rate-btn.rated {
+  color: #ffeb3b; /* Persistent gold color for star */
+  background-color: rgba(50, 50, 50, 0.8); /* Keep original background or a slightly different one if desired */
+  cursor: default !important; /* Indicate it's not interactive */
+  opacity: 0.7; /* Slightly dim it to show it's disabled, optional */
+}
+
+.checkra-feedback-applied-fix .feedback-fix-rate-btn.rated:hover {
+  transform: none; /* No scale transform on hover when rated */
+  /* Optional: ensure hover doesn't change colors if it's already rated */
+  color: #ffeb3b;
+  background-color: rgba(50, 50, 50, 0.8);
+}
+
+/* --- ADDED: Styles for the new Custom Rating Options Dropdown --- */
+.checkra-feedback-applied-fix .feedback-fix-rating-options {
+  /* Positioning (top, right, z-index, position:absolute) is handled by inline styles in JS */
+  background-color: rgba(40, 40, 40, 0.95); /* Darker, slightly more opaque */
+  border: 1px solid rgba(80, 80, 80, 0.9);
+  border-radius: 16px; /* To match button bar */
+  padding: 5px; 
+  min-width: 160px; /* Adjust as needed */
+  box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 3px; /* Small gap between options */
+}
+
+.checkra-feedback-applied-fix .feedback-rating-option {
+  background-color: transparent; /* Options transparent against container bg */
+  color: #eee;
+  padding: 8px 10px;
+  border-radius: 12px; /* Slightly rounded corners for options */
+  cursor: pointer !important;
+  font-size: 12px;
+  text-align: left;
+  transition: background-color 0.15s ease-in-out;
+  white-space: nowrap;
+}
+
+.checkra-feedback-applied-fix .feedback-rating-option:hover {
+  background-color: rgba(70, 70, 70, 0.9);
+  color: #fff;
 }
 
 /* --- Viewer Layout & Header --- */

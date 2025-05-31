@@ -1,10 +1,10 @@
-import { CheckraOptions } from '../types';
-import { AiSettings as CoreAiSettings } from '../ui/settings-modal';
+import { CheckraOptions, AiSettings as CoreAiSettings } from '../types';
 import { SettingsModal } from '../ui/settings-modal';
 import Checkra from '../ui/Checkra';
 import { EventEmitter } from './event-emitter';
 import * as Auth from '../auth/auth'; // Import auth functions
 import { customWarn, customError } from '../utils/logger';
+import { initializeAiServiceListeners } from '../services/ai-service'; // Import the initializer
 
 // Module-level instance variables
 let settingsModalInstance: SettingsModal | null = null;
@@ -19,6 +19,9 @@ let latestAiSettings: CoreAiSettings = { model: 'gpt-4.1', temperature: 0.7 };
 
 // Global event emitter instance
 export const eventEmitter = new EventEmitter();
+
+// Initialize listeners for other services that depend on eventEmitter
+initializeAiServiceListeners(eventEmitter); // Initialize AI service listeners
 
 // Listen for settingsChanged event to keep cache updated
 eventEmitter.on('settingsChanged', (settings: CoreAiSettings) => {
@@ -109,6 +112,7 @@ export interface CheckraAPI {
 // but for isVisible, they should align.
 const coreDefaultOptions: Partial<CheckraOptions> = {
   isVisible: false, // Default to hidden for programmatic init too
+  enableRating: false, // ADDED: Default for enableRating
 };
 
 /**
@@ -118,12 +122,10 @@ const coreDefaultOptions: Partial<CheckraOptions> = {
  * @returns A CheckraAPI object to interact with the library, or null if initialization fails.
  */
 export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
-  // Merge provided options: incoming options take precedence over core defaults.
   const finalOptions: CheckraOptions = {
-    ...coreDefaultOptions, // Start with core defaults
-    ...(options || {}),    // Override with explicitly passed options (which might include script/global config from src/index.ts)
+    ...coreDefaultOptions, 
+    ...(options || {}),
   };
-
 
   // Determine Effective API Key
   if (finalOptions.apiKey && typeof finalOptions.apiKey === 'string' && finalOptions.apiKey.trim() !== '') {
@@ -149,12 +151,10 @@ export function initCheckra(options?: CheckraOptions): CheckraAPI | null {
       settingsModalInstance = new SettingsModal();
     }
 
-    // Get/create the FeedbackViewer singleton instance, passing initial visibility
-    // The FeedbackViewer.getInstance method needs to be adapted to accept initialVisibility
     if (!feedbackViewerInstance) {
-      feedbackViewerInstance = Checkra.getInstance(settingsModalInstance, finalOptions.isVisible);
+      // Pass enableRating to getInstance
+      feedbackViewerInstance = Checkra.getInstance(settingsModalInstance, finalOptions.isVisible, finalOptions.enableRating);
     }
-
 
     const api: CheckraAPI = {
       show: () => {

@@ -10,13 +10,15 @@ export default class Checkra {
   private settingsModal: SettingsModal;
   private static instance: Checkra | null = null;
   private initialVisibility: boolean; // Store initial visibility
+  private enableRating: boolean; // ADDED: Store enableRating option
 
-  private constructor(settingsModal: SettingsModal, initialVisibility: boolean = false) {
+  private constructor(settingsModal: SettingsModal, initialVisibility: boolean = false, enableRating: boolean = false) {
     this.settingsModal = settingsModal;
     this.initialVisibility = initialVisibility;
+    this.enableRating = enableRating; // Store it
     this.checkraDOM = new CheckraDOM();
-    // Pass initialVisibility to FeedbackViewerImpl constructor
-    this.checkraImplementation = new CheckraImplementation(this.handleToggle.bind(this), this.initialVisibility);
+    // Pass initialVisibility and enableRating to FeedbackViewerImpl constructor
+    this.checkraImplementation = new CheckraImplementation(this.handleToggle.bind(this), this.initialVisibility, this.enableRating);
     
     // Listen for core requests to show/hide
     eventEmitter.on('showViewerRequest', this.boundShowRequested);
@@ -32,13 +34,13 @@ export default class Checkra {
   private boundShowRequested = () => this.showPanel();
   private boundHideRequested = () => this.hidePanel();
 
-  public static getInstance(settingsModal: SettingsModal, initialVisibility: boolean = false): Checkra {
+  public static getInstance(settingsModal: SettingsModal, initialVisibility: boolean = false, enableRating: boolean = false): Checkra {
     if (!Checkra.instance) {
       if (!settingsModal) {
           console.error('[FeedbackViewer] getInstance called without settingsModal for new instance creation!');
           throw new Error('SettingsModal instance is required to create a new FeedbackViewer instance.');
       }
-      Checkra.instance = new Checkra(settingsModal, initialVisibility);
+      Checkra.instance = new Checkra(settingsModal, initialVisibility, enableRating);
     }
     // If instance exists, should we update its visibility or warn if initialVisibility differs?
     // For now, it returns the existing instance. The initial visibility is set at creation.
