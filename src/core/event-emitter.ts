@@ -1,4 +1,5 @@
-import { type AiSettings as CoreAiSettings } from '../ui/settings-modal';
+import { AiSettings } from '../types';
+import { AddRatingRequestBody } from '../types';
 
 type Listener = (...args: any[]) => void;
 
@@ -19,14 +20,15 @@ export type EventName =
   | 'feedbackViewerImplReady'
   | 'screenshotTaken'        // Added for screenshot data
   | 'elementSelected'        // Added for element selection
-  | 'elementDeselected';     // Added for element deselection
+  | 'elementDeselected'     // Added for element deselection
+  | 'fixRated';             // Added for fix rating
 
 /**
  * Defines the payload types for each event.
  * Uses 'void' if an event does not carry a payload.
  */
 export interface EventPayloads {
-  'settingsChanged': CoreAiSettings;
+  'settingsChanged': AiSettings;
   'aiRequestSent': { prompt: string; imageDataUrl?: string | null; context?: string | null, selectedElementSelector?: string | null, originalHtml?: string | null, fixId?: string | null };
   'aiResponseChunk': string;
   'aiFinalized': void;
@@ -48,6 +50,7 @@ export interface EventPayloads {
     rect: DOMRect | null;
   };
   'elementDeselected': void;
+  'fixRated': AddRatingRequestBody;
 }
 
 export class EventEmitter {

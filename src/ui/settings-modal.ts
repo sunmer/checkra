@@ -1,13 +1,6 @@
 import './settings-modal.css';
 import { eventEmitter } from '../core/index';
-
-/**
- * Interface for AI model settings.
- */
-export interface AiSettings {
-  model: string;
-  temperature: number;
-}
+import { AiSettings } from '../types';
 
 /**
  * Class for managing the settings modal UI component.

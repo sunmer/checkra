@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase } from './supabase-client';
 import { REDIRECT_URI } from './auth-config'; // Keep REDIRECT_URI for explicit passing
 import { customLog, customWarn, customError } from '../utils/logger';
 // The supabase-js library will handle session storage internally, so SESSION_KEY is no longer needed here.

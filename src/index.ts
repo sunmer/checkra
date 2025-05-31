@@ -19,6 +19,7 @@ export type { CheckraOptions } from './types';
 const defaultAutoInitOptions: CheckraOptions = {
   // No apiKey by default, triggers anonymous UUID
   isVisible: false, // Default to hidden
+  enableRating: false, // ADDED: Default for enableRating in auto-init
 };
 
 /**

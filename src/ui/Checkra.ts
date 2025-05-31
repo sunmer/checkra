@@ -1,22 +1,24 @@
-import { FeedbackViewerDOM } from './feedback-viewer-dom';
-import { FeedbackViewerImpl } from './feedback-viewer-impl';
+import { CheckraDOM } from './checkra-dom';
+import { CheckraImplementation } from './checkra-impl';
 import { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index'; // Corrected: eventEmitter is exported from core/index.ts
 
 
-export default class FeedbackViewer {
-  private feedbackViewerDOM: FeedbackViewerDOM;
-  private feedbackViewerImpl: FeedbackViewerImpl;
+export default class Checkra {
+  private checkraDOM: CheckraDOM;
+  private checkraImplementation: CheckraImplementation;
   private settingsModal: SettingsModal;
-  private static instance: FeedbackViewer | null = null;
+  private static instance: Checkra | null = null;
   private initialVisibility: boolean; // Store initial visibility
+  private enableRating: boolean; // ADDED: Store enableRating option
 
-  private constructor(settingsModal: SettingsModal, initialVisibility: boolean = false) {
+  private constructor(settingsModal: SettingsModal, initialVisibility: boolean = false, enableRating: boolean = false) {
     this.settingsModal = settingsModal;
     this.initialVisibility = initialVisibility;
-    this.feedbackViewerDOM = new FeedbackViewerDOM();
-    // Pass initialVisibility to FeedbackViewerImpl constructor
-    this.feedbackViewerImpl = new FeedbackViewerImpl(this.handleToggle.bind(this), this.initialVisibility);
+    this.enableRating = enableRating; // Store it
+    this.checkraDOM = new CheckraDOM();
+    // Pass initialVisibility and enableRating to FeedbackViewerImpl constructor
+    this.checkraImplementation = new CheckraImplementation(this.handleToggle.bind(this), this.initialVisibility, this.enableRating);
     
     // Listen for core requests to show/hide
     eventEmitter.on('showViewerRequest', this.boundShowRequested);
@@ -24,7 +26,7 @@ export default class FeedbackViewer {
 
     // Initialize FeedbackViewerImpl AFTER setting up the listener
     // The Impl will decide based on its initialVisibility and localStorage if it should show itself.
-    this.feedbackViewerImpl.initialize(this.feedbackViewerDOM, this.settingsModal);
+    this.checkraImplementation.initialize(this.checkraDOM, this.settingsModal);
 
   }
 
@@ -32,17 +34,17 @@ export default class FeedbackViewer {
   private boundShowRequested = () => this.showPanel();
   private boundHideRequested = () => this.hidePanel();
 
-  public static getInstance(settingsModal: SettingsModal, initialVisibility: boolean = false): FeedbackViewer {
-    if (!FeedbackViewer.instance) {
+  public static getInstance(settingsModal: SettingsModal, initialVisibility: boolean = false, enableRating: boolean = false): Checkra {
+    if (!Checkra.instance) {
       if (!settingsModal) {
           console.error('[FeedbackViewer] getInstance called without settingsModal for new instance creation!');
           throw new Error('SettingsModal instance is required to create a new FeedbackViewer instance.');
       }
-      FeedbackViewer.instance = new FeedbackViewer(settingsModal, initialVisibility);
+      Checkra.instance = new Checkra(settingsModal, initialVisibility, enableRating);
     }
     // If instance exists, should we update its visibility or warn if initialVisibility differs?
     // For now, it returns the existing instance. The initial visibility is set at creation.
-    return FeedbackViewer.instance;
+    return Checkra.instance;
   }
 
   private handleToggle(isVisible: boolean): void {
@@ -58,14 +60,14 @@ export default class FeedbackViewer {
    */
   public showPanel(): void {
     // this.feedbackViewerImpl.showFromApi(); // Let Impl decide if it was user initiated or not
-    this.feedbackViewerImpl.showFromApi(false); // false indicates not user-initiated (e.g. from shortcut or API)
+    this.checkraImplementation.showFromApi(false); // false indicates not user-initiated (e.g. from shortcut or API)
   }
 
   /**
    * Hides the feedback viewer panel by calling the implementation's method.
    */
   public hidePanel(): void {
-    this.feedbackViewerImpl.hide(false); // Programmatic hide, not initiated by user interaction on close button
+    this.checkraImplementation.hide(false); // Programmatic hide, not initiated by user interaction on close button
   }
 
   /**
@@ -74,8 +76,8 @@ export default class FeedbackViewer {
   public destroy(): void {
     eventEmitter.off('showViewerRequest', this.boundShowRequested);
     eventEmitter.off('hideViewerRequest', this.boundHideRequested);
-    this.feedbackViewerImpl.cleanup(); 
-    this.feedbackViewerDOM.destroy();   
-    FeedbackViewer.instance = null;
+    this.checkraImplementation.cleanup(); 
+    this.checkraDOM.destroy();   
+    Checkra.instance = null;
   }
 } 

@@ -1,6 +1,6 @@
 import { fetchFeedback } from '../services/ai-service';
-import { SELECT_SVG_ICON, type FeedbackViewerElements } from './feedback-viewer-dom';
-import type { FeedbackViewerDOM } from './feedback-viewer-dom';
+import { SELECT_SVG_ICON, type CheckraViewerElements } from './checkra-dom';
+import type { CheckraDOM } from './checkra-dom';
 import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
@@ -9,6 +9,7 @@ import { API_BASE, CDN_DOMAIN } from '../config';
 import { getSiteId } from '../utils/id'; 
 import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 import { customWarn, customError } from '../utils/logger';
+import { GenerateSuggestionRequestbody, BackendPayloadMetadata, AddRatingRequestBody } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -40,6 +41,8 @@ interface AppliedFixInfo {
   isCurrentlyFixed: boolean; // Tracks if the displayed version in the wrapper is the fix
   stableTargetSelector: string; // ADDED: A stable selector for the original element
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter'; // ADDED: How the fix was applied
+  requestBody: GenerateSuggestionRequestbody; // ADDED: The request body that generated this fix
+  isRated?: boolean; // ADDED: To track if the fix has been rated
 }
 
 // localStorage keys for pending actions
@@ -49,11 +52,12 @@ const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
  */
-export class FeedbackViewerImpl {
-  private domElements: FeedbackViewerElements | null = null;
-  private domManager: FeedbackViewerDOM | null = null;
+export class CheckraImplementation {
+  private domElements: CheckraViewerElements | null = null;
+  private domManager: CheckraDOM | null = null;
   private settingsModal: SettingsModal | null = null;
   private optionsInitialVisibility: boolean; // To store the initial visibility from options
+  private enableRating: boolean; // ADDED: Store enableRating option
 
   // --- State ---
   private isVisible: boolean = false;
@@ -76,7 +80,7 @@ export class FeedbackViewerImpl {
   // --- Global Tracking for Applied Fixes ---
   private appliedFixes: Map<string, AppliedFixInfo> = new Map();
   // Store listeners for applied fixes to clean them up later
-  private appliedFixListeners: Map<string, { close: EventListener; toggle: EventListener; copy: EventListener }> = new Map();
+  private appliedFixListeners: Map<string, { close: EventListener; toggle: EventListener; copy: EventListener; rate: EventListener }> = new Map();
 
   // --- Listeners ---
 
@@ -97,11 +101,15 @@ export class FeedbackViewerImpl {
 
   private boundHandleJsonPatch = this.handleJsonPatch.bind(this);
 
+  private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null; // ADDED: To store request body for the current fix cycle
+
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
-    initialVisibilityFromOptions: boolean = false // New parameter
+    initialVisibilityFromOptions: boolean = false, // New parameter
+    enableRating: boolean = false // ADDED: enableRating parameter
   ) {
     this.optionsInitialVisibility = initialVisibilityFromOptions;
+    this.enableRating = enableRating; // Store it
     // Bind methods
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
@@ -117,7 +125,7 @@ export class FeedbackViewerImpl {
   }
 
   public initialize(
-    domManager: FeedbackViewerDOM,
+    domManager: CheckraDOM,
     settingsModal: SettingsModal
   ): void {
     // --- ALWAYS reset conversation history and onboarding flag on page load ---
@@ -214,6 +222,8 @@ export class FeedbackViewerImpl {
         toggleBtn?.removeEventListener('click', listeners.toggle);
         const copyBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-copy-btn');
         copyBtn?.removeEventListener('click', listeners.copy);
+        const rateBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rate-btn');
+        rateBtn?.removeEventListener('click', listeners.rate);
       }
     });
     this.appliedFixListeners.clear();
@@ -399,19 +409,20 @@ export class FeedbackViewerImpl {
 
     if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
       const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
-      // Use this.currentElementInsertionMode determined by the screen capture click zone
       const modeToUse = this.currentElementInsertionMode;
+      const requestBodyForFix = this.requestBodyForCurrentCycle; // Use the stored request body
 
-      if (lastAiItem && lastAiItem.fix) {
-        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, modeToUse, this.stableSelectorForCurrentCycle || undefined);
+      if (lastAiItem && lastAiItem.fix && requestBodyForFix) {
+        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
       } else {
-        customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item. Applying from current cycle state.');
-        if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle) {
-          this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, modeToUse, this.stableSelectorForCurrentCycle || undefined);
+        customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item or requestBodyForFix missing.');
+        if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle && requestBodyForFix) {
+          this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
         } else {
-          customError('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, or stableSelector).');
+          customError('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, stableSelector, or requestBodyForFix).');
         }
       }
+      this.requestBodyForCurrentCycle = null; // Clear after use
     }
   }
 
@@ -618,7 +629,33 @@ export class FeedbackViewerImpl {
       return;
     }
 
-    // Pass this.currentElementInsertionMode to fetchFeedback
+    // (This part constructs the RequestBody. It needs full context of page metadata,
+    // framework detection, etc. For now, we'll create a simplified version.)
+    // It's crucial that this structure matches what ai-service expects and what types.ts defines.
+    const pageMetadata: BackendPayloadMetadata = {
+      // Simplified PageMetadata - in a real scenario, this would be more thoroughly populated,
+      // potentially by calling a shared utility function or an async method like getPageMetadata from ai-service.
+      title: document.title || null,
+      description: document.querySelector('meta[name="description"]')?.getAttribute('content') || null,
+      ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') || null,
+      url: window.location.href,
+      language: document.documentElement.lang || null,
+      h1: document.querySelector('h1')?.textContent?.trim() || null,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      // cssDigests, frameworkDetection, uiKitDetection are complex and would ideally be generated
+      // by invoking helpers from ai-service or utils if available here, or passed through.
+      // For this edit, they are omitted for brevity but are part of BackendPayloadMetadata.
+    };
+
+    this.requestBodyForCurrentCycle = {
+      prompt: promptText || '',
+      html: processedHtmlForAI, // This is the preprocessed HTML
+      htmlCharCount: processedHtmlForAI?.length || 0,
+      metadata: pageMetadata, // Assign the populated metadata
+      aiSettings: this.settingsModal?.getCurrentSettings() || { model: 'gpt-4o', temperature: 0.7 }, // Get current AI settings
+      insertionMode: this.currentElementInsertionMode,
+    };
+
     fetchFeedback(imageDataToSend, promptText, processedHtmlForAI, this.currentElementInsertionMode);
     // After submitting, clear the textarea and reset button for general prompts too
     this.domManager?.setPromptState(true, ''); 
@@ -657,13 +694,14 @@ export class FeedbackViewerImpl {
 
         const listeners = this.appliedFixListeners.get(fixId);
         if (listeners) {
-          // Detach listeners before removing from map to be safe, though wrapperElement.remove() might also do this for its children
           const closeBtn = wrapperElement.querySelector('.feedback-fix-close-btn');
           const toggleBtn = wrapperElement.querySelector('.feedback-fix-toggle');
           const copyBtn = wrapperElement.querySelector('.feedback-fix-copy-btn');
+          const rateBtn = wrapperElement.querySelector('.feedback-fix-rate-btn'); // Added this line
           closeBtn?.removeEventListener('click', listeners.close);
           toggleBtn?.removeEventListener('click', listeners.toggle);
           copyBtn?.removeEventListener('click', listeners.copy);
+          rateBtn?.removeEventListener('click', listeners.rate);
           this.appliedFixListeners.delete(fixId);
         }
         this.appliedFixes.delete(fixId);
@@ -987,7 +1025,7 @@ Your job:
       this.fixedOuterHTMLForCurrentCycle = null;
     }
   }
-  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, insertionMode: 'replace' | 'insertBefore' | 'insertAfter', stableSelector?: string): void {
+  private applyFixToPage(fixId: string, originalHtml: string, fixedHtml: string, insertionMode: 'replace' | 'insertBefore' | 'insertAfter', requestBody: GenerateSuggestionRequestbody, stableSelector?: string): void {
     if (!this.domManager || !this.domElements) {
       customWarn('[FeedbackViewerLogic DEBUG] applyFixToPage: Cannot apply fix: Missing DOM Manager or elements.');
       return;
@@ -1021,20 +1059,24 @@ Your job:
       contentContainer.appendChild(fixedContentFragment);
       wrapper.appendChild(contentContainer);
 
-      // Create the new controls container
       const controlsContainer = document.createElement('div');
       controlsContainer.className = 'checkra-fix-controls-container';
 
       const closeBtn = this.createAppliedFixButton('close', fixId);
       const toggleBtn = this.createAppliedFixButton('toggle', fixId);
       const copyBtn = this.createAppliedFixButton('copy', fixId);
+      // const rateBtn = this.createAppliedFixButton('rate', fixId); // Declaration moved down
       
-      // Append buttons to the new controls container
-      controlsContainer.appendChild(copyBtn); // Order: Copy, Toggle, Close (or as desired)
+      controlsContainer.appendChild(copyBtn);
       controlsContainer.appendChild(toggleBtn);
-      controlsContainer.appendChild(closeBtn);
+      // Conditionally add rateBtn
+      let rateBtn: HTMLButtonElement | null = null; // Declare rateBtn, initially null
+      if (this.enableRating) {
+        rateBtn = this.createAppliedFixButton('rate', fixId);
+        controlsContainer.appendChild(rateBtn); // Append if enabled
+      }
+      controlsContainer.appendChild(closeBtn); // Close button is last
 
-      // Append the controls container to the main wrapper
       wrapper.appendChild(controlsContainer);
 
       const parent = originalSelectedElement.parentNode;
@@ -1052,50 +1094,51 @@ Your job:
       if (!finalStableSelector) {
         customError(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}. Cannot reliably apply or store fix.`);
         this.showError(`Failed to apply fix: Stable target selector missing for fix ${fixId}.`);
-        // Attempt to remove wrapper if it was inserted, to prevent orphaned fix elements
         if (wrapper.parentNode) wrapper.remove();
         return;
       }
 
-      const fixInfo: AppliedFixInfo = {
+      const fixInfoData: AppliedFixInfo = {
         originalElementId: fixId,
         originalOuterHTML: originalHtml,
         fixedOuterHTML: fixedHtml,
         appliedWrapperElement: wrapper,
         isCurrentlyFixed: true,
         stableTargetSelector: finalStableSelector,
-        insertionMode: insertionMode // Store the mode used
+        insertionMode: insertionMode, 
+        requestBody: requestBody,
+        isRated: false, // Initialize isRated to false for a new fix
       };
-      this.appliedFixes.set(fixId, fixInfo);
+      this.appliedFixes.set(fixId, fixInfoData);
+
+      // Apply .rated class and disable if initially rated (e.g. from restored state)
+      if (rateBtn && fixInfoData.isRated) { // Check if rateBtn exists
+        rateBtn.classList.add('rated');
+        (rateBtn as HTMLButtonElement).disabled = true;
+      }
 
       const listeners = {
         close: (e: Event) => this.handleAppliedFixClose(fixId, e),
         toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e),
-        copy: (e: Event) => this.handleAppliedFixCopy(fixId, e)
-      } as const;
-      this.appliedFixListeners.set(fixId, listeners as any);
+        copy: (e: Event) => this.handleAppliedFixCopy(fixId, e),
+        // Conditionally add rate listener if rateBtn exists/was created
+        ...(rateBtn && { rate: (e: Event) => this.handleAppliedFixRate(fixId, e) })
+      } as any; // Use any here due to conditional property, or type more carefully
+      
+      this.appliedFixListeners.set(fixId, listeners);
       closeBtn.addEventListener('click', listeners.close);
       toggleBtn.addEventListener('click', listeners.toggle);
       copyBtn.addEventListener('click', listeners.copy);
+      if (rateBtn && listeners.rate) { // Check if rateBtn and its listener exist
+        rateBtn.addEventListener('click', listeners.rate);
+      }
 
-      // After successful application, clear the current cycle's fix proposal
-      // to prevent re-application on next finalizeResponse without new AI feedback.
       this.fixedOuterHTMLForCurrentCycle = null;
-      // The currentFixId and originalOuterHTMLForCurrentCycle remain as they define the *current context*.
-
-      // Optionally, clear the main prompt and AI response area in the panel after successful application.
-      // this.domManager?.setPromptState(true, '');
-      // this.domManager?.clearAIResponseContent(); 
-      // Consider what should happen in the panel UI after this.
-
-      // Clean up selection highlights after the fix is successfully applied
       this.removeSelectionHighlight();
 
     } catch (error) {
       customError('[FeedbackViewerLogic] Error applying fix directly to page:', error);
       this.showError(`Failed to apply fix: ${error instanceof Error ? error.message : String(error)}`);
-      // If elementToReplace was found and removed, but wrapper insertion failed, we need to restore original.
-      // This is complex. For now, an error is shown. A more robust undo for failed apply would be needed.
     }
   }
 
@@ -1116,7 +1159,7 @@ Your job:
   }
 
   /** Creates a button for the applied fix wrapper */
-  private createAppliedFixButton(type: 'close' | 'toggle' | 'copy', fixId: string): HTMLButtonElement {
+  private createAppliedFixButton(type: 'close' | 'toggle' | 'copy' | 'rate', fixId: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.setAttribute('data-fix-id', fixId);
 
@@ -1135,6 +1178,11 @@ Your job:
         button.className = 'feedback-fix-copy-btn';
         button.innerHTML = COPY_FIX_SVG;
         button.title = 'Copy prompt for this fix';
+        break;
+      case 'rate': // Added case for rate button
+        button.className = 'feedback-fix-rate-btn';
+        button.innerHTML = '★'; // Star icon
+        button.title = 'Rate this fix';
         break;
     }
     return button;
@@ -1935,6 +1983,83 @@ Your job:
     } catch (err) {
       customError('[FeedbackViewerImpl] Error handling aiJsonPatch event:', err);
       this.showError('An error occurred while applying AI suggested changes.');
+    }
+  }
+
+  // ADDED: Handler for the rating button click
+  private handleAppliedFixRate(fixId: string, event: Event): void {
+    event.stopPropagation();
+    const fixInfo = this.appliedFixes.get(fixId);
+    const rateButton = (event.currentTarget as HTMLElement);
+
+    if (!fixInfo || !fixInfo.appliedWrapperElement || !rateButton || (rateButton as HTMLButtonElement).disabled) {
+      // Also check if button is disabled
+      customWarn(`[FeedbackViewerLogic] Cannot rate: Fix info/elements missing or already rated/disabled for Fix ID: ${fixId}.`);
+      return;
+    }
+
+    // Check if a rating options container already exists, remove if so to toggle off
+    let existingOptionsContainer = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rating-options');
+    if (existingOptionsContainer) {
+      existingOptionsContainer.remove();
+      return; 
+    }
+
+    const ratingOptionsContainer = document.createElement('div');
+    ratingOptionsContainer.className = 'feedback-fix-rating-options';
+    ratingOptionsContainer.style.position = 'absolute';
+    ratingOptionsContainer.style.zIndex = '10000'; 
+    ratingOptionsContainer.style.right = '0px'; 
+    ratingOptionsContainer.style.top = '30px';
+
+    const ratings = [
+      { value: 1, text: '★ Not OK' },
+      { value: 2, text: '★★ OK' },
+      { value: 3, text: '★★★ Pretty good' },
+      { value: 4, text: '★★★★ Wow' },
+    ];
+
+    ratings.forEach(rating => {
+      const optionElement = document.createElement('div');
+      optionElement.className = 'feedback-rating-option';
+      optionElement.textContent = rating.text;
+      optionElement.setAttribute('data-rating-value', rating.value.toString());
+      
+      optionElement.addEventListener('click', () => {
+        if (fixInfo.requestBody) {
+          const feedbackPayload: AddRatingRequestBody = {
+            ...fixInfo.requestBody,
+            rating: rating.value as 1 | 2 | 3 | 4,
+          };
+          eventEmitter.emit('fixRated', feedbackPayload);
+          customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
+          
+          // Update state and UI for the rated button
+          fixInfo.isRated = true; // Mark as rated in our state
+          rateButton.classList.add('rated');
+          (rateButton as HTMLButtonElement).disabled = true;
+        }
+        ratingOptionsContainer.remove();
+      });
+      ratingOptionsContainer.appendChild(optionElement);
+    });
+
+    // Add a click outside listener to close the options container
+    const clickOutsideListener = (ev: MouseEvent) => {
+      if (!ratingOptionsContainer.contains(ev.target as Node) && ev.target !== rateButton) {
+        ratingOptionsContainer.remove();
+        document.removeEventListener('click', clickOutsideListener, true);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', clickOutsideListener, true);
+    }, 0);
+
+    const controlsContainer = rateButton.parentElement;
+    if (controlsContainer) {
+        controlsContainer.appendChild(ratingOptionsContainer);
+    } else {
+        fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer);
     }
   }
 }
