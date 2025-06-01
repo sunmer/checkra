@@ -9,7 +9,7 @@ import { API_BASE, CDN_DOMAIN } from '../config';
 import { getSiteId } from '../utils/id'; 
 import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 import { customWarn, customError } from '../utils/logger';
-import { GenerateSuggestionRequestbody, BackendPayloadMetadata, AddRatingRequestBody } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
+import { GenerateSuggestionRequestbody, AddRatingRequestBody } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
