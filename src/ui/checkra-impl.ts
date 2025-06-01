@@ -104,6 +104,7 @@ export class CheckraImplementation {
   private boundHandleDomUpdate = this.handleDomUpdate.bind(this); // NEW: Bound handler for direct DOM updates
 
   private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null; // ADDED: To store request body for the current fix cycle
+  private boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this); // NEW: Bound handler for request body
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
@@ -167,6 +168,7 @@ export class CheckraImplementation {
     eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
     eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Listen for direct DOM updates
+    eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Listen for request body from ai-service
 
     // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -250,6 +252,7 @@ export class CheckraImplementation {
     eventEmitter.off('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.off('aiJsonPatch', this.boundHandleJsonPatch);
     eventEmitter.off('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Unsubscribe from direct DOM updates
+    eventEmitter.off('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Unsubscribe from request body event
 
     this.domElements = null;
     this.domManager = null;
@@ -422,6 +425,9 @@ export class CheckraImplementation {
         this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
       } else {
         customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item or requestBodyForFix missing.');
+        if (!requestBodyForFix) {
+          customError('[FeedbackViewerImpl] requestBodyForCurrentCycle is null - the ai-service may not have emitted requestBodyPrepared event.');
+        }
         if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle && requestBodyForFix) {
           this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
         } else {
@@ -647,32 +653,9 @@ export class CheckraImplementation {
       return;
     }
 
-    // (This part constructs the RequestBody. It needs full context of page metadata,
-    // framework detection, etc. For now, we'll create a simplified version.)
-    // It's crucial that this structure matches what ai-service expects and what types.ts defines.
-    const pageMetadata: BackendPayloadMetadata = {
-      // Simplified PageMetadata - in a real scenario, this would be more thoroughly populated,
-      // potentially by calling a shared utility function or an async method like getPageMetadata from ai-service.
-      title: document.title || null,
-      description: document.querySelector('meta[name="description"]')?.getAttribute('content') || null,
-      ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') || null,
-      url: window.location.href,
-      language: document.documentElement.lang || null,
-      h1: document.querySelector('h1')?.textContent?.trim() || null,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      // cssDigests, frameworkDetection, uiKitDetection are complex and would ideally be generated
-      // by invoking helpers from ai-service or utils if available here, or passed through.
-      // For this edit, they are omitted for brevity but are part of BackendPayloadMetadata.
-    };
-
-    this.requestBodyForCurrentCycle = {
-      prompt: promptText || '',
-      html: processedHtmlForAI, // This is the preprocessed HTML
-      htmlCharCount: processedHtmlForAI?.length || 0,
-      metadata: pageMetadata, // Assign the populated metadata
-      aiSettings: this.settingsModal?.getCurrentSettings() || { model: 'gpt-4o', temperature: 0.7 }, // Get current AI settings
-      insertionMode: this.currentElementInsertionMode,
-    };
+    // Note: The full request body with rich metadata will be provided by ai-service
+    // via the 'requestBodyPrepared' event. We don't create it here anymore.
+    // Just call fetchFeedback which will trigger the metadata gathering in ai-service.
 
     fetchFeedback(imageDataToSend, promptText, processedHtmlForAI, this.currentElementInsertionMode);
     // After submitting, clear the textarea and reset button for general prompts too
@@ -1067,6 +1050,26 @@ Your job:
       const wrapper = document.createElement('div');
       wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in';
       wrapper.setAttribute('data-checkra-fix-id', fixId);
+
+      // --- NEW: Preserve layout classes/styles for adjacent insertions ---
+      if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
+        const origEl = originalSelectedElement as HTMLElement;
+        if (origEl) {
+          // Copy classes except internal checkra-* ones
+          origEl.classList.forEach(cls => {
+            if (!cls.startsWith('checkra-')) {
+              wrapper.classList.add(cls);
+            }
+          });
+          // Copy inline styles if any (appended to avoid overwriting position/outline set by CSS)
+          const origStyle = origEl.getAttribute('style');
+          if (origStyle && origStyle.trim().length > 0) {
+            const existingStyle = wrapper.getAttribute('style') || '';
+            wrapper.setAttribute('style', `${existingStyle} ${origStyle}`.trim());
+          }
+        }
+      }
+      // --- END NEW ---
 
       const contentContainer = document.createElement('div');
       contentContainer.className = 'checkra-applied-fix-content';
@@ -1750,6 +1753,17 @@ Your job:
     }
   }
 
+  // --- Handler for requestBodyPrepared event from ai-service ---
+  private handleRequestBodyPrepared(requestBody: GenerateSuggestionRequestbody): void {
+    // Store the full request body with all metadata from ai-service
+    this.requestBodyForCurrentCycle = requestBody;
+    customWarn('[FeedbackViewerImpl] Received full request body with metadata:', {
+      hasFrameworkDetection: !!requestBody.metadata?.frameworkDetection,
+      hasCssDigests: !!requestBody.metadata?.cssDigests,
+      hasUiKitDetection: !!requestBody.metadata?.uiKitDetection
+    });
+  }
+
   // --- QUICK SUGGESTION HANDLER ---
   private handleSuggestionClick(promptText: string): void {
     if (!promptText) return;
@@ -2049,21 +2063,150 @@ Your job:
       optionElement.textContent = rating.text;
       optionElement.setAttribute('data-rating-value', rating.value.toString());
       
-      optionElement.addEventListener('click', () => {
-        if (fixInfo.requestBody) {
-          const feedbackPayload: AddRatingRequestBody = {
-            ...fixInfo.requestBody,
-            rating: rating.value as 1 | 2 | 3 | 4,
-          };
-          eventEmitter.emit('fixRated', feedbackPayload);
-          customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
-          
-          // Update state and UI for the rated button
-          fixInfo.isRated = true; // Mark as rated in our state
-          rateButton.classList.add('rated');
-          (rateButton as HTMLButtonElement).disabled = true;
+      optionElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // If rating is 1 or 2, show feedback input and submit button
+        if (rating.value === 1 || rating.value === 2) {
+          // Remove any existing feedback form
+          const existingForm = ratingOptionsContainer.querySelector('.feedback-rating-feedback-form');
+          if (existingForm) existingForm.remove();
+
+          const feedbackForm = document.createElement('form');
+          feedbackForm.className = 'feedback-rating-feedback-form';
+          feedbackForm.style.display = 'flex';
+          feedbackForm.style.flexDirection = 'column';
+          feedbackForm.style.gap = '6px';
+          feedbackForm.style.marginTop = '8px';
+
+          const feedbackInput = document.createElement('input');
+          feedbackInput.type = 'text';
+          feedbackInput.placeholder = 'Optional feedback (what could be improved?)';
+          feedbackInput.className = 'feedback-rating-feedback-input';
+          feedbackInput.style.padding = '6px 8px';
+          feedbackInput.style.borderRadius = '8px';
+          feedbackInput.style.border = '1px solid #888';
+          feedbackInput.style.fontSize = '12px';
+          feedbackInput.style.background = '#222';
+          feedbackInput.style.color = '#eee';
+
+          // --- Chips ---
+          const chipLabels = ['ugly', 'off brand', 'broken', 'copy', 'colors', 'layout', 'spacing'];
+          const chipsContainer = document.createElement('div');
+          chipsContainer.style.display = 'flex';
+          chipsContainer.style.gap = '6px';
+          chipsContainer.style.margin = '6px 0 0 0';
+          chipsContainer.style.flexWrap = 'wrap';
+
+          let selectedChips: Set<string> = new Set();
+
+          chipLabels.forEach(label => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.textContent = label;
+            chip.className = 'feedback-rating-chip';
+            chip.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation(); // Prevent event from bubbling up to parent elements
+              if (selectedChips.has(label)) {
+                selectedChips.delete(label);
+                chip.classList.remove('active');
+              } else {
+                selectedChips.add(label);
+                chip.classList.add('active');
+              }
+              updateSubmitState();
+            });
+            chipsContainer.appendChild(chip);
+          });
+
+          // --- Submit button ---
+          const submitBtn = document.createElement('button');
+          submitBtn.type = 'button';
+          submitBtn.textContent = 'submit rating';
+          submitBtn.className = 'feedback-rating-feedback-submit';
+          Object.assign(submitBtn.style, {
+            marginTop: '2px',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            background: '#2563eb',
+            color: '#fff',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            opacity: '0.7'
+          } as CSSStyleDeclaration);
+          submitBtn.disabled = true;
+
+          function updateSubmitState() {
+            const feedbackVal = feedbackInput.value.trim();
+            if (feedbackVal.length > 0 || selectedChips.size > 0) {
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+            } else {
+              submitBtn.disabled = true;
+              submitBtn.style.opacity = '0.7';
+            }
+          }
+
+          feedbackInput.addEventListener('input', updateSubmitState);
+
+          feedbackForm.appendChild(feedbackInput);
+          feedbackForm.appendChild(chipsContainer);
+          feedbackForm.appendChild(submitBtn);
+
+          // Remove the form submit handler entirely
+
+          // Add click handler to submitBtn
+          submitBtn.addEventListener('click', () => {
+            console.log('submitBtn clicked');
+            const feedbackVal = feedbackInput.value.trim();
+            if (fixInfo.requestBody) {
+              const feedbackPayload: AddRatingRequestBody = {
+                ...fixInfo.requestBody,
+                rating: rating.value as 1 | 2 | 3 | 4,
+                feedback: feedbackVal || undefined,
+                fixId: fixId,
+                tags: selectedChips.size > 0 ? Array.from(selectedChips) : undefined,
+                generatedHtml: fixInfo.fixedOuterHTML,
+              };
+              console.log('POSTING fixRated payload:', feedbackPayload);
+              eventEmitter.emit('fixRated', feedbackPayload);
+              customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId} with feedback: ${feedbackVal} and tags: ${Array.from(selectedChips).join(',')}`);
+              fixInfo.isRated = true;
+              rateButton.classList.add('rated');
+              (rateButton as HTMLButtonElement).disabled = true;
+              ratingOptionsContainer.remove();
+            }
+          });
+
+          feedbackInput.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              submitBtn.click();
+            }
+          });
+
+          optionElement.appendChild(feedbackForm);
+          feedbackInput.focus();
+          updateSubmitState();
+        } else {
+          // For ratings 3 or 4, submit immediately
+          if (fixInfo.requestBody) {
+            const feedbackPayload: AddRatingRequestBody = {
+              ...fixInfo.requestBody,
+              rating: rating.value as 1 | 2 | 3 | 4,
+              fixId: fixId,
+              generatedHtml: fixInfo.fixedOuterHTML,
+            };
+            eventEmitter.emit('fixRated', feedbackPayload);
+            customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
+            fixInfo.isRated = true;
+            rateButton.classList.add('rated');
+            (rateButton as HTMLButtonElement).disabled = true;
+          }
+          ratingOptionsContainer.remove();
         }
-        ratingOptionsContainer.remove();
       });
       ratingOptionsContainer.appendChild(optionElement);
     });
@@ -2227,9 +2370,14 @@ Your job:
 
 // Helper function placed at module level
 function createCenteredLoaderElement(): HTMLDivElement {
-    const loader = document.createElement('div');
-    loader.className = 'checkra-replace-loader';
-    return loader;
+    const loaderOuter = document.createElement('div');
+    loaderOuter.className = 'checkra-replace-loader'; // Positioned container
+
+    const spinnerInner = document.createElement('div');
+    spinnerInner.className = 'checkra-spinner-inner'; // Actual spinning element with border
+    loaderOuter.appendChild(spinnerInner);
+
+    return loaderOuter;
 }
 
 // Helper function to get a user-friendly display name for a query

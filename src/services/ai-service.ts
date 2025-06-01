@@ -190,6 +190,33 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
   }
 };
 
+// ---------- NEW HELPER: mapHexToUtilityToken -----------------------------
+/**
+ * Try to translate a hex colour (e.g. "#2563eb") to a utility class token
+ * understood by the detected CSS framework (e.g. "bg-blue-600" for Tailwind).
+ * Currently supports Tailwind by scanning CSS_ATOMIC_MAP.  Returns null if no
+ * mapping is found.
+ */
+function mapHexToUtilityToken(hex: string | undefined | null, frameworkName: string): string | null {
+  if (!hex) return null;
+  const normalised = hex.trim().toLowerCase();
+  if (!normalised.startsWith('#')) return null;
+
+  if (frameworkName === 'tailwind') {
+    for (const [token, decl] of Object.entries(CSS_ATOMIC_MAP)) {
+      if (decl && decl.toLowerCase().includes(normalised)) {
+        // Only keep colour-related utility classes
+        if (token.startsWith('bg-') || token.startsWith('text-') || token.startsWith('border-')) {
+          return token;
+        }
+      }
+    }
+  }
+  // TODO: Add Bootstrap / MUI palette lookup here if desired
+  return null;
+}
+// ------------------------------------------------------------------------
+
 /**
  * Gathers metadata from the current page.
  */
@@ -227,10 +254,16 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
       extractColorsFromElement
     );
     if (colours) {
+      const primaryToken = mapHexToUtilityToken(colours.primary, frameworkInfo.name);
+      const accentToken  = mapHexToUtilityToken(colours.accent, frameworkInfo.name);
+
       metadata.brand = {
         inferred: colours,
-        primary: colours.primary,
-        accent: colours.accent,
+        primary: primaryToken ? primaryToken : colours.primary,
+        accent: accentToken ? accentToken : colours.accent,
+        // Pass through tokens as separate fields for backend debugging
+        primaryUtilityToken: primaryToken || null,
+        accentUtilityToken : accentToken  || null,
       } as any;
     }
     if (lever) {
@@ -321,6 +354,11 @@ const fetchFeedbackBase = async (
       requestBody.html = processedHtml;
       requestBody.htmlCharCount = sanitizedHtml.length;
       // cssDigests, frameworkDetection, uiKitDetection are now part of requestBody.metadata
+    }
+
+    // Emit the request body so checkra-impl can store it with the full metadata
+    if (serviceEventEmitter) {
+      serviceEventEmitter.emit('requestBodyPrepared', requestBody);
     }
 
     const currentApiKey = getEffectiveApiKey();

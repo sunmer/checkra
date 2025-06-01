@@ -87,6 +87,10 @@ export interface GenerateSuggestionRequestbody {
 
 export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
   rating: 1 | 2 | 3 | 4;
+  fixId: string;
+  feedback?: string;
+  generatedHtml?: string;
+  tags?: string[];
 }
 
 // --- New Shared Interfaces ---

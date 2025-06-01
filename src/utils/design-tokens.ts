@@ -67,21 +67,31 @@ function adjustLightness(rgb: string, makeDarker: boolean): string {
 /* --------------------------------------------------
  *  Stage A – utility-class parsing on HTML string
  * --------------------------------------------------*/
-const COLOR_UTILITY_REGEX = /(bg|text|from|to|border|stroke|fill)-([a-zA-Z0-9\[\]%-]+)/;
 const SPACING_REGEX = /(gap|space-[xy]|p[trblxy]?|m[trblxy]?)-([0-9]+)/;
 const DEPTH_REGEX = /(shadow)-([a-z]+)/;
 const MOTION_REGEX = /(duration|ease|transition)-([a-z0-9]+)/;
+
+function isColorUtility(cls: string): boolean {
+  // Tailwind
+  return /^((bg|text|border|from|to|via|fill|stroke)-[a-z]+-\d{2,3})$/.test(cls) ||
+    // Bootstrap 5 (bg-primary, text-success, …)
+    /^(bg|text)-(primary|secondary|success|info|warning|danger|light|dark)$/.test(cls) ||
+    // MUI utility tokens (mui-blue-500 etc.)
+    /^mui-[a-z]+-\d{3}$/.test(cls);
+}
 
 function tokensFromClassList(classList: string[]): { colours?: InferredColours; lever?: LeverValues } {
   const lever: LeverValues = {};
   let primary: string | undefined;
   let accent: string | undefined;
   classList.forEach(cls => {
-    if (!primary && COLOR_UTILITY_REGEX.test(cls) && cls.startsWith('text-')) {
-      primary = cls;
-    }
-    if (!accent && COLOR_UTILITY_REGEX.test(cls) && cls.startsWith('bg-')) {
-      accent = cls;
+    if (isColorUtility(cls)) {
+      if (!primary && cls.startsWith('text-')) {
+        primary = cls;
+      }
+      if (!accent && cls.startsWith('bg-')) {
+        accent = cls;
+      }
     }
     if (!lever.spacingStep && SPACING_REGEX.test(cls)) lever.spacingStep = cls;
     if (!lever.depthPreset && DEPTH_REGEX.test(cls)) lever.depthPreset = cls;

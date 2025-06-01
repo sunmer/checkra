@@ -1209,18 +1209,28 @@
 }
 
 /* Centered Loader for Replace Mode */
-.checkra-replace-loader {
+.checkra-replace-loader { /* This is the container, handles centering */
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 32px; /* Adjust size */
+  width: 32px; /* Container size, can be same as spinner or slightly larger for padding */
   height: 32px;
+  z-index: 10001;
+  display: flex; /* To center the spinner-inner if its size is different, or just in case */
+  align-items: center;
+  justify-content: center;
+  /* No border or animation directly on this container */
+}
+
+.checkra-spinner-inner { /* This is the actual spinning element */
+  width: 100%; /* Fill the container, or set specific size e.g. 32px */
+  height: 100%; /* Fill the container */
   border: 4px solid rgba(0, 0, 0, 0.1);
   border-left-color: #2563eb; /* Blue spinner part */
   border-radius: 50%;
-  animation: checkra-spinner 1s linear infinite;
-  z-index: 10001; /* Ensure it's above dimmed content but potentially below panel */
+  animation: checkra-spinner 1s linear infinite; /* Apply the existing rotation animation */
+  box-sizing: border-box; /* Ensure border is within the width/height */
 }
 
 /* Dimming overlay for element being replaced */
@@ -1240,4 +1250,22 @@
 /* Ensure highlighted element can be a positioning context */
 .checkra-highlight-container {
     position: relative !important; /* Allow absolute positioning of loader inside */
+}
+
+.feedback-rating-chip {
+  background: #333;
+  color: #eee;
+  border: 1px solid #888;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  margin: 0 2px 2px 0;
+}
+
+.feedback-rating-chip.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
 }
