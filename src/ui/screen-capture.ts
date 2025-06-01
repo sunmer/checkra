@@ -531,7 +531,7 @@ if (!document.getElementById('screen-capture-styles')) {
 
     /* New styles for insertion indicators */
     .checkra-highlight-container {
-      position: relative !important; /* Ensure this is applied */
+      /* position: relative !important; */ /* Removed to prevent layout shifts */
       /* outline: none !important; /* May not be needed if specific borders are used */
     }
 
