@@ -19,7 +19,6 @@ interface ConversationItem {
     originalHtml: string;
     fixedHtml: string;
     fixId: string;
-    // insertionMode should NOT be here yet, it comes from backend at point of use.
   };
 }
 const CONVERSATION_HISTORY_KEY = 'checkra_conversation_history';
@@ -2064,6 +2063,13 @@ Your job:
       optionElement.setAttribute('data-rating-value', rating.value.toString());
       
       optionElement.addEventListener('click', (e) => {
+        // Check if the click target is within an existing feedback form.
+        // If so, don't re-process this click on the optionElement itself.
+        const existingForm = optionElement.querySelector('.feedback-rating-feedback-form');
+        if (existingForm && existingForm.contains(e.target as Node)) {
+          return; // Click was inside the form, do nothing here.
+        }
+
         e.stopPropagation();
         // If rating is 1 or 2, show feedback input and submit button
         if (rating.value === 1 || rating.value === 2) {
@@ -2078,6 +2084,9 @@ Your job:
           feedbackForm.style.gap = '6px';
           feedbackForm.style.marginTop = '8px';
 
+          // Prevent click from bubbling up to optionElement and recreating form - NO LONGER NEEDED HERE
+          // feedbackForm.addEventListener('click', (ev) => ev.stopPropagation());
+
           const feedbackInput = document.createElement('input');
           feedbackInput.type = 'text';
           feedbackInput.placeholder = 'Optional feedback (what could be improved?)';
@@ -2088,6 +2097,9 @@ Your job:
           feedbackInput.style.fontSize = '12px';
           feedbackInput.style.background = '#222';
           feedbackInput.style.color = '#eee';
+
+          // Prevent click from bubbling up to optionElement and recreating form - NO LONGER NEEDED HERE
+          // feedbackInput.addEventListener('click', (ev) => ev.stopPropagation());
 
           // --- Chips ---
           const chipLabels = ['ugly', 'off brand', 'broken', 'copy', 'colors', 'layout', 'spacing'];
