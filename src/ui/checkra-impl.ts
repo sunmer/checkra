@@ -73,6 +73,7 @@ export class CheckraImplementation {
   private svgPlaceholderCounter: number = 0;
   private activeStreamingAiItem: ConversationItem | null = null; // ADDED: To track the current AI message being streamed
   private selectionPlusIconElement: HTMLDivElement | null = null; // Added for persistent '+' icon
+  private pageReplaceLoaderElement: HTMLDivElement | null = null; // Loader for 'replace' mode
 
   // --- Quick Suggestion Flow ---
   private queuedPromptText: string | null = null; // Stores prompt chosen before element selection
@@ -100,8 +101,10 @@ export class CheckraImplementation {
   private conversationHistory: ConversationItem[] = [];
 
   private boundHandleJsonPatch = this.handleJsonPatch.bind(this);
+  private boundHandleDomUpdate = this.handleDomUpdate.bind(this); // NEW: Bound handler for direct DOM updates
 
   private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null; // ADDED: To store request body for the current fix cycle
+  private boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this); // NEW: Bound handler for request body
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
@@ -164,6 +167,8 @@ export class CheckraImplementation {
     // Listen for onboarding suggestion clicks
     eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
+    eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Listen for direct DOM updates
+    eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Listen for request body from ai-service
 
     // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -246,6 +251,8 @@ export class CheckraImplementation {
     eventEmitter.off('showViewerApi', this.boundShowFromApi); // ADDED: Unsubscribe from API show event
     eventEmitter.off('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.off('aiJsonPatch', this.boundHandleJsonPatch);
+    eventEmitter.off('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Unsubscribe from direct DOM updates
+    eventEmitter.off('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Unsubscribe from request body event
 
     this.domElements = null;
     this.domManager = null;
@@ -362,6 +369,8 @@ export class CheckraImplementation {
   public finalizeResponse(): void {
     if (!this.domManager || !this.domElements) return;
 
+    this.hidePageLoaders(); // Hide page loaders when response is finalized
+
     const streamToFinalize = this.activeStreamingAiItem;
 
     if (streamToFinalize && streamToFinalize.type === 'ai' && streamToFinalize.isStreaming) {
@@ -416,6 +425,9 @@ export class CheckraImplementation {
         this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
       } else {
         customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item or requestBodyForFix missing.');
+        if (!requestBodyForFix) {
+          customError('[FeedbackViewerImpl] requestBodyForCurrentCycle is null - the ai-service may not have emitted requestBodyPrepared event.');
+        }
         if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle && requestBodyForFix) {
           this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
         } else {
@@ -428,6 +440,8 @@ export class CheckraImplementation {
 
   public showError(error: Error | string): void {
     let errorHtmlContent: string;
+
+    this.hidePageLoaders(); // Hide page loaders on error
 
     if (typeof error === 'string' && error.includes(SELECT_SVG_ICON)) {
       // If it's the specific error message with the SVG placeholder,
@@ -483,11 +497,8 @@ export class CheckraImplementation {
     this.stableSelectorForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
-    this.activeStreamingAiItem = null; // Also reset any active streaming item
-
-    // Optionally, tell DOM to reset/clear certain parts if not handled by hide() or prepareForInput()
-    // For example, if there are specific UI elements tied to a fix proposal that aren't part of the general history.
-    // this.domManager?.clearCurrentFixProposalDisplay(); // Example if such a method existed
+    this.activeStreamingAiItem = null; 
+    this.hidePageLoaders(); // Hide page loaders on new selection
   }
 
   // --- Method to render user-facing messages (warnings, info) into history ---
@@ -513,7 +524,7 @@ export class CheckraImplementation {
   }
 
   private handleSubmit(): void {
-    const promptText = this.domElements?.promptTextarea.value.trim(); // Safely access promptTextarea
+    const promptText = this.domElements?.promptTextarea.value.trim(); 
 
     // Allow /publish even if other conditions aren't met
     if (promptText?.toLowerCase() === '/publish') {
@@ -588,9 +599,22 @@ export class CheckraImplementation {
 
     this.domManager.setPromptState(false);
     this.domManager.updateSubmitButtonState(false);
-    this.domManager.updateLoaderVisibility(true, 'Loading...');
+    this.domManager.updateLoaderVisibility(true, 'Loading...'); // This is the side panel loader
     this.domManager.clearUserMessage();
     this.domManager.showPromptInputArea(false, promptText);
+
+    // --- Show page-specific loaders ---
+    this.hidePageLoaders(); // Clear any previous loaders first
+    if (this.currentElementInsertionMode === 'insertBefore' || this.currentElementInsertionMode === 'insertAfter') {
+        if (this.selectionPlusIconElement) {
+            this.selectionPlusIconElement.classList.add('loading');
+        }
+    } else if (this.currentElementInsertionMode === 'replace') {
+        if (this.currentlyHighlightedElement) {
+            this.showReplaceLoader(this.currentlyHighlightedElement);
+        }
+    }
+    // --- End page-specific loaders ---
 
     const imageKeywords = ["image", "photo", "picture", "screenshot", "visual", "look", "style", "design", "appearance", "graphic", "illustration", "background", "banner", "logo"];
     const promptHasImageKeyword = imageKeywords.some(keyword => promptText.toLowerCase().includes(keyword)); // Ensure keyword is already lowercase or use keyword.toLowerCase()
@@ -629,32 +653,9 @@ export class CheckraImplementation {
       return;
     }
 
-    // (This part constructs the RequestBody. It needs full context of page metadata,
-    // framework detection, etc. For now, we'll create a simplified version.)
-    // It's crucial that this structure matches what ai-service expects and what types.ts defines.
-    const pageMetadata: BackendPayloadMetadata = {
-      // Simplified PageMetadata - in a real scenario, this would be more thoroughly populated,
-      // potentially by calling a shared utility function or an async method like getPageMetadata from ai-service.
-      title: document.title || null,
-      description: document.querySelector('meta[name="description"]')?.getAttribute('content') || null,
-      ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') || null,
-      url: window.location.href,
-      language: document.documentElement.lang || null,
-      h1: document.querySelector('h1')?.textContent?.trim() || null,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      // cssDigests, frameworkDetection, uiKitDetection are complex and would ideally be generated
-      // by invoking helpers from ai-service or utils if available here, or passed through.
-      // For this edit, they are omitted for brevity but are part of BackendPayloadMetadata.
-    };
-
-    this.requestBodyForCurrentCycle = {
-      prompt: promptText || '',
-      html: processedHtmlForAI, // This is the preprocessed HTML
-      htmlCharCount: processedHtmlForAI?.length || 0,
-      metadata: pageMetadata, // Assign the populated metadata
-      aiSettings: this.settingsModal?.getCurrentSettings() || { model: 'gpt-4o', temperature: 0.7 }, // Get current AI settings
-      insertionMode: this.currentElementInsertionMode,
-    };
+    // Note: The full request body with rich metadata will be provided by ai-service
+    // via the 'requestBodyPrepared' event. We don't create it here anymore.
+    // Just call fetchFeedback which will trigger the metadata gathering in ai-service.
 
     fetchFeedback(imageDataToSend, promptText, processedHtmlForAI, this.currentElementInsertionMode);
     // After submitting, clear the textarea and reset button for general prompts too
@@ -1050,6 +1051,26 @@ Your job:
       wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in';
       wrapper.setAttribute('data-checkra-fix-id', fixId);
 
+      // --- NEW: Preserve layout classes/styles for adjacent insertions ---
+      if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
+        const origEl = originalSelectedElement as HTMLElement;
+        if (origEl) {
+          // Copy classes except internal checkra-* ones
+          origEl.classList.forEach(cls => {
+            if (!cls.startsWith('checkra-')) {
+              wrapper.classList.add(cls);
+            }
+          });
+          // Copy inline styles if any (appended to avoid overwriting position/outline set by CSS)
+          const origStyle = origEl.getAttribute('style');
+          if (origStyle && origStyle.trim().length > 0) {
+            const existingStyle = wrapper.getAttribute('style') || '';
+            wrapper.setAttribute('style', `${existingStyle} ${origStyle}`.trim());
+          }
+        }
+      }
+      // --- END NEW ---
+
       const contentContainer = document.createElement('div');
       contentContainer.className = 'checkra-applied-fix-content';
       const fixedContentFragment = this.createFragmentFromHTML(fixedHtml);
@@ -1354,19 +1375,25 @@ Your job:
   private removeSelectionHighlight(): void {
     if (this.currentlyHighlightedElement) {
       this.currentlyHighlightedElement.classList.remove(
-        'checkra-selected-element-outline', // Old class for replace
-        'checkra-hover-top', // Old hover class, just in case
-        'checkra-hover-bottom', // Old hover class, just in case
+        'checkra-selected-element-outline',
+        'checkra-hover-top',
+        'checkra-hover-bottom',
         'checkra-highlight-container',
-        // New persistent selection classes
         'checkra-selected-insert-before',
         'checkra-selected-insert-after',
-        'checkra-selected-replace'
+        'checkra-selected-replace',
+        'checkra-element-dimmed' // Ensure dimmed is removed here too
       );
     }
     if (this.selectionPlusIconElement && this.selectionPlusIconElement.parentNode) {
+      this.selectionPlusIconElement.classList.remove('loading'); // Ensure loading is removed from plus icon
       this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
       this.selectionPlusIconElement = null;
+    }
+    // Also ensure replace loader is removed if selection is cleared while it was active
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove();
+        this.pageReplaceLoaderElement = null;
     }
   }
 
@@ -1726,6 +1753,17 @@ Your job:
     }
   }
 
+  // --- Handler for requestBodyPrepared event from ai-service ---
+  private handleRequestBodyPrepared(requestBody: GenerateSuggestionRequestbody): void {
+    // Store the full request body with all metadata from ai-service
+    this.requestBodyForCurrentCycle = requestBody;
+    customWarn('[FeedbackViewerImpl] Received full request body with metadata:', {
+      hasFrameworkDetection: !!requestBody.metadata?.frameworkDetection,
+      hasCssDigests: !!requestBody.metadata?.cssDigests,
+      hasUiKitDetection: !!requestBody.metadata?.uiKitDetection
+    });
+  }
+
   // --- QUICK SUGGESTION HANDLER ---
   private handleSuggestionClick(promptText: string): void {
     if (!promptText) return;
@@ -2016,7 +2054,7 @@ Your job:
       { value: 1, text: '★ Not OK' },
       { value: 2, text: '★★ OK' },
       { value: 3, text: '★★★ Pretty good' },
-      { value: 4, text: '★★★★ Wow' },
+      { value: 4, text: '★★★★ Wow!' },
     ];
 
     ratings.forEach(rating => {
@@ -2025,21 +2063,150 @@ Your job:
       optionElement.textContent = rating.text;
       optionElement.setAttribute('data-rating-value', rating.value.toString());
       
-      optionElement.addEventListener('click', () => {
-        if (fixInfo.requestBody) {
-          const feedbackPayload: AddRatingRequestBody = {
-            ...fixInfo.requestBody,
-            rating: rating.value as 1 | 2 | 3 | 4,
-          };
-          eventEmitter.emit('fixRated', feedbackPayload);
-          customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
-          
-          // Update state and UI for the rated button
-          fixInfo.isRated = true; // Mark as rated in our state
-          rateButton.classList.add('rated');
-          (rateButton as HTMLButtonElement).disabled = true;
+      optionElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // If rating is 1 or 2, show feedback input and submit button
+        if (rating.value === 1 || rating.value === 2) {
+          // Remove any existing feedback form
+          const existingForm = ratingOptionsContainer.querySelector('.feedback-rating-feedback-form');
+          if (existingForm) existingForm.remove();
+
+          const feedbackForm = document.createElement('form');
+          feedbackForm.className = 'feedback-rating-feedback-form';
+          feedbackForm.style.display = 'flex';
+          feedbackForm.style.flexDirection = 'column';
+          feedbackForm.style.gap = '6px';
+          feedbackForm.style.marginTop = '8px';
+
+          const feedbackInput = document.createElement('input');
+          feedbackInput.type = 'text';
+          feedbackInput.placeholder = 'Optional feedback (what could be improved?)';
+          feedbackInput.className = 'feedback-rating-feedback-input';
+          feedbackInput.style.padding = '6px 8px';
+          feedbackInput.style.borderRadius = '8px';
+          feedbackInput.style.border = '1px solid #888';
+          feedbackInput.style.fontSize = '12px';
+          feedbackInput.style.background = '#222';
+          feedbackInput.style.color = '#eee';
+
+          // --- Chips ---
+          const chipLabels = ['ugly', 'off brand', 'broken', 'copy', 'colors', 'layout', 'spacing'];
+          const chipsContainer = document.createElement('div');
+          chipsContainer.style.display = 'flex';
+          chipsContainer.style.gap = '6px';
+          chipsContainer.style.margin = '6px 0 0 0';
+          chipsContainer.style.flexWrap = 'wrap';
+
+          let selectedChips: Set<string> = new Set();
+
+          chipLabels.forEach(label => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.textContent = label;
+            chip.className = 'feedback-rating-chip';
+            chip.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation(); // Prevent event from bubbling up to parent elements
+              if (selectedChips.has(label)) {
+                selectedChips.delete(label);
+                chip.classList.remove('active');
+              } else {
+                selectedChips.add(label);
+                chip.classList.add('active');
+              }
+              updateSubmitState();
+            });
+            chipsContainer.appendChild(chip);
+          });
+
+          // --- Submit button ---
+          const submitBtn = document.createElement('button');
+          submitBtn.type = 'button';
+          submitBtn.textContent = 'submit rating';
+          submitBtn.className = 'feedback-rating-feedback-submit';
+          Object.assign(submitBtn.style, {
+            marginTop: '2px',
+            padding: '6px 10px',
+            borderRadius: '8px',
+            background: '#2563eb',
+            color: '#fff',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            opacity: '0.7'
+          } as CSSStyleDeclaration);
+          submitBtn.disabled = true;
+
+          function updateSubmitState() {
+            const feedbackVal = feedbackInput.value.trim();
+            if (feedbackVal.length > 0 || selectedChips.size > 0) {
+              submitBtn.disabled = false;
+              submitBtn.style.opacity = '1';
+            } else {
+              submitBtn.disabled = true;
+              submitBtn.style.opacity = '0.7';
+            }
+          }
+
+          feedbackInput.addEventListener('input', updateSubmitState);
+
+          feedbackForm.appendChild(feedbackInput);
+          feedbackForm.appendChild(chipsContainer);
+          feedbackForm.appendChild(submitBtn);
+
+          // Remove the form submit handler entirely
+
+          // Add click handler to submitBtn
+          submitBtn.addEventListener('click', () => {
+            console.log('submitBtn clicked');
+            const feedbackVal = feedbackInput.value.trim();
+            if (fixInfo.requestBody) {
+              const feedbackPayload: AddRatingRequestBody = {
+                ...fixInfo.requestBody,
+                rating: rating.value as 1 | 2 | 3 | 4,
+                feedback: feedbackVal || undefined,
+                fixId: fixId,
+                tags: selectedChips.size > 0 ? Array.from(selectedChips) : undefined,
+                generatedHtml: fixInfo.fixedOuterHTML,
+              };
+              console.log('POSTING fixRated payload:', feedbackPayload);
+              eventEmitter.emit('fixRated', feedbackPayload);
+              customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId} with feedback: ${feedbackVal} and tags: ${Array.from(selectedChips).join(',')}`);
+              fixInfo.isRated = true;
+              rateButton.classList.add('rated');
+              (rateButton as HTMLButtonElement).disabled = true;
+              ratingOptionsContainer.remove();
+            }
+          });
+
+          feedbackInput.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              submitBtn.click();
+            }
+          });
+
+          optionElement.appendChild(feedbackForm);
+          feedbackInput.focus();
+          updateSubmitState();
+        } else {
+          // For ratings 3 or 4, submit immediately
+          if (fixInfo.requestBody) {
+            const feedbackPayload: AddRatingRequestBody = {
+              ...fixInfo.requestBody,
+              rating: rating.value as 1 | 2 | 3 | 4,
+              fixId: fixId,
+              generatedHtml: fixInfo.fixedOuterHTML,
+            };
+            eventEmitter.emit('fixRated', feedbackPayload);
+            customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
+            fixInfo.isRated = true;
+            rateButton.classList.add('rated');
+            (rateButton as HTMLButtonElement).disabled = true;
+          }
+          ratingOptionsContainer.remove();
         }
-        ratingOptionsContainer.remove();
       });
       ratingOptionsContainer.appendChild(optionElement);
     });
@@ -2062,6 +2229,155 @@ Your job:
         fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer);
     }
   }
+
+  private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
+    customWarn('[CheckraImplementation] Received aiDomUpdateReceived', data);
+    if (!this.currentlyHighlightedElement) {
+      customError('[CheckraImplementation] No currentlyHighlightedElement to apply DOM update to.');
+      this.showError('No element was selected to apply the changes to.');
+      return;
+    }
+
+    const { html, insertionMode } = data;
+    let processedHtml = html;
+
+    const fenceRegex = /^```(?:html)?\n([\s\S]*?)\n```$/i;
+    const fenceMatch = processedHtml.match(fenceRegex);
+    if (fenceMatch && fenceMatch[1]) {
+      processedHtml = fenceMatch[1].trim();
+      customWarn('[CheckraImplementation] Stripped Markdown fences from domUpdateHtml content.');
+    }
+
+    try {
+      processedHtml = this.postprocessHtmlFromAI(processedHtml); 
+      const scrubLeadingNonElement = (incomingHtml: string): string => {
+        const frag = this.createFragmentFromHTML(incomingHtml);
+        if (!frag) return incomingHtml;
+        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+          const textNode = frag.firstChild;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            const textContent = textNode.textContent || '';
+            if (textContent.trim() === '') {
+              textNode.parentNode?.removeChild(textNode);
+            } else {
+              textNode.parentNode?.removeChild(textNode);
+            }
+          } else {
+            textNode.parentNode?.removeChild(textNode);
+          }
+        }
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(frag);
+        return tempContainer.innerHTML;
+      };
+      processedHtml = scrubLeadingNonElement(processedHtml);
+
+    } catch (e) {
+      customWarn('[CheckraImplementation] postprocessHtmlFromAI or scrubbing failed on domUpdateHtml:', e);
+    }
+
+    const finalHtmlToApply = processedHtml;
+
+    const testFrag = this.createFragmentFromHTML(finalHtmlToApply);
+    if (!testFrag || testFrag.childNodes.length === 0) {
+      customError('[CheckraImplementation] HTML for domUpdate is empty/invalid after processing. Aborting DOM update.');
+      this.showError('AI generated empty content, nothing to apply.');
+      return;
+    }
+
+    // Ensure necessary context is available before calling applyFixToPage
+    if (!this.currentFixId || !this.originalOuterHTMLForCurrentCycle || !this.requestBodyForCurrentCycle || !this.stableSelectorForCurrentCycle) {
+        customError('[CheckraImplementation] Missing context for applyFixToPage in handleDomUpdate.', {
+            fixId: this.currentFixId,
+            originalHtml: this.originalOuterHTMLForCurrentCycle,
+            requestBody: this.requestBodyForCurrentCycle,
+            stableSelector: this.stableSelectorForCurrentCycle
+        });
+        this.showError('Internal error: Could not apply changes due to missing context.');
+        // Fallback to direct insertion without controls if context is missing, to at least show the HTML.
+        // This is a degraded experience but better than nothing if context is somehow lost.
+        if (this.currentlyHighlightedElement) {
+          customWarn('[CheckraImplementation] Fallback: performing direct DOM insertion in handleDomUpdate due to missing context for controls.')
+          try {
+              switch (insertionMode) {
+                  case 'insertBefore': this.currentlyHighlightedElement.insertAdjacentHTML('beforebegin', finalHtmlToApply); break;
+                  case 'insertAfter': this.currentlyHighlightedElement.insertAdjacentHTML('afterend', finalHtmlToApply); break;
+                  case 'replace': this.currentlyHighlightedElement.outerHTML = finalHtmlToApply; this.currentlyHighlightedElement = null; break;
+              }
+              this.removeSelectionHighlight();
+          } catch (directInsertError) {
+              customError('[CheckraImplementation] Error during fallback direct DOM insertion:', directInsertError);
+          }
+        } else {
+          customError('[CheckraImplementation] Cannot perform fallback direct DOM insertion, currentlyHighlightedElement is null.');
+        }
+        return;
+    }
+
+    // Call applyFixToPage to ensure controls are added and fix is tracked
+    this.applyFixToPage(
+        this.currentFixId,
+        this.originalOuterHTMLForCurrentCycle,
+        finalHtmlToApply, // This is the fixedHTML
+        insertionMode,
+        this.requestBodyForCurrentCycle,
+        this.stableSelectorForCurrentCycle
+    );
+
+    customWarn(`[CheckraImplementation] DOM update via applyFixToPage initiated with mode: ${insertionMode}`);
+      
+    if (this.activeStreamingAiItem) {
+        this.activeStreamingAiItem.isStreaming = false;
+        this.domManager?.updateLastAIMessage(this.activeStreamingAiItem.content, false); 
+    }
+    this.activeStreamingAiItem = null;
+    this.requestBodyForCurrentCycle = null; // Clear after use, similar to finalizeResponse
+
+    // Note: applyFixToPage itself calls removeSelectionHighlight, so no need to call it here again.
+    // Also, if mode is 'replace', applyFixToPage doesn't nullify currentlyHighlightedElement directly,
+    // but the element with data-checkra-fix-id is removed and replaced by the wrapper.
+    // The original selection highlight should be gone due to applyFixToPage's own call.
+  }
+
+  private showReplaceLoader(targetElement: Element): void {
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove(); // Remove if already exists
+    }
+    this.pageReplaceLoaderElement = createCenteredLoaderElement(); // Uses the module-level helper
+    
+    if (!targetElement.classList.contains('checkra-highlight-container')) {
+        targetElement.classList.add('checkra-highlight-container');
+    }
+
+    targetElement.appendChild(this.pageReplaceLoaderElement);
+    targetElement.classList.add('checkra-element-dimmed');
+  }
+
+  private hidePageLoaders(): void {
+    if (this.selectionPlusIconElement) {
+        this.selectionPlusIconElement.classList.remove('loading');
+    }
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove();
+        this.pageReplaceLoaderElement = null;
+    }
+    const dimmedElements = document.querySelectorAll('.checkra-element-dimmed');
+    dimmedElements.forEach(el => el.classList.remove('checkra-element-dimmed'));
+  }
+
+  // --- End of CheckraImplementation class ---
+}
+
+// Helper function placed at module level
+function createCenteredLoaderElement(): HTMLDivElement {
+    const loaderOuter = document.createElement('div');
+    loaderOuter.className = 'checkra-replace-loader'; // Positioned container
+
+    const spinnerInner = document.createElement('div');
+    spinnerInner.className = 'checkra-spinner-inner'; // Actual spinning element with border
+    loaderOuter.appendChild(spinnerInner);
+
+    return loaderOuter;
 }
 
 // Helper function to get a user-friendly display name for a query

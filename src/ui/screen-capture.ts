@@ -1,78 +1,87 @@
 import html2canvas from 'html2canvas';
 
 const MIN_HEIGHT_FOR_INSERT_ZONES = 50; // Minimum element height in pixels for top/bottom 10% zones
-const MIN_WIDTH_FOR_SECTION = 150; // Minimum element width in pixels to be considered for section-like behavior
-const SECTION_WIDTH_THRESHOLD_PERCENTAGE = 0.6; // Element width must be >= 60% of available content width
+// Old constants below are no longer directly used by the new isLikelySection
+// const MIN_WIDTH_FOR_SECTION = 150; 
+// const SECTION_WIDTH_THRESHOLD_PERCENTAGE = 0.6; 
 
 /**
- * Checks if an element is likely a "section" suitable for before/after insertions.
+ * Checks if an element is likely a "section" suitable for before/after insertions using a scoring heuristic.
  */
-function isLikelySection(element: HTMLElement | null, availableContentWidth: number): boolean {
-  if (!element) return false;
+function isLikelySection(el: HTMLElement | null, availableWidth: number): boolean {
+  if (!el) return false;
 
-  const feedbackViewerElement = document.getElementById('checkra-feedback-viewer');
-  if (element.id === 'checkra-feedback-viewer' || (feedbackViewerElement && feedbackViewerElement.contains(element))) {
-    return false; // Ignore the feedback viewer itself
+  const viewer = document.getElementById('checkra-feedback-viewer');
+  if (el === viewer || (viewer && viewer.contains(el))) return false;
+
+  const style = getComputedStyle(el);
+  const r = el.getBoundingClientRect();
+  if (style.display === 'none' || style.visibility === 'hidden' || r.width === 0 || r.height === 0) return false;
+
+  // Early reject for very small things
+  if (r.width < 120 || r.height < 50) return false;
+
+  let score = 0;
+
+  /* 1. semantic bonus */
+  if (['section','main','article','header','footer','nav','aside'].includes(el.tagName.toLowerCase())) score += 20;
+
+  /* 2. width ratio */
+  const widthRatio = r.width / availableWidth;
+  if (widthRatio >= 0.80) score += 20;
+  else if (widthRatio >= 0.60) score += 10;
+
+  /* 3. height bonus */
+  if (r.height >= 80)  score += 15;
+  if (r.height >= 200) score += 10; // extra
+
+  /* 4. margin bonus */
+  const mt = parseFloat(style.marginTop)  || 0;
+  const mb = parseFloat(style.marginBottom)|| 0;
+  if (mt + mb >= 48) score += 10;
+
+  /* 5. sibling gap bonus */
+  const prev = el.previousElementSibling as HTMLElement | null;
+  if (prev) {
+    const prevRect = prev.getBoundingClientRect();
+    if (r.top - prevRect.bottom >= 24) score += 10;
   }
 
-  const style = window.getComputedStyle(element);
-  const tagName = element.tagName.toLowerCase();
-  const rect = element.getBoundingClientRect();
-
-  // Basic exclusions for common inline or small elements, or non-visible ones
-  if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) {
-    return false;
-  }
-  if (['span', 'a', 'img', 'strong', 'em', 'br', 'hr', 'label', 'input', 'button', 'svg', 'path', 'i', 'link', 'script', 'style', 'meta'].includes(tagName)) {
-     // Allow buttons/links if they are visually very large blocks, otherwise exclude
-    if ((tagName === 'button' || tagName === 'a') && (rect.height > MIN_HEIGHT_FOR_INSERT_ZONES * 1.5 && rect.width > MIN_WIDTH_FOR_SECTION * 1.5)) {
-      // It's a large button/link, could be a section-like CTA block
-    } else {
-      return false;
+  /* 6. parent grid/flex penalty */
+  const parent = el.parentElement;
+  if (parent) {
+    const pStyle = getComputedStyle(parent);
+    if ((pStyle.display === 'grid' || pStyle.display === 'flex') && parent.children.length > 3) {
+      score -= 20;
     }
   }
-  if (style.position === 'absolute' || style.position === 'fixed' || style.position === 'sticky') {
-    // Allow sticky if it's also very wide (like a sticky nav/header that is section-like)
-    if (style.position === 'sticky' && rect.width >= availableContentWidth * SECTION_WIDTH_THRESHOLD_PERCENTAGE && rect.height >= MIN_HEIGHT_FOR_INSERT_ZONES) {
-      // Potentially a sticky section header/footer
-    } else {
-      return false; // Exclude other absolute/fixed/non-wide-sticky
-    }
-  }
-  if (rect.height < MIN_HEIGHT_FOR_INSERT_ZONES) {
-    return false;
-  }
-  if (rect.width < MIN_WIDTH_FOR_SECTION) {
-    return false;
-  }
 
-  // Strong positive signals for semantic sectioning elements
-  if (['main', 'section', 'article', 'body'].includes(tagName)) {
-    return true;
-  }
-  // Nav, header, footer are sections if they are reasonably wide
-  if (['nav', 'header', 'footer', 'aside'].includes(tagName) && rect.width >= availableContentWidth * (SECTION_WIDTH_THRESHOLD_PERCENTAGE - 0.1)) { // 50% width for these
-    return true;
-  }
+  /* 7. position penalty */
+  if (['absolute','fixed'].includes(style.position)) score -= 30;
 
-  // General heuristic for other elements (like divs) based on width relative to available content width
-  if (rect.width >= availableContentWidth * SECTION_WIDTH_THRESHOLD_PERCENTAGE) {
-    // Further check: avoid direct children of tight grids/flex containers if the item itself isn't a major block
-    const parent = element.parentElement;
-    if (parent) {
-      const parentStyle = window.getComputedStyle(parent);
-      if (parentStyle.display === 'grid' || parentStyle.display === 'flex') {
-        // If parent is grid/flex, the element needs to be more substantial or be one of few children
-        if (parent.children.length < 4 || rect.width >= availableContentWidth * (SECTION_WIDTH_THRESHOLD_PERCENTAGE + 0.15)) { // Be more generous if fewer children, or require wider if many
-          return true;
-        }
-        return false; // Likely an item in a denser grid/flex layout, not a standalone section for insert before/after
+  /* 8. text-density penalty */
+  const directText = Array.from(el.childNodes)
+      .filter(n => n.nodeType === Node.TEXT_NODE)
+      .map(n => (n as Text).textContent?.trim().length || 0)
+      .reduce((a,b)=>a+b,0);
+  if (directText < 10) score -= 10;
+
+  /* 9. container-only hand-off */
+  if ((style.display === 'flex' || style.display === 'grid') && el.firstElementChild) {
+    const child = el.firstElementChild as HTMLElement;
+    const cr = child.getBoundingClientRect();
+    // Check if child's width is a large percentage of *availableWidth*, not parent's width (r.width)
+    // This avoids issues if the parent itself isn't full availableWidth but child fills it. 
+    if ((cr.width / availableWidth) > 0.9 && cr.height >= r.height * 0.8) { // Child also needs to be substantial height-wise
+      // Treat child as candidate instead, but only if it's significantly different (e.g. not just a 1px padding wrapper)
+      // Avoid infinite recursion if child is el itself (shouldn't happen with firstElementChild)
+      if (child !== el && (Math.abs(cr.width - r.width) > 5 || Math.abs(cr.height - r.height) > 5) ) {
+         return isLikelySection(child, availableWidth);
       }
     }
-    return true; // Is wide and not in a problematic grid/flex parent scenario
   }
 
-  return false; // Default to not a section if no strong signals met
+  return score >= 25;
 }
 
 /**
