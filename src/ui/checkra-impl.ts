@@ -1050,17 +1050,55 @@ Your job:
       wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in';
       wrapper.setAttribute('data-checkra-fix-id', fixId);
 
-      // --- NEW: Preserve layout classes/styles for adjacent insertions ---
-      if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
+      // --- Start: Enhanced Wrapper Mimicking for 'replace' mode ---
+      if (insertionMode === 'replace' && originalSelectedElement instanceof HTMLElement) {
+        const origEl = originalSelectedElement as HTMLElement;
+
+        // A.1. Copy Classes (excluding checkra- specific ones)
+        origEl.classList.forEach(cls => {
+          if (!cls.startsWith('checkra-') && !wrapper.classList.contains(cls)) {
+            wrapper.classList.add(cls);
+          }
+        });
+
+        // A.2. Copy Inline Styles
+        const origInlineStyle = origEl.getAttribute('style');
+        if (origInlineStyle && origInlineStyle.trim().length > 0) {
+          // Append original styles. Note: Inline styles from original will override CSS class styles on wrapper if they conflict.
+          // Checkra's essential styles (like position:relative for controls) are typically via CSS classes, so this should be fine.
+          // Ensure semi-colons are handled cleanly.
+          const currentWrapperStyle = wrapper.style.cssText;
+          wrapper.style.cssText = `${currentWrapperStyle}${currentWrapperStyle ? ';' : ''}${origInlineStyle}`.replace(/;\s*;+/g, ';').replace(/^\s*;|;\s*$/g, '');
+        }
+
+        // A.3. Copy ARIA Roles & Tabindex
+        const role = origEl.getAttribute('role');
+        if (role) wrapper.setAttribute('role', role);
+        const tabindex = origEl.getAttribute('tabindex');
+        if (tabindex) wrapper.setAttribute('tabindex', tabindex);
+
+        // A.4. Copy Computed Display Value
+        // This is crucial for preserving layout behavior (block, flex, grid, etc.)
+        // We apply it as an inline style to ensure it takes precedence for the wrapper's direct layout.
+        const computedDisplay = window.getComputedStyle(origEl).display;
+        if (computedDisplay && computedDisplay !== 'contents') { // Avoid setting display:contents on the main wrapper
+            // Check if display is already set by copied inline styles or classes to avoid redundancy or conflict
+            // This is a simplification; a more robust check might parse existing styles.
+            if (!wrapper.style.display || wrapper.style.display === 'block' && computedDisplay !== 'block') { 
+                 wrapper.style.display = computedDisplay;
+            }
+        }
+      } 
+      // --- End: Enhanced Wrapper Mimicking for 'replace' mode ---
+      // Existing logic for 'insertBefore' or 'insertAfter' class/style copying can remain as is or be harmonized later if needed.
+      else if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
         const origEl = originalSelectedElement as HTMLElement;
         if (origEl) {
-          // Copy classes except internal checkra-* ones
           origEl.classList.forEach(cls => {
             if (!cls.startsWith('checkra-')) {
               wrapper.classList.add(cls);
             }
           });
-          // Copy inline styles if any (appended to avoid overwriting position/outline set by CSS)
           const origStyle = origEl.getAttribute('style');
           if (origStyle && origStyle.trim().length > 0) {
             const existingStyle = wrapper.getAttribute('style') || '';
@@ -1068,7 +1106,6 @@ Your job:
           }
         }
       }
-      // --- END NEW ---
 
       const contentContainer = document.createElement('div');
       contentContainer.className = 'checkra-applied-fix-content';
