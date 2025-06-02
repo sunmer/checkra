@@ -89,17 +89,19 @@
 /* --- NEW: Container for fix control buttons --- */
 /* Ensure this is the direct selector */
 .checkra-fix-controls-container {
-  position: absolute; 
+  position: absolute; /* This will be overridden by inline style 'fixed' from JS */
   transform: translateX(-50%); 
   display: flex; 
   align-items: center;
   gap: 5px; 
-  padding: 3px; 
-  background-color: rgba(40, 40, 40, 0.5); /* This is #28282880 */
-  border-radius: 16px; 
+  padding: 4px 6px; /* Adjusted padding slightly for a better look with new border-radius */
+  background-color: rgba(50, 50, 50, 0.5); /* #32323280 - Changed to user-provided color */
+  border-radius: 8px; /* Changed to a moderate pill-shape radius */
   z-index: 12; 
   pointer-events: auto; 
   width: auto;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3); /* Adjusted shadow slightly */
+  box-sizing: border-box; /* Added */
   /* top and left are set by JS via OverlayManager */
 }
 

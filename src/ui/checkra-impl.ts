@@ -5,12 +5,15 @@ import { screenCapture } from './screen-capture';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
 import { generateStableSelector } from '../utils/selector-utils';
-import { API_BASE, CDN_DOMAIN } from '../config';
-import { getSiteId } from '../utils/id'; 
-import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
+import { AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 import { customWarn, customError } from '../utils/logger';
 import { GenerateSuggestionRequestbody, AddRatingRequestBody, ResolvedColorInfo } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
-import { OverlayManager } from './overlay-manager';
+import { OverlayManager, ControlButtonCallbacks } from './overlay-manager'; // MODIFIED: Import ControlButtonCallbacks
+import { AppliedFixStore, AppliedFixInfo } from './applied-fix-store'; // ADDED AppliedFixStore import
+import { RatingUI } from './rating-ui'; // ADDED RatingUI import
+import { SnapshotService, SnapshotOperationResult } from '../services/snapshot-service'; // ADDED SnapshotService import
+import { StatsFetcher, StatsFetcherResult, getFriendlyQueryName } from '../analytics/stats-fetcher'; // ADDED StatsFetcher imports
+import { AuthPendingActionHelper, PendingAction } from '../auth/auth-pending-action-helper'; // ADDED AuthPendingActionHelper import
 
 
 interface ConversationItem {
@@ -29,30 +32,11 @@ const CONVERSATION_HISTORY_KEY = 'checkra_conversation_history';
 const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
 const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
 // Regex for finding SVG placeholders during restoration - UPDATED
-const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^"]+)"[^>]*>[\s\S]*?<\/svg>/g;
-const DISPLAY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
-const COPY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
-
-// --- Interface for Applied Fix Data ---
-interface AppliedFixInfo {
-  originalElementId: string; 
-  originalOuterHTML: string; 
-  fixedOuterHTML: string; 
-  // appliedWrapperElement: HTMLDivElement | null; // REMOVED
-  markerStartNode: Comment | null; // ADDED: Reference to the start marker comment node
-  markerEndNode: Comment | null;   // ADDED: Reference to the end marker comment node
-  actualAppliedElement: HTMLElement | null; // ADDED: The first actual element node of the applied fix
-  isCurrentlyFixed: boolean; 
-  stableTargetSelector: string; 
-  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'; 
-  requestBody: GenerateSuggestionRequestbody; 
-  isRated?: boolean; 
-  resolvedColors?: ResolvedColorInfo; 
-}
+const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^\"\)]+").*?>[\s\S]*?<\/svg>/g;
 
 // localStorage keys for pending actions
-const PENDING_ACTION_TYPE_KEY = 'checkra_auth_pending_action_type';
-const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
+// const PENDING_ACTION_TYPE_KEY = 'checkra_auth_pending_action_type';
+// const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
 
 // ADDED: Helper function to convert rgb/rgba to hex
 function rgbToHex(rgbString: string): string | null {
@@ -89,6 +73,11 @@ export class CheckraImplementation {
   private overlayManager: OverlayManager; // ADDED: OverlayManager instance
   private optionsInitialVisibility: boolean; // To store the initial visibility from options
   private enableRating: boolean; // ADDED: Store enableRating option
+  private appliedFixStore: AppliedFixStore; // ADDED AppliedFixStore instance
+  private ratingUI: RatingUI; // ADDED RatingUI instance
+  private snapshotService: SnapshotService; // ADDED SnapshotService instance
+  private statsFetcher: StatsFetcher; // ADDED StatsFetcher instance
+  private authPendingActionHelper: AuthPendingActionHelper; // ADDED AuthPendingActionHelper instance
 
   // --- State ---
   private isVisible: boolean = false;
@@ -101,7 +90,6 @@ export class CheckraImplementation {
   private currentElementInsertionMode: 'replace' | 'insertBefore' | 'insertAfter' = 'replace'; // Added
   private currentComputedBackgroundColor: string | null = null; // ADDED for backend WCAG checks
   private currentResolvedColors: ResolvedColorInfo | null = null; // ADDED: For incoming resolved colors
-  private lastAppliedFixResolvedColors: ResolvedColorInfo | null = null; // ADDED: For rating the last applied fix
 
   private fixIdCounter: number = 0; // Counter for generating unique IDs
   private originalSvgsMap: Map<string, string> = new Map();
@@ -112,15 +100,6 @@ export class CheckraImplementation {
 
   // --- Quick Suggestion Flow ---
   private queuedPromptText: string | null = null; // Stores prompt chosen before element selection
-
-  // --- Global Tracking for Applied Fixes ---
-  private appliedFixes: Map<string, AppliedFixInfo> = new Map();
-  // Store listeners for applied fixes to clean them up later
-  private appliedFixListeners: Map<string, { close: EventListener; toggle: EventListener; copy: EventListener; rate: EventListener }> = new Map();
-
-  // --- Listeners ---
-
-  private footerSelectListener: (() => void) | null = null; // Listener for footer button
 
   private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
 
@@ -150,6 +129,11 @@ export class CheckraImplementation {
     this.optionsInitialVisibility = initialVisibilityFromOptions;
     this.enableRating = enableRating; // Store it
     this.overlayManager = new OverlayManager(); // ADDED: Instantiate OverlayManager
+    this.appliedFixStore = new AppliedFixStore(); // ADDED: Instantiate AppliedFixStore
+    this.ratingUI = new RatingUI(); // ADDED: Instantiate RatingUI
+    this.snapshotService = new SnapshotService(); // ADDED: Instantiate SnapshotService
+    this.statsFetcher = new StatsFetcher(); // ADDED: Instantiate StatsFetcher
+    this.authPendingActionHelper = new AuthPendingActionHelper(); // ADDED: Instantiate AuthPendingActionHelper
     // Bind methods
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
@@ -185,6 +169,7 @@ export class CheckraImplementation {
     if (this.domManager && this.conversationHistory.length > 0) {
       this.domManager.renderFullHistory(this.conversationHistory);
     }
+    this.ratingUI.applyStyles(); // ADDED: Apply RatingUI styles
 
     // --- Setup Listeners ---
     this.domElements.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
@@ -212,7 +197,8 @@ export class CheckraImplementation {
     this.domElements.responseContent.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
       if (target.classList.contains('checkra-stat-badge') && target.dataset.queryname) {
-        this.fetchAndDisplayStats(target.dataset.queryname);
+        // MODIFIED: Call new handler that uses StatsFetcher
+        this.initiateStatsFetch(target.dataset.queryname);
       }
     });
 
@@ -255,29 +241,7 @@ export class CheckraImplementation {
     this.domElements.promptTextarea.removeEventListener('keydown', this.handleTextareaKeydown);
     this.domElements.submitButton.removeEventListener('click', this.handleSubmit);
 
-    // --- Clean up listeners on applied fixes ---
-    this.appliedFixListeners.forEach((listeners, fixId) => {
-      // const fixInfo = this.appliedFixes.get(fixId); // TODO: Revisit cleanup with new marker/overlay system
-      // if (fixInfo?.appliedWrapperElement) { // OLD WRAPPER LOGIC - TO BE REPLACED
-      //   const closeBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-close-btn');
-      //   const toggleBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-toggle');
-      //   closeBtn?.removeEventListener('click', listeners.close);
-      //   toggleBtn?.removeEventListener('click', listeners.toggle);
-      //   const copyBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-copy-btn');
-      //   copyBtn?.removeEventListener('click', listeners.copy);
-      //   const rateBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rate-btn');
-      //   rateBtn?.removeEventListener('click', listeners.rate);
-      // }
-    });
-    this.appliedFixListeners.clear(); // Listeners are managed by OverlayManager or on buttons themselves
-
-    this.overlayManager.removeAllControlsAndOverlay(); // ADDED: Cleanup overlay
-
-    if (this.domElements && this.footerSelectListener) {
-      const footerSelectBtn = this.domElements.viewer.querySelector('#checkra-btn-footer-select-section');
-      footerSelectBtn?.removeEventListener('click', this.footerSelectListener);
-      this.footerSelectListener = null;
-    }
+    this.overlayManager.removeAllControlsAndOverlay(); // MODIFIED: Ensures all controls managed by OverlayManager are cleaned up
 
     // Remove mini select listener
     this.domElements.miniSelectButton?.removeEventListener('click', this.handleMiniSelectClick);
@@ -297,8 +261,6 @@ export class CheckraImplementation {
     this.domManager = null;
     this.removeGlobalListeners();
 
-    // Optional: Clear history state if needed on full cleanup?
-    // this.conversationHistory = []; 
     this.removeSelectionHighlight(); // This will now also handle the persistent plus icon
     if (this.selectionPlusIconElement && this.selectionPlusIconElement.parentNode) {
       this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
@@ -609,7 +571,7 @@ export class CheckraImplementation {
 
     // Allow /publish even if other conditions aren't met
     if (promptText?.toLowerCase() === '/publish') {
-      this.publishSnapshot();
+      this.handlePublishCommand(); // MODIFIED: Call new handler
       this.domManager?.setPromptState(true, ''); 
       this.domManager?.updateSubmitButtonState(true); 
       return; 
@@ -617,13 +579,7 @@ export class CheckraImplementation {
 
     // ADDED: Handle /save command
     if (promptText?.toLowerCase() === '/save') {
-      if (this.appliedFixes.size === 0) {
-        this.renderUserMessage("No changes have been applied to save as a draft.");
-        this.domManager?.setPromptState(true, '');
-        this.domManager?.updateSubmitButtonState(true);
-        return;
-      }
-      this.saveSnapshotAsDraft(); // New method to handle saving logic
+      this.handleSaveDraftCommand(); // MODIFIED: Call new handler
       this.domManager?.setPromptState(true, '');
       this.domManager?.updateSubmitButtonState(true);
       return;
@@ -753,32 +709,27 @@ export class CheckraImplementation {
   }
 
   // --- Applied Fix Button Handlers --- (These remain for already applied fixes)
-  private handleAppliedFixClose(fixId: string, event: Event): void {
-    event.stopPropagation();
-    const fixInfo = this.appliedFixes.get(fixId);
+  private handleAppliedFixClose(fixId: string): void {
+    const fixInfo = this.appliedFixStore.get(fixId);
 
     if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
       customWarn(`[FeedbackViewerLogic] Could not find fix info or markers for Fix ID: ${fixId} during close.`);
-      this.overlayManager.hideControls(); 
-      this.appliedFixes.delete(fixId);
-      this.appliedFixListeners.delete(fixId); 
+      this.overlayManager.hideControlsForFix(fixId);
+      this.appliedFixStore.delete(fixId);
       return;
     }
 
-    const { markerStartNode, markerEndNode, originalOuterHTML, insertionMode, stableTargetSelector } = fixInfo;
+    const { markerStartNode, markerEndNode, originalOuterHTML, insertionMode } = fixInfo;
     const parent = markerStartNode.parentNode;
 
     if (!parent) {
       customError(`[FeedbackViewerLogic] Parent node of markers not found for fix ${fixId}. Cannot revert.`);
-      // Attempt to remove controls as a fallback
-      document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`)?.remove();
-      this.appliedFixes.delete(fixId);
-      this.appliedFixListeners.delete(fixId);
+      this.overlayManager.hideControlsForFix(fixId);
+      this.appliedFixStore.delete(fixId);
       return;
     }
 
     try {
-      // Remove all nodes between start and end markers (inclusive of end, exclusive of start initially)
       let currentNode = markerStartNode.nextSibling;
       while (currentNode && currentNode !== markerEndNode) {
         const next = currentNode.nextSibling;
@@ -791,68 +742,34 @@ export class CheckraImplementation {
         if (!originalFragment || originalFragment.childNodes.length === 0) {
           throw new Error('Failed to parse original HTML for revert.');
         }
-        
-        // Insert original content before where the end marker was (or is, if not removed yet)
         parent.insertBefore(originalFragment, markerEndNode);
-
-        // Re-tag the first element of the reverted content so it can be selected again
-        let firstRevertedElement = markerStartNode.nextSibling;
-        while(firstRevertedElement && firstRevertedElement.nodeType !== Node.ELEMENT_NODE) {
-            firstRevertedElement = firstRevertedElement.nextSibling;
-        }
-        if (firstRevertedElement && firstRevertedElement !== markerEndNode) {
-            (firstRevertedElement as HTMLElement).setAttribute('data-checkra-fix-id', fixId);
-            // Also, update actualAppliedElement in fixInfo if we were to keep the fix (e.g. for a redo later)
-            // For close, we are deleting the fix, so this isn't strictly necessary for this operation.
-        } else {
-            customWarn(`[FeedbackViewerLogic] Could not find first element of reverted content for fix ${fixId} to re-tag.`);
-        }
-      } 
-      // For 'insertBefore' or 'insertAfter', removing nodes between markers is sufficient as original was not touched.
+        // No need to re-tag or update actualAppliedElement as the fix is being removed.
+      }
       
-      // Remove markers themselves
       markerStartNode.remove();
       markerEndNode.remove();
 
-      // Remove controls (now handled by OverlayManager)
-      this.overlayManager.hideControls(); 
-
-      // Clean up state
-      const listeners = this.appliedFixListeners.get(fixId);
-      if (listeners) {
-        // Buttons are removed with controls, so no need to remove listeners from them individually IF controls are gone
-        this.appliedFixListeners.delete(fixId);
-      }
-      this.appliedFixes.delete(fixId);
+      this.overlayManager.hideControlsForFix(fixId); 
+      this.appliedFixStore.delete(fixId);
 
     } catch (error) {
       customError(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId} (mode: ${insertionMode}):`, error);
-      // Fallback: try to remove markers and controls if error occurred mid-operation
       markerStartNode?.remove();
       markerEndNode?.remove();
-      this.overlayManager.hideControls(); 
-      this.appliedFixes.delete(fixId);
-      this.appliedFixListeners.delete(fixId);
+      this.overlayManager.hideControlsForFix(fixId);
+      this.appliedFixStore.delete(fixId);
     }
   }
 
-  private handleAppliedFixToggle(fixId: string, event: Event): void {
-    event.stopPropagation();
-    const fixInfo = this.appliedFixes.get(fixId);
-    const toggleButton = event.currentTarget as HTMLButtonElement | null; // Get button from the event
+  private handleAppliedFixToggle(fixId: string): void {
+    const fixInfo = this.appliedFixStore.get(fixId);
 
     if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
       customWarn(`[FeedbackViewerLogic] Toggle: Could not find fix info or markers for Fix ID: ${fixId}.`);
       return;
     }
 
-    // Ensure toggleButton is actually the one we expect, though currentTarget should be reliable here
-    if (!toggleButton || !toggleButton.classList.contains('feedback-fix-toggle') || toggleButton.dataset.fixId !== fixId) {
-        customError(`[FeedbackViewerLogic] Toggle: Event target is not the expected toggle button for fix ${fixId}.`);
-        // If we don't have the button, we can still toggle content but can't update button visuals.
-    }
-
-    const { markerStartNode, markerEndNode, originalOuterHTML, fixedOuterHTML, insertionMode } = fixInfo;
+    const { markerStartNode, markerEndNode, originalOuterHTML, fixedOuterHTML } = fixInfo;
     const parent = markerStartNode.parentNode;
 
     if (!parent) {
@@ -871,58 +788,69 @@ export class CheckraImplementation {
       }
 
       const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
+      let newActualAppliedElement: HTMLElement | null = null;
 
       if (newContentFragment && newContentFragment.childNodes.length > 0) {
         parent.insertBefore(newContentFragment, markerEndNode);
         let firstNewElement = markerStartNode.nextSibling;
-        while(firstNewElement && firstNewElement.nodeType !== Node.ELEMENT_NODE) {
+        while(firstNewElement && firstNewElement !== markerEndNode) {
+            if (firstNewElement.nodeType === Node.ELEMENT_NODE) {
+                newActualAppliedElement = firstNewElement as HTMLElement;
+                break;
+            }
             firstNewElement = firstNewElement.nextSibling;
         }
-        const newActualAppliedElement = (firstNewElement && firstNewElement !== markerEndNode) ? firstNewElement as HTMLElement : null;
-        if (fixInfo.actualAppliedElement !== newActualAppliedElement) {
+        
+        // Check if actual element changed or if controls were not visible (e.g., after toggling to empty then back to content)
+        if (fixInfo.actualAppliedElement !== newActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)) { 
+            const oldActualAppliedElement = fixInfo.actualAppliedElement;
             fixInfo.actualAppliedElement = newActualAppliedElement;
-            // If the actual element changed and controls are visible, tell OverlayManager to update position for this fix
-            if (fixInfo.actualAppliedElement && this.overlayManager.isFixControlsVisible(fixId)) { // NEW: Need isFixControlsVisible
-                 this.overlayManager.updateControlsPositionForFix(fixId, fixInfo.actualAppliedElement); // NEW: Need updateControlsPositionForFix
+
+            if (newActualAppliedElement) { 
+                // If new element exists, and it's different, or controls were hidden, update/show controls
+                if (newActualAppliedElement !== oldActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)){
+                    this.overlayManager.showControlsForFix(fixId, newActualAppliedElement, this.getControlCallbacksForFix(fixId));
+                } else {
+                    // Element is the same, controls are visible, just ensure position is correct
+                    this.overlayManager.updateControlsPositionForFix(fixId, newActualAppliedElement);
+                }
+            } else {
+                // No new element found (e.g., toggled to an empty string or only comments)
+                this.overlayManager.hideControlsForFix(fixId);
             }
         }
       } else {
-        customError(`[FeedbackViewerLogic] Toggle: Failed to parse HTML (or HTML was empty) for fixId: ${fixId}.`);
+        customWarn(`[FeedbackViewerLogic] Toggle: HTML to insert was empty or invalid for fixId: ${fixId}. Hiding controls.`);
         fixInfo.actualAppliedElement = null; 
+        this.overlayManager.hideControlsForFix(fixId); 
       }
 
       fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
-
-      if (toggleButton) {
-        if (fixInfo.isCurrentlyFixed) {
-          toggleButton.classList.add('toggled-on');
-          toggleButton.title = "Toggle Original Version";
-        } else {
-          toggleButton.classList.remove('toggled-on');
-          toggleButton.title = "Toggle Fixed Version";
-        }
-      }
+      this.overlayManager.updateToggleButtonVisuals(fixId, fixInfo.isCurrentlyFixed);
 
     } catch (error) {
-      customError(`[FeedbackViewerLogic] Error toggling fix ${fixId} (mode: ${insertionMode}):`, error);
-      if (toggleButton && fixInfo) { 
-        if (fixInfo.isCurrentlyFixed) {
-          toggleButton.classList.add('toggled-on');
-          toggleButton.title = "Toggle Original Version";
-        } else {
-          toggleButton.classList.remove('toggled-on');
-          toggleButton.title = "Toggle Fixed Version";
-        }
+      customError(`[FeedbackViewerLogic] Error toggling fix ${fixId}:`, error);
+      if (fixInfo) { 
+        this.overlayManager.updateToggleButtonVisuals(fixId, fixInfo.isCurrentlyFixed); // Attempt to restore visual state
       }
     }
+  }
+
+  /** Helper to reconstruct callbacks for a fix, e.g. after toggling an empty fix back to having content */
+  private getControlCallbacksForFix(fixId: string): ControlButtonCallbacks {
+    return {
+      onClose: () => this.handleAppliedFixClose(fixId),
+      onToggle: () => this.handleAppliedFixToggle(fixId),
+      onCopy: () => this.handleAppliedFixCopy(fixId),
+      onRate: this.enableRating ? (anchorElement: HTMLElement) => this.handleAppliedFixRate(fixId, anchorElement) : undefined
+    };
   }
 
   /**
    * Copies a ready-to-use LLM prompt for the selected fix to the clipboard.
    */
-  private async handleAppliedFixCopy(fixId: string, event: Event): Promise<void> {
-    event.stopPropagation();
-    const fixInfo = this.appliedFixes.get(fixId);
+  private async handleAppliedFixCopy(fixId: string): Promise<void> {
+    const fixInfo = this.appliedFixStore.get(fixId);
     if (!fixInfo) {
       customError(`[FeedbackViewerLogic] Copy prompt failed – fix ${fixId} not found in map.`);
       return;
@@ -1165,8 +1093,6 @@ Your job:
 
       if (insertionMode === 'replace') {
         parent.insertBefore(startComment, originalSelectedElement);
-        
-        // Use a temporary div to parse fixedHtml and get actual nodes
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = fixedHtml.trim();
         const newNodes = Array.from(tempDiv.childNodes);
@@ -1175,76 +1101,51 @@ Your job:
           newNodes.forEach(node => parent.insertBefore(node, originalSelectedElement));
           actualAppliedElement = newNodes.find(node => node.nodeType === Node.ELEMENT_NODE) as HTMLElement || null;
         } else {
-          // If fixedHtml is empty or only comments/text, insert a placeholder or handle error
-          customWarn(`[FeedbackViewerLogic] FixedHTML for ${fixId} resulted in no actual nodes. Original was kept.`);
-          // Fallback: remove startComment if no actual content is replacing originalSelectedElement
-          parent.removeChild(startComment);
-          // Keep originalSelectedElement in place, do not remove it if fixedHtml is empty.
-          // No endComment needed if nothing was effectively inserted.
-          // actualAppliedElement remains null
+          customWarn(`[FeedbackViewerLogic] FixedHTML for ${fixId} (replace) resulted in no actual nodes. Original was kept.`);
+          parent.removeChild(startComment); // Remove start marker if nothing inserted
         }
         
-        // Only remove originalSelectedElement if newNodes were actually inserted
         if (newNodes.length > 0) {
           parent.removeChild(originalSelectedElement);
-          // Insert endComment after the last of the new nodes
           const lastNewNode = newNodes[newNodes.length - 1];
           if (lastNewNode.nextSibling) {
             parent.insertBefore(endComment, lastNewNode.nextSibling);
           } else {
             parent.appendChild(endComment);
           }
-        } else {
-          // If fixedHTML was empty, remove the start comment as nothing was actually applied to replace the original
-          // and originalSelectedElement is kept.
-          // No need to re-add data-checkra-fix-id as it was never removed from originalSelectedElement
         }
-
       } else if (insertionMode === 'insertBefore') {
         parent.insertBefore(startComment, originalSelectedElement);
-        originalSelectedElement.insertAdjacentHTML('beforebegin', fixedHtml);
-        actualAppliedElement = startComment.nextElementSibling as HTMLElement | null;
-        // Insert endComment before the originalSelectedElement, which is after all parts of fixedHtml
-        parent.insertBefore(endComment, originalSelectedElement);
-      } else if (insertionMode === 'insertAfter') {
-        parent.insertBefore(startComment, originalSelectedElement.nextSibling);
-        originalSelectedElement.insertAdjacentHTML('afterend', fixedHtml);
-        actualAppliedElement = originalSelectedElement.nextElementSibling as HTMLElement | null;
-        // Find the true end of the inserted content to place the endComment
-        let currentElement = actualAppliedElement;
-        let lastSiblingOfFix = actualAppliedElement;
-        while(currentElement && currentElement.nextSibling !== endComment && currentElement !== originalSelectedElement) {
-            if (currentElement.nodeType === Node.COMMENT_NODE && currentElement.nodeValue === ` checkra-fix-start:${fixId} `) break; // Should not happen here, but safety
-            lastSiblingOfFix = currentElement as HTMLElement;
-            currentElement = currentElement.nextElementSibling as HTMLElement | null;
+        parent.insertBefore(endComment, originalSelectedElement); // endComment is now immediately before originalSelectedElement
+        const fragment = this.createFragmentFromHTML(fixedHtml);
+        if (fragment) parent.insertBefore(fragment, endComment); // Insert content between start and end markers
+        
+        let current = startComment.nextSibling;
+        while(current && current !== endComment) { // Loop correctly stops at endComment
+            if (current.nodeType === Node.ELEMENT_NODE) {
+                actualAppliedElement = current as HTMLElement;
+                break;
+            }
+            current = current.nextSibling;
         }
-        if (lastSiblingOfFix && lastSiblingOfFix.nextSibling) {
-             parent.insertBefore(endComment, lastSiblingOfFix.nextSibling);
-        } else {
-             parent.appendChild(endComment);
+      } else if (insertionMode === 'insertAfter') {
+        const anchorNode = originalSelectedElement.nextSibling; // Node after original, for placing markers
+        parent.insertBefore(startComment, anchorNode);
+        parent.insertBefore(endComment, anchorNode); // endComment is now immediately before anchorNode
+        
+        const fragment = this.createFragmentFromHTML(fixedHtml);
+        if (fragment) parent.insertBefore(fragment, endComment); // Insert content between start and end markers
+        
+        let current = startComment.nextSibling;
+        while(current && current !== endComment) { // Loop correctly stops at endComment
+            if (current.nodeType === Node.ELEMENT_NODE) {
+                actualAppliedElement = current as HTMLElement;
+                break;
+            }
+            current = current.nextSibling;
         }
       }
       // --- END: New Marker-Based Fix Application ---
-
-      // --- Controls Container (Temporary: Appended to body) ---
-      // This section will be replaced by OverlayManager in Phase 2
-      // const controlsContainer = document.createElement('div');
-      // controlsContainer.className = 'checkra-fix-controls-container';
-      // controlsContainer.setAttribute('data-controls-for-fix', fixId); // To identify it later
-      
-      const closeBtn = this.createAppliedFixButton('close', fixId);
-      const toggleBtn = this.createAppliedFixButton('toggle', fixId);
-      const copyBtn = this.createAppliedFixButton('copy', fixId);
-      let rateBtn: HTMLButtonElement | null = null;
-      if (this.enableRating) {
-        rateBtn = this.createAppliedFixButton('rate', fixId);
-        // controlsContainer.appendChild(rateBtn); // OLD
-      }
-      // controlsContainer.appendChild(copyBtn); // OLD
-      // controlsContainer.appendChild(toggleBtn); // OLD
-      // controlsContainer.appendChild(closeBtn); // OLD
-      // document.body.appendChild(controlsContainer); // OLD
-      // --- End Controls Container ---
 
       const finalStableSelector = stableSelector || this.stableSelectorForCurrentCycle;
       if (!finalStableSelector) {
@@ -1259,9 +1160,9 @@ Your job:
         originalElementId: fixId,
         originalOuterHTML: originalHtml,
         fixedOuterHTML: fixedHtml,
-        markerStartNode: startComment, // These are defined in the function scope
-        markerEndNode: endComment,     // and will hold the correct Comment nodes
-        actualAppliedElement: actualAppliedElement, // Will be null if fixedHtml was empty
+        markerStartNode: startComment,
+        markerEndNode: endComment,
+        actualAppliedElement: actualAppliedElement,
         isCurrentlyFixed: true,
         stableTargetSelector: finalStableSelector,
         insertionMode: insertionMode, 
@@ -1269,93 +1170,33 @@ Your job:
         isRated: false,
         resolvedColors: this.currentResolvedColors ? { ...this.currentResolvedColors } : undefined
       };
-      this.appliedFixes.set(fixId, fixInfoData);
+      this.appliedFixStore.add(fixId, fixInfoData);
 
-      // If actualAppliedElement is null, it means fixedHtml was empty or only comments/text.
       if (!actualAppliedElement) {
         customWarn(`[FeedbackViewerLogic] Fix ${fixId} (${insertionMode}) resulted in no applied element. Markers may be present but content is empty. Controls not fully activated.`);
-        // For 'replace' mode, if fixedHtml was empty, originalSelectedElement was kept and only startComment was added then removed.
-        // No further marker cleanup needed here for 'replace' as it's handled within its specific block.
-        if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
-            // If nothing substantial was inserted between the markers for these modes.
-            let sibling = startComment.nextSibling;
-            let onlyMarkers = true;
-            while (sibling && sibling !== endComment) {
-                if (sibling.nodeType === Node.ELEMENT_NODE) {
-                    onlyMarkers = false;
-                    break;
-                }
-                sibling = sibling.nextSibling;
-            }
-            if (onlyMarkers) {
-                customWarn(`[FeedbackViewerLogic] Removing markers for ${fixId} (${insertionMode}) as no element nodes were found between them.`);
-                startComment.remove();
-                endComment.remove();
-            }
-        } 
-        // For 'replace' mode where actualAppliedElement is null, the original element was kept.
-        // The startComment was already removed if newNodes was empty.
-        // If newNodes was not empty but only contained non-element nodes, startComment and endComment might still be around the original element.
-        // This specific sub-case of 'replace' + !actualAppliedElement is tricky because originalSelectedElement itself might have been the only thing between markers briefly.
-        // The logic within the 'replace' block aims to remove originalSelectedElement only if newNodes are concrete.
-        // If originalSelectedElement is still there and markers are around it due to empty/non-element fixedHTML, they should be removed.
-        else if (insertionMode === 'replace') {
-            if (startComment.parentNode && endComment.parentNode && startComment.nextSibling === originalSelectedElement && originalSelectedElement.nextSibling === endComment) {
-                customWarn(`[FeedbackViewerLogic] Removing markers around original element for ${fixId} (replace) as fixedHTML was empty.`);
-                startComment.remove();
-                endComment.remove();
-            } else if (startComment.parentNode && startComment.nextSibling === endComment) { // If markers ended up adjacent
-                customWarn(`[FeedbackViewerLogic] Removing adjacent markers for ${fixId} (replace) as fixedHTML was effectively empty.`);
-                startComment.remove();
-                endComment.remove();
-            }
-        }
-
+        startComment?.remove();
+        endComment?.remove();
+        this.overlayManager.hideControlsForFix(fixId);
+        this.appliedFixStore.delete(fixId);
         this.fixedOuterHTMLForCurrentCycle = null; 
         this.removeSelectionHighlight();
         this.currentResolvedColors = null; 
-        // Controls might have been added to body, remove them too if no actual fix applied
-        // const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
-        // controls?.remove();
-        this.overlayManager.hideControls(); 
-        this.appliedFixes.delete(fixId); // Also remove from appliedFixes as it's not a valid applied fix
-        this.appliedFixListeners.delete(fixId);
         return; 
       }
 
-      const listeners = {
-        close: (e: Event) => this.handleAppliedFixClose(fixId, e),
-        toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e),
-        copy: (e: Event) => this.handleAppliedFixCopy(fixId, e),
-        ...(rateBtn && { rate: (e: Event) => this.handleAppliedFixRate(fixId, e) })
-      } as any; // Cast to any due to conditional rate listener, consider defining a more precise type for listeners if preferred
+      const controlCallbacks: ControlButtonCallbacks = {
+        onClose: () => this.handleAppliedFixClose(fixId),
+        onToggle: () => this.handleAppliedFixToggle(fixId),
+        onCopy: () => this.handleAppliedFixCopy(fixId),
+        onRate: this.enableRating ? (anchorElement: HTMLElement) => this.handleAppliedFixRate(fixId, anchorElement) : undefined
+      };
       
-      // Store listeners. OverlayManager will use these to attach to the actual button instances it manages.
-      this.appliedFixListeners.set(fixId, listeners); 
-
-      // Show controls using OverlayManager
-      if (actualAppliedElement) {
-        this.overlayManager.showControls(
-          fixId,
-          actualAppliedElement,
-          // Pass the created button elements directly
-          { close: closeBtn, toggle: toggleBtn, copy: copyBtn, rate: rateBtn || undefined }, 
-          listeners // Pass the listeners object for OverlayManager to use
-        );
-      } else {
-        customWarn(`[FeedbackViewerImpl applyFixToPage] No actualAppliedElement for fix ${fixId}, controls not shown via overlay.`);
-        // Buttons were created but not added to DOM/Overlay, no specific cleanup needed for them here
-        // If listeners were stored in appliedFixListeners, that map entry will be stale but harmless or cleaned on explicit close.
-      }
-
-      // Direct listener attachment to buttons is now handled by OverlayManager
-      // closeBtn.addEventListener('click', listeners.close); // OLD
-      // toggleBtn.addEventListener('click', listeners.toggle); // OLD
-      // copyBtn.addEventListener('click', listeners.copy); // OLD
-      // if (rateBtn && listeners.rate) { // OLD
-      //   rateBtn.addEventListener('click', listeners.rate); // OLD
-      // }
-
+      this.overlayManager.showControlsForFix(
+        fixId,
+        actualAppliedElement,
+        controlCallbacks 
+      );
+      
       this.fixedOuterHTMLForCurrentCycle = null; 
       this.removeSelectionHighlight();
       this.currentResolvedColors = null; 
@@ -1380,37 +1221,6 @@ Your job:
       customError("Error creating fragment from HTML string:", e, htmlString);
       return null;
     }
-  }
-
-  /** Creates a button for the applied fix wrapper */
-  private createAppliedFixButton(type: 'close' | 'toggle' | 'copy' | 'rate', fixId: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.setAttribute('data-fix-id', fixId);
-    button.classList.add('feedback-fix-btn'); // Common base class
-
-    switch (type) {
-      case 'close':
-        button.classList.add('feedback-fix-close-btn');
-        button.innerHTML = '&times;';
-        button.title = 'Discard Fix (Revert to Original)';
-        break;
-      case 'toggle':
-        button.classList.add('feedback-fix-toggle', 'toggled-on'); // Add .toggled-on by default
-        button.innerHTML = DISPLAY_FIX_SVG; // Always use the "eye open" SVG
-        button.title = 'Toggle Original Version'; // Initial title assuming fix is shown first
-        break;
-      case 'copy':
-        button.classList.add('feedback-fix-copy-btn');
-        button.innerHTML = COPY_FIX_SVG;
-        button.title = 'Copy prompt for this fix';
-        break;
-      case 'rate': // Added case for rate button
-        button.classList.add('feedback-fix-rate-btn');
-        button.innerHTML = '★'; // Star icon
-        button.title = 'Rate this fix';
-        break;
-    }
-    return button;
   }
 
   /**
@@ -1451,7 +1261,6 @@ Your job:
   // Handler for the mini select button click
   private handleMiniSelectClick(e: MouseEvent): void {
     e.stopPropagation(); // Prevent triggering other clicks
-    // this.isQuickAuditRun = false; // REMOVED: Audit feature removed
 
     // Trigger screen capture, passing the main viewer element to be ignored
     if (this.domElements?.viewer) {
@@ -1482,7 +1291,6 @@ Your job:
     if (this.boundHandleEscapeKey) {
       document.addEventListener('keydown', this.boundHandleEscapeKey);
     }
-    // Add outside click listener here if not added elsewhere
   }
 
   private removeGlobalListeners(): void {
@@ -1601,526 +1409,60 @@ Your job:
     }
   }
 
-  // RENAMED and REIMPLEMENTED: from exportSnapshot and sendSnapshotToBackend
-  public async publishSnapshot(): Promise<void> {
-    if (this.appliedFixes.size === 0) {
-      customWarn("[FeedbackViewerImpl] No fixes applied. Nothing to publish.");
+  // --- NEW Command Handlers using SnapshotService ---
+  private async handlePublishCommand(): Promise<void> {
+    if (this.appliedFixStore.getSize() === 0) {
       this.renderUserMessage("No changes have been applied to publish.");
       return;
     }
-    const changesToPublish = Array.from(this.appliedFixes.values()).map(fixInfo => ({
-      targetSelector: fixInfo.stableTargetSelector,
-      appliedHtml: fixInfo.fixedOuterHTML,
-      sessionFixId: fixInfo.originalElementId
-    }));
-    const siteId = getSiteId();
-    const clientGeneratedSnapshotId = crypto.randomUUID(); // This is the key ID
-
-    const snapshotPayload = {
-      snapshotId: clientGeneratedSnapshotId,
-      timestamp: new Date().toISOString(),
-      pageUrl: window.location.href,
-      changes: changesToPublish,
-      publish: true // Mark for publishing
-    };
-
-    const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
-
+    this.renderUserMessage("Publishing changes...");
     try {
-      this.renderUserMessage("Preparing to publish changes...");
-      const postResponse = await fetchProtected(postSnapshotUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snapshotPayload),
-      });
-
-      if (!postResponse.ok) {
-        const errorBody = await postResponse.text();
-        let specificErrorMessage = `Storing snapshot for publish failed: ${postResponse.status} ${postResponse.statusText}`;
-        try {
-            const errorJson = JSON.parse(errorBody);
-            if (errorJson && errorJson.message) {
-                specificErrorMessage += ` - ${errorJson.message}`;
-            }
-        } catch (parseErr) {
-            specificErrorMessage += ` - ${errorBody}`;
-        }
-        throw new Error(specificErrorMessage);
-      }
-
-      const postResult = await postResponse.json();
-      // According to new API: postResult contains { message, snapshotId (clientGeneratedSnapshotId), accessUrl, s3SnapshotPath }
-      // We need clientGeneratedSnapshotId for the next step.
-
-      if (postResult.snapshotId !== clientGeneratedSnapshotId) {
-        customError("[FeedbackViewerImpl] Mismatch between client-generated snapshotId and server response.", { client: clientGeneratedSnapshotId, server: postResult.snapshotId });
-        this.renderUserMessage("Error: Snapshot ID mismatch after initial save. Cannot proceed with publishing.");
-        return;
-      }
-
-      this.renderUserMessage(`Snapshot ${clientGeneratedSnapshotId.substring(0,8)}... stored. Now promoting to live...`);
-
-      // The snapshotId in the path is the clientGeneratedSnapshotId
-      const promoteUrl = `${API_BASE}/sites/${siteId}/variants/${clientGeneratedSnapshotId}`;
-
-      try {
-        const promoteResponse = await fetchProtected(promoteUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}), // Empty body as per new API
-        });
-
-        if (!promoteResponse.ok) {
-          const promoteErrorBody = await promoteResponse.text();
-          let specificPromoteErrorMessage = `Promotion failed: ${promoteResponse.status} ${promoteResponse.statusText}`;
-          try {
-              const errorJson = JSON.parse(promoteErrorBody);
-              if (errorJson && errorJson.message) {
-                  specificPromoteErrorMessage += ` - ${errorJson.message}`;
-              }
-          } catch (parseErr) {
-              specificPromoteErrorMessage += ` - ${promoteErrorBody}`;
-          }
-          throw new Error(specificPromoteErrorMessage);
-        }
-
-        const promoteResult = await promoteResponse.json();
-        // According to new API: promoteResult contains { message, siteId, snapshotId (promoted), promotedAt, cdnUrl }
-        if (promoteResult.cdnUrl && promoteResult.snapshotId) {
-          this.renderUserMessage(`Published successfully! Snapshot ID: ${promoteResult.snapshotId.substring(0,8)}...`);
-          const shareUrl = promoteResult.cdnUrl; // Use the cdnUrl directly
-          this.renderUserMessage(`Share URL: <a href="${shareUrl}" target="_blank" rel="noopener noreferrer">${shareUrl}</a>`);
-        } else {
-          customWarn("[FeedbackViewerImpl] Promotion successful, but cdnUrl or snapshotId missing in response:", promoteResult);
-          this.renderUserMessage(`Snapshot ${clientGeneratedSnapshotId.substring(0,8)}... promoted, but could not get the public share URL.`);
-        }
-
-      } catch (promoteError) {
-        if (promoteError instanceof AuthenticationRequiredError || (promoteError && (promoteError as any).name === 'AuthenticationRequiredError')) {
-          // Pass the original 'publish' action type and the full snapshotPayload (or relevant parts)
-          // so it can be retried. For simplicity, passing the fact that it was a publish action.
-          // The 'changesToPublish' might be too large for localStorage if not careful.
-          // Let's store a simplified marker for publish and rely on this.appliedFixes to be re-evaluated.
-          await this.handleAuthenticationRequiredAndRedirect('publish', { /* minimal data or rely on current state */ }, promoteError as AuthenticationRequiredError);
-          this.renderUserMessage("Authentication required to promote. Please log in to continue.");
-        } else {
-          customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during promoting snapshot. Error details follow.");
-          if (promoteError instanceof Error) {
-            customError("[FeedbackViewerImpl] Promote Error Name:", promoteError.name);
-            customError("[FeedbackViewerImpl] Promote Error Message:", promoteError.message);
-            if (promoteError.stack) customError("[FeedbackViewerImpl] Promote Error Stack:", promoteError.stack);
-            if ((promoteError as any).response && typeof (promoteError as any).response.status === 'number') {
-              const response = (promoteError as any).response as Response;
-              customError("[FeedbackViewerImpl] Underlying promote response status:", response.status);
-              try {
-                 const responseBody = await response.text();
-                 customError("[FeedbackViewerImpl] Underlying promote response body:", responseBody);
-              } catch (bodyError) {
-                 customError("[FeedbackViewerImpl] Could not read underlying promote response body:", bodyError);
-              }
-           }
-          } else {
-            customError("[FeedbackViewerImpl] Caught a non-Error object during promotion:", promoteError);
-          }
-          const displayErrorMessage = promoteError instanceof Error ? promoteError.message : String(promoteError);
-          this.showError(`Failed to promote snapshot: ${displayErrorMessage}`);
-          this.renderUserMessage(`Error promoting snapshot ${clientGeneratedSnapshotId.substring(0,8)}...: ${displayErrorMessage}. It was stored but is not live.`);
-        }
+      const result: SnapshotOperationResult = await this.snapshotService.publishSnapshot(this.appliedFixStore.getAll());
+      this.renderUserMessage(result.message); // Display message from service (can be multi-part)
+      if (result.success && result.cdnUrl) {
+        this.renderUserMessage(`Share URL: <a href="${result.cdnUrl}" target="_blank" rel="noopener noreferrer">${result.cdnUrl}</a>`);
+      } else if (!result.success && result.snapshotId) {
+        // Handle cases like promotion failed but was stored
+        this.renderUserMessage(`Snapshot ID (stored but not fully published): ${result.snapshotId.substring(0,8)}...`);
       }
     } catch (error) {
-      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        // Store a simplified marker for publish action.
-        await this.handleAuthenticationRequiredAndRedirect('publish', { /* minimal data or rely on current state */ }, error as AuthenticationRequiredError);
+      if (error instanceof AuthenticationRequiredError) {
+        // Pass the current applied fixes map to be stored for resumption
+        await this.handleAuthenticationRequiredAndRedirect('publish', Array.from(this.appliedFixStore.getAll().entries()), error);
         this.renderUserMessage("Authentication required to publish. Please log in to continue.");
       } else {
-        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during saving snapshot for publish. Error details follow.");
-        if (error instanceof Error) {
-          customError("[FeedbackViewerImpl] Error Name:", error.name);
-          customError("[FeedbackViewerImpl] Error Message:", error.message);
-          if (error.stack) customError("[FeedbackViewerImpl] Error Stack:", error.stack);
-          if ((error as any).response && typeof (error as any).response.status === 'number') {
-             const response = (error as any).response as Response;
-             customError("[FeedbackViewerImpl] Underlying response status:", response.status);
-             try {
-                const responseBody = await response.text();
-                customError("[FeedbackViewerImpl] Underlying response body:", responseBody);
-             } catch (bodyError) {
-                customError("[FeedbackViewerImpl] Could not read underlying response body:", bodyError);
-             }
-          }
-        } else {
-          customError("[FeedbackViewerImpl] Caught a non-Error object:", error);
-        }
+        customError("[FeedbackViewerImpl] Error during publish command:", error);
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
-        this.showError(`Failed to save snapshot for publishing: ${displayErrorMessage}`);
+        this.showError(`Failed to publish: ${displayErrorMessage}`);
       }
     }
   }
 
-  private displayStatsBadges(): void {
-    if (!this.domManager) return;
-
-    // Added a wrapper div with a specific class for targeting in CSS
-    const badgesHtml = `
-      <div class="checkra-stats-badges-wrapper">
-        <div class="checkra-stats-badges">
-          <button class="checkra-stat-badge" data-queryname="metrics_1d">Stats (last 24h)</button>
-          <button class="checkra-stat-badge" data-queryname="metrics_7d">Stats (last 7d)</button>
-          <button class="checkra-stat-badge" data-queryname="geo_top5_7d">Top Countries (last 7d)</button>
-        </div>
-      </div>
-    `;
-    
-    this.saveHistory({ type: 'usermessage', content: badgesHtml }); // Kept as 'usermessage'
-  }
-
-  // Method to fetch and display stats when a badge is clicked
-  private async fetchAndDisplayStats(queryName: string): Promise<void> {
-    if (!this.domManager) return;
-
-    this.domManager.appendHistoryItem({
-      type: 'ai', 
-      content: `Fetching ${getFriendlyQueryName(queryName)}...`,
-      isStreaming: true 
-    });
-
-    try {
-      const response = await fetchProtected(`https://${CDN_DOMAIN}/analytics/${queryName}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch stats: ${response.status} ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      if (!data.rows || data.rows.length === 0) {
-        const noDataMessage = "No data available for this query.";
-        this.saveHistory({ type: 'usermessage', content: noDataMessage });
-        return;
-      }
-
-      let markdownTable = "";
-      if (queryName === 'metrics_1d' || queryName === 'metrics_7d') {
-        markdownTable = `| Variant | Views   | Uniques | Avg. Dwell (ms) |\n|---------|---------|---------|-----------------|\n`;
-        data.rows.forEach((row: any) => {
-          markdownTable += `| ${row.var || 'N/A'} | ${row.views || '0'} | ${row.uniques || '0'} | ${row.avg_dur_ms || '0'} |\n`;
-        });
-      } else if (queryName === 'geo_top5_7d') {
-        markdownTable = `| Variant | Country | Views   | Uniques | Avg. Dwell (ms) |\n|---------|---------|---------|---------|-----------------|\n`;
-        data.rows.forEach((row: any) => {
-          markdownTable += `| ${row.var || 'N/A'} | ${row.country || 'N/A'} | ${row.views || '0'} | ${row.uniques || '0'} | ${row.avg_dur_ms || '0'} |\n`;
-        });
-      }
-
-      if (markdownTable) {
-        this.domManager.updateLastAIMessage(markdownTable, false);
-      } else {
-        const formatErrorMessage = "Could not format data for display.";
-        this.saveHistory({ type: 'usermessage', content: formatErrorMessage });
-      }
-
-    } catch (error: any) {
-      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        await this.handleAuthenticationRequiredAndRedirect('fetchStats', { queryName }, error as AuthenticationRequiredError);
-      } else {
-        customError("[FeedbackViewerImpl] Non-AuthenticationRequiredError during fetching stats. Error details follow.");
-        if (error instanceof Error) {
-          customError("[FeedbackViewerImpl] Stats Error Name:", error.name);
-          customError("[FeedbackViewerImpl] Stats Error Message:", error.message);
-          if (error.stack) {
-            customError("[FeedbackViewerImpl] Stats Error Stack:", error.stack);
-          }
-          if ((error as any).response && typeof (error as any).response.status === 'number') {
-            const response = (error as any).response as Response;
-            customError("[FeedbackViewerImpl] Underlying stats response status:", response.status);
-            try {
-               const responseBody = await response.text();
-               customError("[FeedbackViewerImpl] Underlying stats response body:", responseBody);
-            } catch (bodyError) {
-               customError("[FeedbackViewerImpl] Could not read underlying stats response body:", bodyError);
-            }
-         }
-        } else {
-          customError("[FeedbackViewerImpl] Caught a non-Error object during stats fetch:", error);
-        }
-        const displayErrorMessage = error instanceof Error ? error.message : String(error);
-        this.domManager.updateLastAIMessage(`Sorry, I couldn't fetch those stats. Error: ${displayErrorMessage}`, false);
-      }
-    }
-  }
-
-  private async handleAuthenticationRequiredAndRedirect(actionType: string, actionData: any, authError: AuthenticationRequiredError): Promise<void> {
-    try {
-      localStorage.setItem(PENDING_ACTION_TYPE_KEY, actionType);
-      if (actionData !== undefined) {
-        localStorage.setItem(PENDING_ACTION_DATA_KEY, JSON.stringify(actionData));
-      }
-      
-      const loginUrlFromError = authError?.loginUrl;
-      const encodedRedirect = encodeURIComponent((window as any).Checkra?.REDIRECT_URI ?? location.origin + '/auth/callback');
-      const safeToUseLoginUrl = loginUrlFromError && loginUrlFromError.includes(`redirect_to=${encodedRedirect}`);
-
-      if (safeToUseLoginUrl) {
-        window.location.href = loginUrlFromError;
-      } else {
-        // Fallback: build correct login flow via startLogin()
-        customWarn('[FeedbackViewerImpl] Backend loginUrl missing or has wrong redirect_to. Falling back to startLogin().');
-        try {
-          await startLogin(); // Use imported startLogin
-        } catch (loginError) {
-          customError('[FeedbackViewerImpl] Error calling startLogin():', loginError);
-          this.showError('Authentication is required. Auto-redirect to login failed.');
-        }
-      }
-    } catch (e) {
-      customError('[FeedbackViewerImpl] Failed to store pending action or initiate login:', e);
-      this.showError('Could not prepare for login. Please try again.');
-    }
-  }
-
-  private async handlePendingActionAfterLogin(): Promise<void> {
-    const actionType = localStorage.getItem(PENDING_ACTION_TYPE_KEY);
-    const rawActionData = localStorage.getItem(PENDING_ACTION_DATA_KEY);
-
-    if (actionType) {
-      const loggedIn = await isLoggedIn(); // Use imported isLoggedIn
-      if (!loggedIn) {
-        return; // Do not resume; keep data intact for after auth
-      }
-
-      localStorage.removeItem(PENDING_ACTION_TYPE_KEY);
-      localStorage.removeItem(PENDING_ACTION_DATA_KEY);
-
-      let actionData: any = null;
-      if (rawActionData) {
-        try {
-          actionData = JSON.parse(rawActionData);
-        } catch (e) {
-          customError('[FeedbackViewerImpl] Failed to parse pending action data:', e);
-          this.showError('Could not restore previous action: invalid data.');
-          return;
-        }
-      }
-
-      switch (actionType) {
-        case 'publish':
-          if (actionData && Array.isArray(actionData)) {
-            // Attempt to restore this.appliedFixes from the stored array of entries
-            try {
-              this.appliedFixes = new Map(actionData as Iterable<readonly [string, AppliedFixInfo]>);
-            } catch (e) {
-              customError('[FeedbackViewerImpl] Error restoring appliedFixes from localStorage:', e);
-              this.showError('Failed to restore changes for publishing.');
-              return;
-            }
-          } else if (this.appliedFixes.size === 0) { // If no actionData or it was bad, AND current fixes are empty
-            this.renderUserMessage("No changes were pending to publish after login.");
-            return;
-          }
-          this.renderUserMessage("Resuming publish operation after login...");
-          await this.publishSnapshot();
-          break;
-        case 'fetchStats':
-          if (actionData && typeof actionData.queryName === 'string') {
-            this.renderUserMessage(`Resuming stats fetch for ${getFriendlyQueryName(actionData.queryName)} after login...`);
-            await this.fetchAndDisplayStats(actionData.queryName);
-          } else {
-            customError('[FeedbackViewerImpl] Invalid or missing queryName for pending fetchStats action.');
-            this.showError('Could not restore stats fetch: missing query details.');
-          }
-          break;
-        default:
-          customWarn(`[FeedbackViewerImpl] Unknown pending action type: ${actionType}`);
-      }
-    } else {
-    }
-  }
-
-  /**
-   * Detects ?error=... returned from Supabase and surfaces it to the user once, then cleans it from history.
-   * Prevents endless redirect loops when Supabase cannot create the user due to RLS / grants.
-   */
-  private handleAuthErrorInUrl(): void {
-    const params = new URLSearchParams(location.search);
-    const errorCode = params.get('error');
-    const errorDesc = params.get('error_description');
-    if (errorCode) {
-      customWarn('[FeedbackViewerImpl] Supabase auth error detected in URL:', errorCode, errorDesc);
-      this.renderUserMessage(`Login failed: ${errorDesc || errorCode}. Please contact support or retry later.`);
-      // Clear the params to avoid repeated messages / loops
-      params.delete('error');
-      params.delete('error_code');
-      params.delete('error_description');
-      const newUrl = `${location.pathname}${params.toString() ? '?' + params.toString() : ''}${location.hash}`;
-      history.replaceState(null, '', newUrl);
-    }
-  }
-
-  // --- Handler for requestBodyPrepared event from ai-service ---
-  private handleRequestBodyPrepared(requestBody: GenerateSuggestionRequestbody): void {
-    // Store the full request body with all metadata from ai-service
-    this.requestBodyForCurrentCycle = requestBody;
-    customWarn('[FeedbackViewerImpl] Received full request body with metadata:', {
-      hasFrameworkDetection: !!requestBody.metadata?.frameworkDetection,
-      hasCssDigests: !!requestBody.metadata?.cssDigests,
-      hasUiKitDetection: !!requestBody.metadata?.uiKitDetection
-    });
-  }
-
-  // --- QUICK SUGGESTION HANDLER ---
-  private handleSuggestionClick(promptText: string): void {
-    if (!promptText) return;
-
-    // Store the prompt to be auto-submitted after element selection
-    this.queuedPromptText = promptText;
-
-    // Initiate element selection (same logic as mini-select button)
-    if (this.domElements?.viewer) {
-      screenCapture.startCapture(this.prepareForInput.bind(this), this.domElements.viewer);
-    } else {
-      customError('[FeedbackViewerImpl] Cannot start quick suggestion flow: viewer element not available.');
-      // Fallback: Just put prompt into textarea as a regular flow
-      if (this.domElements?.promptTextarea) {
-        this.domElements.promptTextarea.value = promptText;
-        this.domElements.promptTextarea.focus();
-      }
-    }
-  }
-
-  private updateSelectionVisuals(element: Element | null, mode: 'replace' | 'insertBefore' | 'insertAfter'): void {
-    this.removeSelectionHighlight(); 
-
-    if (!element) {
-        this.currentlyHighlightedElement = null; 
-        return;
-    }
-    
-    this.currentlyHighlightedElement = element; 
-    element.classList.add('checkra-highlight-container'); 
-
-    if (mode === 'insertBefore') {
-      element.classList.add('checkra-selected-insert-before');
-      this.createPersistentPlusIcon('top', element as HTMLElement);
-    } else if (mode === 'insertAfter') {
-      element.classList.add('checkra-selected-insert-after');
-      this.createPersistentPlusIcon('bottom', element as HTMLElement);
-    } else { // replace
-      element.classList.add('checkra-selected-replace');
-      // No plus icon for replace mode
-    }
-  }
-
-  private createPersistentPlusIcon(position: 'top' | 'bottom', parentElement: HTMLElement): void {
-    if (!this.selectionPlusIconElement) {
-      this.selectionPlusIconElement = document.createElement('div');
-      this.selectionPlusIconElement.className = 'checkra-insert-indicator'; // Uses styles from screen-capture.ts
-      this.selectionPlusIconElement.textContent = '+';
-      document.body.appendChild(this.selectionPlusIconElement);
-    }
-    this.selectionPlusIconElement.classList.remove('top', 'bottom');
-    this.selectionPlusIconElement.classList.add(position);
-
-    const parentRect = parentElement.getBoundingClientRect();
-    if (position === 'top') {
-      this.selectionPlusIconElement.style.top = `${parentRect.top + window.scrollY - 11}px`;
-    } else { // bottom
-      this.selectionPlusIconElement.style.top = `${parentRect.bottom + window.scrollY - 11}px`;
-    }
-    this.selectionPlusIconElement.style.left = `${parentRect.left + window.scrollX + parentRect.width / 2 - 11}px`;
-    this.selectionPlusIconElement.style.display = 'flex';
-  }
-
-  // Method to save the current changes as a private draft
-  private async saveSnapshotAsDraft(): Promise<void> {
-    if (this.appliedFixes.size === 0) {
-      customWarn("[FeedbackViewerImpl] No fixes applied. Nothing to save as draft.");
-      // User message is handled by the caller (handleSubmit) for this specific case
+  private async handleSaveDraftCommand(): Promise<void> {
+    if (this.appliedFixStore.getSize() === 0) {
+      this.renderUserMessage("No changes have been applied to save as a draft.");
       return;
     }
-
-    const changesToSave = Array.from(this.appliedFixes.values()).map(fixInfo => ({
-      targetSelector: fixInfo.stableTargetSelector,
-      appliedHtml: fixInfo.fixedOuterHTML,
-      sessionFixId: fixInfo.originalElementId
-    }));
-    const siteId = getSiteId();
-    const clientGeneratedSnapshotId = crypto.randomUUID();
-
-    const snapshotPayload = {
-      snapshotId: clientGeneratedSnapshotId,
-      timestamp: new Date().toISOString(),
-      pageUrl: window.location.href,
-      changes: changesToSave,
-      publish: false // Explicitly save as draft
-    };
-
-    const postSnapshotUrl = `${API_BASE}/sites/${siteId}/snapshots`;
-
+    this.renderUserMessage("Saving draft...");
     try {
-      this.renderUserMessage("Saving draft...");
-      const postResponse = await fetchProtected(postSnapshotUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snapshotPayload),
-      });
-
-      if (!postResponse.ok) {
-        const errorBody = await postResponse.text();
-        let specificErrorMessage = `Saving draft failed: ${postResponse.status} ${postResponse.statusText}`;
-        try {
-            const errorJson = JSON.parse(errorBody);
-            if (errorJson && errorJson.message) {
-                specificErrorMessage += ` - ${errorJson.message}`;
-            }
-        } catch (parseErr) {
-            specificErrorMessage += ` - ${errorBody}`;
-        }
-        throw new Error(specificErrorMessage);
+      const result: SnapshotOperationResult = await this.snapshotService.saveSnapshotAsDraft(this.appliedFixStore.getAll());
+      this.renderUserMessage(result.message);
+      if (result.success && result.accessUrl) {
+        this.renderUserMessage(`Access your draft (owner only): <a href="${result.accessUrl}" target="_blank" rel="noopener noreferrer">${result.accessUrl}</a>`);
       }
-
-      const postResult = await postResponse.json();
-      // Expected response: { message, snapshotId, accessUrl, s3SnapshotPath }
-
-      if (postResult.snapshotId === clientGeneratedSnapshotId && postResult.accessUrl) {
-        this.renderUserMessage(`Draft saved successfully! Snapshot ID: ${postResult.snapshotId.substring(0,8)}...`);
-        this.renderUserMessage(`Access your draft (owner only): <a href="${postResult.accessUrl}" target="_blank" rel="noopener noreferrer">${postResult.accessUrl}</a>`);
-      } else {
-        customWarn("[FeedbackViewerImpl] Save draft successful, but snapshotId or accessUrl missing/mismatched in response:", postResult);
-        this.renderUserMessage("Draft saved, but could not get the access URL. Snapshot ID: " + (postResult.snapshotId || clientGeneratedSnapshotId).substring(0,8) + "...");
-      }
-
     } catch (error) {
-      if (error instanceof AuthenticationRequiredError || (error && (error as any).name === 'AuthenticationRequiredError')) {
-        // For saving drafts, we might just inform the user they need to log in.
-        // Or, we could try to store the 'save' action similar to 'publish', but it's less critical.
-        // For now, inform and let them retry manually after login.
-        await this.handleAuthenticationRequiredAndRedirect('saveDraft', { /* minimal data */ }, error as AuthenticationRequiredError);
+      if (error instanceof AuthenticationRequiredError) {
+        // Pass the current applied fixes map to be stored for resumption
+        await this.handleAuthenticationRequiredAndRedirect('saveDraft', Array.from(this.appliedFixStore.getAll().entries()), error);
         this.renderUserMessage("Authentication required to save draft. Please log in and try again.");
       } else {
-        customError("[FeedbackViewerImpl] Error during saving draft. Error details follow.");
-        if (error instanceof Error) {
-          customError("[FeedbackViewerImpl] Draft Save Error Name:", error.name);
-          customError("[FeedbackViewerImpl] Draft Save Error Message:", error.message);
-          if (error.stack) customError("[FeedbackViewerImpl] Draft Save Error Stack:", error.stack);
-          if ((error as any).response && typeof (error as any).response.status === 'number') {
-             const response = (error as any).response as Response;
-             customError("[FeedbackViewerImpl] Underlying draft save response status:", response.status);
-             try {
-                const responseBody = await response.text();
-                customError("[FeedbackViewerImpl] Underlying draft save response body:", responseBody);
-             } catch (bodyError) {
-                customError("[FeedbackViewerImpl] Could not read underlying draft save response body:", bodyError);
-             }
-          }
-        } else {
-          customError("[FeedbackViewerImpl] Caught a non-Error object during draft save:", error);
-        }
+        customError("[FeedbackViewerImpl] Error during save draft command:", error);
         const displayErrorMessage = error instanceof Error ? error.message : String(error);
         this.showError(`Failed to save draft: ${displayErrorMessage}`);
       }
     }
   }
+  // --- END NEW Command Handlers ---
 
   private handleJsonPatch(patchEvent: { payload: any; originalHtml: string }): void {
     try {
@@ -2229,248 +1571,58 @@ Your job:
   }
 
   // ADDED: Handler for the rating button click
-  private handleAppliedFixRate(fixId: string, event: Event): void {
-    event.stopPropagation();
-    const fixInfo = this.appliedFixes.get(fixId);
-    const rateButton = (event.currentTarget as HTMLElement);
-
-    // if (!fixInfo || !fixInfo.appliedWrapperElement || !rateButton || (rateButton as HTMLButtonElement).disabled) { // OLD CHECK
-    // Temporarily adjust check, actualAppliedElement might not be the one with controls yet
-    if (!fixInfo || !rateButton || (rateButton as HTMLButtonElement).disabled) { 
-      customWarn(`[FeedbackViewerLogic] Cannot rate: Fix info missing or button disabled for Fix ID: ${fixId}.`);
+  private handleAppliedFixRate(fixId: string, anchorElement: HTMLElement): void {
+    if (!this.enableRating) {
+      customWarn('[FeedbackViewerImpl] Rating is disabled. handleAppliedFixRate should not have been called.');
       return;
     }
 
-    // Check if a rating options container already exists, remove if so to toggle off
-    // let existingOptionsContainer = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rating-options'); // OLD
-    // Query document directly for now; this will be more robust with overlay manager
-    let existingOptionsContainer = document.body.querySelector(`.feedback-fix-rating-options[data-rating-for-fix="${fixId}"]`);
-    if (existingOptionsContainer) {
-      existingOptionsContainer.remove();
-      return; 
+    const fixInfo = this.appliedFixStore.get(fixId);
+    if (!fixInfo) {
+      customWarn(`[FeedbackViewerLogic] Cannot rate: Fix info missing for Fix ID: ${fixId}.`);
+      return;
     }
 
-    const ratingOptionsContainer = document.createElement('div');
-    ratingOptionsContainer.className = 'feedback-fix-rating-options';
-    ratingOptionsContainer.setAttribute('data-rating-for-fix', fixId); // For querying
-    ratingOptionsContainer.style.position = 'absolute'; 
-    ratingOptionsContainer.style.zIndex = '10000'; 
-    ratingOptionsContainer.style.right = '0px'; 
-    ratingOptionsContainer.style.top = '30px';
+    // If already rated, do nothing (RatingUI might also handle this, but good to check)
+    if (fixInfo.isRated) {
+      customWarn(`[FeedbackViewerImpl] Fix ${fixId} already rated. Ignoring request.`);
+      // Optionally, OverlayManager could visually indicate this on the button itself permanently after first rating.
+      return;
+    }
 
-    const ratings = [
-      { value: 1, text: '★ Not OK' },
-      { value: 2, text: '★★ OK' },
-      { value: 3, text: '★★★ Pretty good' },
-      { value: 4, text: '★★★★ Wow!' },
-    ];
-
-    ratings.forEach(rating => {
-      const optionElement = document.createElement('div');
-      optionElement.className = 'feedback-rating-option';
-      optionElement.textContent = rating.text;
-      optionElement.setAttribute('data-rating-value', rating.value.toString());
-      
-      optionElement.addEventListener('click', (e) => {
-        // Check if the click target is within an existing feedback form.
-        // If so, don't re-process this click on the optionElement itself.
-        const existingForm = optionElement.querySelector('.feedback-rating-feedback-form');
-        if (existingForm && existingForm.contains(e.target as Node)) {
-          return; // Click was inside the form, do nothing here.
-        }
-
-        e.stopPropagation();
-        // If rating is 1 or 2, show feedback input and submit button
-        if (rating.value === 1 || rating.value === 2) {
-          // Remove any existing feedback form
-          const existingForm = ratingOptionsContainer.querySelector('.feedback-rating-feedback-form');
-          if (existingForm) existingForm.remove();
-
-          const feedbackForm = document.createElement('form');
-          feedbackForm.className = 'feedback-rating-feedback-form';
-          feedbackForm.style.display = 'flex';
-          feedbackForm.style.flexDirection = 'column';
-          feedbackForm.style.gap = '6px';
-          feedbackForm.style.marginTop = '8px';
-
-          // Prevent click from bubbling up to optionElement and recreating form - NO LONGER NEEDED HERE
-          // feedbackForm.addEventListener('click', (ev) => ev.stopPropagation());
-
-          const feedbackInput = document.createElement('input');
-          feedbackInput.type = 'text';
-          feedbackInput.placeholder = 'Optional feedback (what could be improved?)';
-          feedbackInput.className = 'feedback-rating-feedback-input';
-          feedbackInput.style.padding = '6px 8px';
-          feedbackInput.style.borderRadius = '8px';
-          feedbackInput.style.border = '1px solid #888';
-          feedbackInput.style.fontSize = '12px';
-          feedbackInput.style.background = '#222';
-          feedbackInput.style.color = '#eee';
-
-          // Prevent click from bubbling up to optionElement and recreating form - NO LONGER NEEDED HERE
-          // feedbackInput.addEventListener('click', (ev) => ev.stopPropagation());
-
-          // --- Chips ---
-          const chipLabels = ['ugly', 'off brand', 'broken', 'copy', 'colors', 'layout', 'spacing'];
-          const chipsContainer = document.createElement('div');
-          chipsContainer.style.display = 'flex';
-          chipsContainer.style.gap = '6px';
-          chipsContainer.style.margin = '6px 0 0 0';
-          chipsContainer.style.flexWrap = 'wrap';
-
-          let selectedChips: Set<string> = new Set();
-
-          chipLabels.forEach(label => {
-            const chip = document.createElement('button');
-            chip.type = 'button';
-            chip.textContent = label;
-            chip.className = 'feedback-rating-chip';
-            chip.addEventListener('click', (ev) => {
-              ev.preventDefault();
-              ev.stopPropagation(); // Prevent event from bubbling up to parent elements
-              if (selectedChips.has(label)) {
-                selectedChips.delete(label);
-                chip.classList.remove('active');
-              } else {
-                selectedChips.add(label);
-                chip.classList.add('active');
-              }
-              updateSubmitState();
-            });
-            chipsContainer.appendChild(chip);
-          });
-
-          // --- Submit button ---
-          const submitBtn = document.createElement('button');
-          submitBtn.type = 'button';
-          submitBtn.textContent = 'submit rating';
-          submitBtn.className = 'feedback-rating-feedback-submit';
-          Object.assign(submitBtn.style, {
-            marginTop: '2px',
-            padding: '6px 10px',
-            borderRadius: '8px',
-            background: '#2563eb',
-            color: '#fff',
-            fontWeight: 'bold',
-            fontSize: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            opacity: '0.7'
-          } as CSSStyleDeclaration);
-          submitBtn.disabled = true;
-
-          function updateSubmitState() {
-            const feedbackVal = feedbackInput.value.trim();
-            if (feedbackVal.length > 0 || selectedChips.size > 0) {
-              submitBtn.disabled = false;
-              submitBtn.style.opacity = '1';
-            } else {
-              submitBtn.disabled = true;
-              submitBtn.style.opacity = '0.7';
-            }
-          }
-
-          feedbackInput.addEventListener('input', updateSubmitState);
-
-          feedbackForm.appendChild(feedbackInput);
-          feedbackForm.appendChild(chipsContainer);
-          feedbackForm.appendChild(submitBtn);
-
-          // Remove the form submit handler entirely
-
-          // Add click handler to submitBtn
-          submitBtn.addEventListener('click', () => {
-            console.log('submitBtn clicked');
-            const feedbackVal = feedbackInput.value.trim();
-            if (fixInfo.requestBody) {
-              const feedbackPayload: AddRatingRequestBody = {
-                ...fixInfo.requestBody,
-                rating: rating.value as 1 | 2 | 3 | 4,
-                feedback: feedbackVal || undefined,
-                fixId: fixId,
-                tags: selectedChips.size > 0 ? Array.from(selectedChips) : undefined,
-                generatedHtml: fixInfo.fixedOuterHTML,
-                // ADDED: Include resolved color info if available for this fix
-                resolvedPrimaryColorInfo: fixInfo.resolvedColors?.resolvedPrimaryColorInfo,
-                resolvedAccentColorInfo: fixInfo.resolvedColors?.resolvedAccentColorInfo,
-              };
-              console.log('POSTING fixRated payload:', feedbackPayload);
-              eventEmitter.emit('fixRated', feedbackPayload);
-              customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId} with feedback: ${feedbackVal} and tags: ${Array.from(selectedChips).join(',')}`);
-              fixInfo.isRated = true;
-              rateButton.classList.add('rated');
-              (rateButton as HTMLButtonElement).disabled = true;
-              ratingOptionsContainer.remove();
-            }
-          });
-
-          feedbackInput.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter') {
-              ev.preventDefault();
-              submitBtn.click();
-            }
-          });
-
-          optionElement.appendChild(feedbackForm);
-          feedbackInput.focus();
-          updateSubmitState();
-        } else {
-          // For ratings 3 or 4, submit immediately
-          if (fixInfo.requestBody) {
-            const feedbackPayload: AddRatingRequestBody = {
-              ...fixInfo.requestBody,
-              rating: rating.value as 1 | 2 | 3 | 4,
-              fixId: fixId,
-              generatedHtml: fixInfo.fixedOuterHTML,
-              // ADDED: Include resolved color info if available for this fix
-              resolvedPrimaryColorInfo: fixInfo.resolvedColors?.resolvedPrimaryColorInfo,
-              resolvedAccentColorInfo: fixInfo.resolvedColors?.resolvedAccentColorInfo,
-            };
-            eventEmitter.emit('fixRated', feedbackPayload);
-            customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
-            fixInfo.isRated = true;
-            rateButton.classList.add('rated');
-            (rateButton as HTMLButtonElement).disabled = true;
-          }
-          ratingOptionsContainer.remove();
-        }
-      });
-      ratingOptionsContainer.appendChild(optionElement);
-    });
-
-    // Add a click outside listener to close the options container
-    const clickOutsideListener = (ev: MouseEvent) => {
-      if (!ratingOptionsContainer.contains(ev.target as Node) && ev.target !== rateButton) {
-        ratingOptionsContainer.remove();
-        document.removeEventListener('click', clickOutsideListener, true);
+    // Define the callback for when a rating is actually submitted from RatingUI
+    const onRatingSubmitted = (payload: AddRatingRequestBody) => {
+      eventEmitter.emit('fixRated', payload); // Emit event for ai-service or other listeners
+      fixInfo.isRated = true;
+      // Visually update the button via OverlayManager if possible, or RatingUI handles its own closure
+      // For now, assume RatingUI closes itself. We might want to tell OverlayManager to make the button look 'rated'.
+      // Let's disable the button directly for now via the anchorElement reference, though OverlayManager might be better.
+      if (anchorElement && anchorElement instanceof HTMLButtonElement) {
+        anchorElement.classList.add('rated');
+        anchorElement.disabled = true; 
       }
+      customWarn(`[FeedbackViewerImpl] Rating submitted for ${fixId}. Button styled as rated.`);
     };
-    setTimeout(() => {
-      document.addEventListener('click', clickOutsideListener, true);
-    }, 0);
 
-    const overlayHost = this.overlayManager.getOverlayElement() || document.body;
-    if (overlayHost === document.body && !this.overlayManager.getOverlayElement()) {
-        customWarn("[FeedbackViewerLogic] OverlayManager overlay element not found, appending rating options to document.body as a fallback.");
-    }
-    overlayHost.appendChild(ratingOptionsContainer);
-    
-    // Position relative to the rateButton, which is in the controls overlay
-    const rateButtonRect = rateButton.getBoundingClientRect();
-    const overlayRect = overlayHost.getBoundingClientRect(); // Get overlay rect for offset calculation if not body
+    // Define the callback for when the popover is closed without submitting
+    const onPopoverClosedWithoutSubmit = () => {
+      customWarn(`[FeedbackViewerImpl] Rating popover closed without submission for ${fixId}.`);
+      // Potentially re-enable the button if it was temporarily disabled, though not current flow.
+    };
 
-    let topPosition = rateButtonRect.bottom + window.scrollY;
-    let leftPosition = rateButtonRect.left + window.scrollX - (ratingOptionsContainer.offsetWidth / 2) + (rateButtonRect.width / 2);
+    // Show the popover using RatingUI service
+    this.ratingUI.showRatingPopover(
+      fixInfo,
+      anchorElement, // This is the rate button, used for positioning
+      fixId,
+      onRatingSubmitted,
+      onPopoverClosedWithoutSubmit
+    );
 
-    // If appended to a specific overlay, adjust for overlay's own offset from viewport if it's not 0,0
-    // However, our overlay is fixed at 0,0 so overlayRect.top/left should be 0.
-    // This complexity is reduced by the overlay being full viewport fixed.
-    // topPosition -= overlayRect.top; 
-    // leftPosition -= overlayRect.left;
-
-    ratingOptionsContainer.style.top = `${topPosition}px`;
-    ratingOptionsContainer.style.left = `${leftPosition}px`;
-
+    // --- REMOVE ALL OLD DOM MANIPULATION LOGIC FOR RATING POPOVER FROM HERE ---
+    // All the code that created ratingOptionsContainer, ratings, optionElement,
+    // feedbackForm, feedbackInput, chipsContainer, submitBtn, and their listeners
+    // should be deleted from this method as RatingUI now handles it.
   }
 
   private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
@@ -2620,10 +1772,256 @@ Your job:
     // Optionally, you could emit another event here if other UI parts need to react instantly
   }
 
-  // --- End of CheckraImplementation class ---
+  private async handleAuthenticationRequiredAndRedirect(actionType: string, actionData: any, authError: AuthenticationRequiredError): Promise<void> {
+    try {
+      this.authPendingActionHelper.setPendingAction(actionType, actionData);
+      
+      const loginUrlFromError = authError?.loginUrl;
+      const encodedRedirect = encodeURIComponent((window as any).Checkra?.REDIRECT_URI ?? location.origin + '/auth/callback');
+      const safeToUseLoginUrl = loginUrlFromError && loginUrlFromError.includes(`redirect_to=${encodedRedirect}`);
+
+      if (safeToUseLoginUrl) {
+        window.location.href = loginUrlFromError;
+      } else {
+        customWarn('[FeedbackViewerImpl] Backend loginUrl missing or has wrong redirect_to. Falling back to startLogin().');
+        try {
+          await startLogin();
+        } catch (loginError) {
+          customError('[FeedbackViewerImpl] Error calling startLogin():', loginError);
+          this.showError('Authentication is required. Auto-redirect to login failed.');
+        }
+      }
+    } catch (e) {
+      customError('[FeedbackViewerImpl] Failed to store pending action or initiate login:', e);
+      this.showError('Could not prepare for login. Please try again.');
+    }
+  }
+
+  private async handlePendingActionAfterLogin(): Promise<void> {
+    const pendingAction: PendingAction = this.authPendingActionHelper.getPendingAction();
+    const { actionType, actionData } = pendingAction; // actionData is already parsed or null
+
+    if (actionType) {
+      const loggedIn = await isLoggedIn();
+      if (!loggedIn) {
+        return; 
+      }
+
+      this.authPendingActionHelper.clearPendingAction();
+
+      // No need to parse actionData again, it's already handled by getPendingAction
+      // No need to manually remove localStorage items, clearPendingAction handles it
+
+      switch (actionType) {
+        case 'publish':
+        case 'saveDraft': 
+          if (actionData && Array.isArray(actionData)) {
+            try {
+              this.appliedFixStore.clear(); 
+              const restoredMap = new Map<string, AppliedFixInfo>(actionData as Array<[string, AppliedFixInfo]>);
+              restoredMap.forEach((value, key) => this.appliedFixStore.add(key, value));
+              
+              if (this.appliedFixStore.getSize() === 0 && actionType === 'publish') { 
+                  this.renderUserMessage("No changes were pending to publish after login.");
+                  return;
+              }
+              if (this.appliedFixStore.getSize() === 0 && actionType === 'saveDraft') { 
+                this.renderUserMessage("No changes were pending to save as draft after login.");
+                return;
+            }
+            } catch (e) {
+              customError('[FeedbackViewerImpl] Error restoring appliedFixes from localStorage:', e);
+              this.showError(`Failed to restore changes for ${actionType}.`);
+              return;
+            }
+          } else if (this.appliedFixStore.getSize() === 0) { 
+            this.renderUserMessage(`No changes were pending to ${actionType} after login.`);
+            return;
+          }
+          
+          this.renderUserMessage(`Resuming ${actionType} operation after login...`);
+          if (actionType === 'publish') {
+            await this.handlePublishCommand();
+          } else if (actionType === 'saveDraft') {
+            await this.handleSaveDraftCommand();
+          }
+          break;
+        case 'fetchStats':
+          if (actionData && typeof actionData.queryName === 'string') {
+            this.renderUserMessage(`Resuming stats fetch for ${getFriendlyQueryName(actionData.queryName)} after login...`);
+            this.initiateStatsFetch(actionData.queryName);
+          } else {
+            customError('[FeedbackViewerImpl] Invalid or missing queryName for pending fetchStats action.');
+            this.showError('Could not restore stats fetch: missing query details.');
+          }
+          break;
+        default:
+          customWarn(`[FeedbackViewerImpl] Unknown pending action type: ${actionType}`);
+      }
+    } else {
+      // No action type found, nothing to do
+    }
+  }
+
+  /**
+   * Detects ?error=... returned from Supabase and surfaces it to the user once, then cleans it from history.
+   * Prevents endless redirect loops when Supabase cannot create the user due to RLS / grants.
+   */
+  private handleAuthErrorInUrl(): void {
+    const params = new URLSearchParams(location.search);
+    const errorCode = params.get('error');
+    const errorDesc = params.get('error_description');
+    if (errorCode) {
+      customWarn('[FeedbackViewerImpl] Supabase auth error detected in URL:', errorCode, errorDesc);
+      this.renderUserMessage(`Login failed: ${errorDesc || errorCode}. Please contact support or retry later.`);
+      // Clear the params to avoid repeated messages / loops
+      params.delete('error');
+      params.delete('error_code');
+      params.delete('error_description');
+      const newUrl = `${location.pathname}${params.toString() ? '?' + params.toString() : ''}${location.hash}`;
+      history.replaceState(null, '', newUrl);
+    }
+  }
+
+  // --- Handler for requestBodyPrepared event from ai-service ---
+  private handleRequestBodyPrepared(requestBody: GenerateSuggestionRequestbody): void {
+    // Store the full request body with all metadata from ai-service
+    this.requestBodyForCurrentCycle = requestBody;
+    customWarn('[FeedbackViewerImpl] Received full request body with metadata:', {
+      hasFrameworkDetection: !!requestBody.metadata?.frameworkDetection,
+      hasCssDigests: !!requestBody.metadata?.cssDigests,
+      hasUiKitDetection: !!requestBody.metadata?.uiKitDetection
+    });
+  }
+
+  // --- QUICK SUGGESTION HANDLER ---
+  private handleSuggestionClick(promptText: string): void {
+    if (!promptText) return;
+
+    // Store the prompt to be auto-submitted after element selection
+    this.queuedPromptText = promptText;
+
+    // Initiate element selection (same logic as mini-select button)
+    if (this.domElements?.viewer) {
+      screenCapture.startCapture(this.prepareForInput.bind(this), this.domElements.viewer);
+    } else {
+      customError('[FeedbackViewerImpl] Cannot start quick suggestion flow: viewer element not available.');
+      // Fallback: Just put prompt into textarea as a regular flow
+      if (this.domElements?.promptTextarea) {
+        this.domElements.promptTextarea.value = promptText;
+        this.domElements.promptTextarea.focus();
+      }
+    }
+  }
+
+  private updateSelectionVisuals(element: Element | null, mode: 'replace' | 'insertBefore' | 'insertAfter'): void {
+    this.removeSelectionHighlight(); 
+
+    if (!element) {
+        this.currentlyHighlightedElement = null; 
+        return;
+    }
+    
+    this.currentlyHighlightedElement = element; 
+    element.classList.add('checkra-highlight-container'); 
+
+    if (mode === 'insertBefore') {
+      element.classList.add('checkra-selected-insert-before');
+      this.createPersistentPlusIcon('top', element as HTMLElement);
+    } else if (mode === 'insertAfter') {
+      element.classList.add('checkra-selected-insert-after');
+      this.createPersistentPlusIcon('bottom', element as HTMLElement);
+    } else { // replace
+      element.classList.add('checkra-selected-replace');
+      // No plus icon for replace mode
+    }
+  }
+
+  private createPersistentPlusIcon(position: 'top' | 'bottom', parentElement: HTMLElement): void {
+    if (!this.selectionPlusIconElement) {
+      this.selectionPlusIconElement = document.createElement('div');
+      this.selectionPlusIconElement.className = 'checkra-insert-indicator'; // Uses styles from screen-capture.ts
+      this.selectionPlusIconElement.textContent = '+';
+      document.body.appendChild(this.selectionPlusIconElement);
+    }
+    this.selectionPlusIconElement.classList.remove('top', 'bottom');
+    this.selectionPlusIconElement.classList.add(position);
+
+    const parentRect = parentElement.getBoundingClientRect();
+    if (position === 'top') {
+      this.selectionPlusIconElement.style.top = `${parentRect.top + window.scrollY - 11}px`;
+    } else { // bottom
+      this.selectionPlusIconElement.style.top = `${parentRect.bottom + window.scrollY - 11}px`;
+    }
+    this.selectionPlusIconElement.style.left = `${parentRect.left + window.scrollX + parentRect.width / 2 - 11}px`;
+    this.selectionPlusIconElement.style.display = 'flex';
+  }
+
+  private displayStatsBadges(): void {
+    if (!this.domManager) return;
+
+    // Uses getFriendlyQueryName imported from stats-fetcher.ts
+    const badgesHtml = `
+      <div class="checkra-stats-badges-wrapper">
+        <div class="checkra-stats-badges">
+          <button class="checkra-stat-badge" data-queryname="metrics_1d">${getFriendlyQueryName('metrics_1d')}</button>
+          <button class="checkra-stat-badge" data-queryname="metrics_7d">${getFriendlyQueryName('metrics_7d')}</button>
+          <button class="checkra-stat-badge" data-queryname="geo_top5_7d">${getFriendlyQueryName('geo_top5_7d')}</button>
+        </div>
+      </div>
+    `;
+    
+    this.saveHistory({ type: 'usermessage', content: badgesHtml }); // Kept as 'usermessage'
+  }
+
+  // NEW: Method to initiate stats fetch and handle its result
+  private async initiateStatsFetch(queryName: string): Promise<void> {
+    if (!this.domManager) return;
+
+    this.domManager.appendHistoryItem({
+      type: 'ai',
+      content: `Fetching ${getFriendlyQueryName(queryName)}...`,
+      isStreaming: true
+    });
+
+    try {
+      const result = await this.statsFetcher.fetchStats(queryName);
+      this.handleStatsResult(result);
+    } catch (error) {
+      // This catch block now primarily handles AuthenticationRequiredError re-thrown by StatsFetcher
+      if (error instanceof AuthenticationRequiredError) {
+        await this.handleAuthenticationRequiredAndRedirect('fetchStats', { queryName }, error);
+        // No need to updateLastAIMessage here as handlePendingActionAfterLogin will re-trigger
+      } else {
+        // Handle unexpected errors not caught by StatsFetcher's internal try-catch
+        customError("[FeedbackViewerImpl] Unexpected error during initiateStatsFetch:", error);
+        this.domManager.updateLastAIMessage(`Sorry, an unexpected error occurred while fetching stats.`, false);
+      }
+    }
+  }
+
+  // NEW: Method to process the result from StatsFetcher
+  private handleStatsResult(result: StatsFetcherResult): void {
+    if (!this.domManager) return;
+
+    if (result.success && result.markdownTable) {
+      this.domManager.updateLastAIMessage(result.markdownTable, false);
+    } else if (result.message) {
+      // Display error or informational message from StatsFetcher (e.g., "No data", "Could not format")
+      // We can use saveHistory which appends a 'usermessage' or updateLastAIMessage for an 'ai' styled error.
+      // Using updateLastAIMessage to keep it consistent with how other AI errors are shown.
+      this.domManager.updateLastAIMessage(result.message, false);
+    } else {
+      // Fallback for an unknown state from StatsFetcherResult
+      this.domManager.updateLastAIMessage("Received an unrecognized response while fetching stats.", false);
+    }
+  }
+
+  // --- END of CheckraImplementation class ---
 }
 
-// Helper function placed at module level
+// Helper function placed at module level (createCenteredLoaderElement)
+// REMOVE getFriendlyQueryName from here as it's now in stats-fetcher.ts
 function createCenteredLoaderElement(): HTMLDivElement {
     const loaderOuter = document.createElement('div');
     loaderOuter.className = 'checkra-replace-loader'; // Positioned container
@@ -2633,18 +2031,4 @@ function createCenteredLoaderElement(): HTMLDivElement {
     loaderOuter.appendChild(spinnerInner);
 
     return loaderOuter;
-}
-
-// Helper function to get a user-friendly display name for a query
-function getFriendlyQueryName(queryName: string): string {
-  switch (queryName) {
-    case 'metrics_1d':
-      return 'Stats (last 24h)';
-    case 'metrics_7d':
-      return 'Stats (last 7d)';
-    case 'geo_top5_7d':
-      return 'Top Countries (last 7d)';
-    default:
-      return queryName.replace(/_/g, ' '); // Default fallback
-  }
 }
