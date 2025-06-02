@@ -87,20 +87,20 @@
 }
 
 /* --- NEW: Container for fix control buttons --- */
-.checkra-feedback-applied-fix .checkra-fix-controls-container {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
+/* Ensure this is the direct selector */
+.checkra-fix-controls-container {
+  position: absolute; 
+  transform: translateX(-50%); 
+  display: flex; 
   align-items: center;
-  gap: 5px; /* Space between buttons */
-  padding: 3px; /* Small padding around the buttons */
-  background-color: rgba(40, 40, 40, 0.5); /* Subtle background for the control strip */
-  border-radius: 16px; /* Rounded corners for the container */
-  z-index: 12; /* Ensure it's above other content, and above applied-fix-content if it had a z-index */
-  pointer-events: auto; /* Make sure the container itself can receive pointer events if needed */
+  gap: 5px; 
+  padding: 3px; 
+  background-color: rgba(40, 40, 40, 0.5); /* This is #28282880 */
+  border-radius: 16px; 
+  z-index: 12; 
+  pointer-events: auto; 
   width: auto;
+  /* top and left are set by JS via OverlayManager */
 }
 
 /* --- ADDED: Outline for actively selected element --- */
@@ -114,7 +114,8 @@
 
 /* --- Buttons on Applied Fix Wrapper --- */
 /* NEW: Common base style for all fix control buttons */
-.checkra-feedback-applied-fix .feedback-fix-btn {
+/* Ensure this selector is exactly .feedback-fix-btn */
+.feedback-fix-btn {
   width: 20px;
   height: 20px;
   background-color: rgba(50, 50, 50, 0.5); /* Default background */
@@ -123,81 +124,80 @@
   cursor: pointer !important;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: center; /* This is line 128 you mentioned */
   font-size: 12px;
   font-weight: bold;
   line-height: 1;
   pointer-events: auto;
   transition: background-color 0.2s, color 0.2s, transform 0.1s;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  padding: 2px; /* Apply padding here */
+  padding: 2px; 
   box-sizing: border-box;
   flex-shrink: 0;
-  border: none; /* Common: no border */
+  border: none; 
 }
 
 /* Common hover effect for all buttons */
-.checkra-feedback-applied-fix .feedback-fix-btn:hover {
+.feedback-fix-btn:hover {
   transform: scale(1.1);
 }
 
 /* Specific styles for close button */
-.checkra-feedback-applied-fix .feedback-fix-close-btn:hover {
+.feedback-fix-btn.feedback-fix-close-btn:hover {
   background-color: rgba(220, 60, 60, 0.9);
   color: white;
 }
 
 /* Specific styles for copy button */
-.checkra-feedback-applied-fix .feedback-fix-copy-btn:hover {
+.feedback-fix-btn.feedback-fix-copy-btn:hover {
   background-color: rgba(60, 110, 200, 0.9);
   color: white;
 }
 
 /* Specific styles for toggle button */
-.checkra-feedback-applied-fix .feedback-fix-toggle:hover {
-color: white;
+.feedback-fix-btn.feedback-fix-toggle:hover {
+  color: white;
 }
 
 /* NEW class for active/toggled-on state */
-.checkra-feedback-applied-fix .feedback-fix-toggle.toggled-on {
+.feedback-fix-btn.feedback-fix-toggle.toggled-on {
   background-color: rgba(60, 180, 110, 0.9) !important;
   color: white;
 }
 
-.checkra-feedback-applied-fix .feedback-fix-toggle.toggled-on:hover {
-  background-color: rgba(50, 160, 90, 0.9) !important; /* Slightly darker green on hover when toggled */
+.feedback-fix-btn.feedback-fix-toggle.toggled-on:hover {
+  background-color: rgba(50, 160, 90, 0.9) !important;
 }
 
-/* Icon sizing within buttons - These can remain if SVGs are consistently used and sized */
-.checkra-feedback-applied-fix .feedback-fix-copy-btn svg,
-.checkra-feedback-applied-fix .feedback-fix-toggle svg {
+/* Icon sizing within buttons */
+.feedback-fix-btn.feedback-fix-copy-btn svg,
+.feedback-fix-btn.feedback-fix-toggle svg {
   width: 12px;
   height: 12px;
   stroke: currentColor;
 }
 
-.checkra-feedback-applied-fix .feedback-fix-rate-btn:hover {
-  background-color: rgba(70, 70, 70, 0.9); /* Slightly different hover for rate */
+.feedback-fix-btn.feedback-fix-rate-btn:hover {
+  background-color: rgba(70, 70, 70, 0.9);
   color: #ffeb3b;
 }
 
 /* Styles for the Rate Button when rated */
-.checkra-feedback-applied-fix .feedback-fix-rate-btn.rated {
-  color: #ffeb3b; /* Persistent gold color for star */
-  background-color: rgba(50, 50, 50, 0.8); /* Keep original background or a slightly different one if desired */
-  cursor: default !important; /* Indicate it's not interactive */
-  opacity: 0.7; /* Slightly dim it to show it's disabled, optional */
+.feedback-fix-btn.feedback-fix-rate-btn.rated {
+  color: #ffeb3b;
+  background-color: rgba(50, 50, 50, 0.8);
+  cursor: default !important;
+  opacity: 0.7;
 }
 
-.checkra-feedback-applied-fix .feedback-fix-rate-btn.rated:hover {
-  transform: none; /* No scale transform on hover when rated */
-  /* Optional: ensure hover doesn't change colors if it's already rated */
+.feedback-fix-btn.feedback-fix-rate-btn.rated:hover {
+  transform: none;
   color: #ffeb3b;
   background-color: rgba(50, 50, 50, 0.8);
 }
 
 /* --- ADDED: Styles for the new Custom Rating Options Dropdown --- */
-.checkra-feedback-applied-fix .feedback-fix-rating-options {
+.feedback-fix-rating-options {
   /* Positioning (top, right, z-index, position:absolute) is handled by inline styles in JS */
   background-color: rgba(40, 40, 40, 0.95); /* Darker, slightly more opaque */
   border: 1px solid rgba(80, 80, 80, 0.9);

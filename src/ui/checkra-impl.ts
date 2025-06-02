@@ -9,8 +9,9 @@ import { API_BASE, CDN_DOMAIN } from '../config';
 import { getSiteId } from '../utils/id'; 
 import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 import { customWarn, customError } from '../utils/logger';
-import { GenerateSuggestionRequestbody, AddRatingRequestBody } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
-import { ResolvedColorInfo } from '../types'; // Added ResolvedColorInfo import
+import { GenerateSuggestionRequestbody, AddRatingRequestBody, ResolvedColorInfo } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
+import { OverlayManager } from './overlay-manager';
+
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -85,6 +86,7 @@ export class CheckraImplementation {
   private domElements: CheckraViewerElements | null = null;
   private domManager: CheckraDOM | null = null;
   private settingsModal: SettingsModal | null = null;
+  private overlayManager: OverlayManager; // ADDED: OverlayManager instance
   private optionsInitialVisibility: boolean; // To store the initial visibility from options
   private enableRating: boolean; // ADDED: Store enableRating option
 
@@ -147,6 +149,7 @@ export class CheckraImplementation {
   ) {
     this.optionsInitialVisibility = initialVisibilityFromOptions;
     this.enableRating = enableRating; // Store it
+    this.overlayManager = new OverlayManager(); // ADDED: Instantiate OverlayManager
     // Bind methods
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
@@ -266,9 +269,9 @@ export class CheckraImplementation {
       //   rateBtn?.removeEventListener('click', listeners.rate);
       // }
     });
-    this.appliedFixListeners.clear();
-    // We don't clear this.appliedFixes itself, as the fixes might persist beyond the viewer's lifecycle if not closed.
-    // The user might close the viewer and expect applied fixes to remain toggleable/closable.
+    this.appliedFixListeners.clear(); // Listeners are managed by OverlayManager or on buttons themselves
+
+    this.overlayManager.removeAllControlsAndOverlay(); // ADDED: Cleanup overlay
 
     if (this.domElements && this.footerSelectListener) {
       const footerSelectBtn = this.domElements.viewer.querySelector('#checkra-btn-footer-select-section');
@@ -756,11 +759,9 @@ export class CheckraImplementation {
 
     if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
       customWarn(`[FeedbackViewerLogic] Could not find fix info or markers for Fix ID: ${fixId} during close.`);
-      // Attempt to remove controls if they exist, even if markers are gone
-      const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
-      controls?.remove();
+      this.overlayManager.hideControls(); 
       this.appliedFixes.delete(fixId);
-      this.appliedFixListeners.delete(fixId);
+      this.appliedFixListeners.delete(fixId); 
       return;
     }
 
@@ -813,9 +814,8 @@ export class CheckraImplementation {
       markerStartNode.remove();
       markerEndNode.remove();
 
-      // Remove controls (currently appended to body)
-      const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
-      controls?.remove();
+      // Remove controls (now handled by OverlayManager)
+      this.overlayManager.hideControls(); 
 
       // Clean up state
       const listeners = this.appliedFixListeners.get(fixId);
@@ -830,7 +830,7 @@ export class CheckraImplementation {
       // Fallback: try to remove markers and controls if error occurred mid-operation
       markerStartNode?.remove();
       markerEndNode?.remove();
-      document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`)?.remove();
+      this.overlayManager.hideControls(); 
       this.appliedFixes.delete(fixId);
       this.appliedFixListeners.delete(fixId);
     }
@@ -839,28 +839,30 @@ export class CheckraImplementation {
   private handleAppliedFixToggle(fixId: string, event: Event): void {
     event.stopPropagation();
     const fixInfo = this.appliedFixes.get(fixId);
-
-    // Query for the toggle button from the body-appended controls container
-    const toggleButton = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"] .feedback-fix-toggle`) as HTMLButtonElement | null;
+    const toggleButton = event.currentTarget as HTMLButtonElement | null; // Get button from the event
 
     if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
-      customWarn(`[FeedbackViewerLogic] Toggle: Could not find fix info or markers for Fix ID: ${fixId}. Button update skipped if button not found.`);
+      customWarn(`[FeedbackViewerLogic] Toggle: Could not find fix info or markers for Fix ID: ${fixId}.`);
       return;
+    }
+
+    // Ensure toggleButton is actually the one we expect, though currentTarget should be reliable here
+    if (!toggleButton || !toggleButton.classList.contains('feedback-fix-toggle') || toggleButton.dataset.fixId !== fixId) {
+        customError(`[FeedbackViewerLogic] Toggle: Event target is not the expected toggle button for fix ${fixId}.`);
+        // If we don't have the button, we can still toggle content but can't update button visuals.
     }
 
     const { markerStartNode, markerEndNode, originalOuterHTML, fixedOuterHTML, insertionMode } = fixInfo;
     const parent = markerStartNode.parentNode;
 
     if (!parent) {
-      customError(`[FeedbackViewerLogic] Toggle: Parent node of markers not found for fix ${fixId}. Cannot toggle.`);
+      customError(`[FeedbackViewerLogic] Toggle: Parent node of markers not found for fix ${fixId}.`);
       return;
     }
 
-    // Part 1.2: Determine HTML to Insert and Clear Existing Content
     try {
       const htmlToInsert = fixInfo.isCurrentlyFixed ? originalOuterHTML : fixedOuterHTML;
       
-      // Clear existing content between markers
       let currentNode = markerStartNode.nextSibling;
       while (currentNode && currentNode !== markerEndNode) {
         const nextNode = currentNode.nextSibling;
@@ -868,27 +870,30 @@ export class CheckraImplementation {
         currentNode = nextNode;
       }
 
-      // Part 1.3: Insert new content
       const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
 
       if (newContentFragment && newContentFragment.childNodes.length > 0) {
         parent.insertBefore(newContentFragment, markerEndNode);
-        // Part 1.4: Update fixInfo.actualAppliedElement
         let firstNewElement = markerStartNode.nextSibling;
         while(firstNewElement && firstNewElement.nodeType !== Node.ELEMENT_NODE) {
             firstNewElement = firstNewElement.nextSibling;
         }
-        fixInfo.actualAppliedElement = (firstNewElement && firstNewElement !== markerEndNode) ? firstNewElement as HTMLElement : null;
+        const newActualAppliedElement = (firstNewElement && firstNewElement !== markerEndNode) ? firstNewElement as HTMLElement : null;
+        if (fixInfo.actualAppliedElement !== newActualAppliedElement) {
+            fixInfo.actualAppliedElement = newActualAppliedElement;
+            // If the actual element changed and controls are visible, tell OverlayManager to update position for this fix
+            if (fixInfo.actualAppliedElement && this.overlayManager.isFixControlsVisible(fixId)) { // NEW: Need isFixControlsVisible
+                 this.overlayManager.updateControlsPositionForFix(fixId, fixInfo.actualAppliedElement); // NEW: Need updateControlsPositionForFix
+            }
+        }
       } else {
-        customError(`[FeedbackViewerLogic] Toggle: Failed to parse HTML (or HTML was empty) for fixId: ${fixId}. Target HTML substring: ${htmlToInsert.substring(0,100)}`);
-        fixInfo.actualAppliedElement = null; // No valid element to point to if fragment is empty
+        customError(`[FeedbackViewerLogic] Toggle: Failed to parse HTML (or HTML was empty) for fixId: ${fixId}.`);
+        fixInfo.actualAppliedElement = null; 
       }
 
-      // Part 1.5: Update fixInfo.isCurrentlyFixed State
       fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
 
-      // Part 1.6: Update Toggle Button Visual State
-      if (toggleButton) { // Check if button exists before trying to update it
+      if (toggleButton) {
         if (fixInfo.isCurrentlyFixed) {
           toggleButton.classList.add('toggled-on');
           toggleButton.title = "Toggle Original Version";
@@ -896,13 +901,10 @@ export class CheckraImplementation {
           toggleButton.classList.remove('toggled-on');
           toggleButton.title = "Toggle Fixed Version";
         }
-      } else {
-        customWarn(`[FeedbackViewerLogic] Toggle: Toggle button for fix ${fixId} not found in DOM, cannot update its visual state.`);
       }
 
     } catch (error) {
-      customError(`[FeedbackViewerLogic] Error during toggle prep for fix ${fixId} (mode: ${insertionMode}):`, error);
-      // Attempt to restore toggle button to a consistent state reflecting current fixInfo.isCurrentlyFixed if possible
+      customError(`[FeedbackViewerLogic] Error toggling fix ${fixId} (mode: ${insertionMode}):`, error);
       if (toggleButton && fixInfo) { 
         if (fixInfo.isCurrentlyFixed) {
           toggleButton.classList.add('toggled-on');
@@ -1226,9 +1228,9 @@ Your job:
 
       // --- Controls Container (Temporary: Appended to body) ---
       // This section will be replaced by OverlayManager in Phase 2
-      const controlsContainer = document.createElement('div');
-      controlsContainer.className = 'checkra-fix-controls-container';
-      controlsContainer.setAttribute('data-controls-for-fix', fixId); // To identify it later
+      // const controlsContainer = document.createElement('div');
+      // controlsContainer.className = 'checkra-fix-controls-container';
+      // controlsContainer.setAttribute('data-controls-for-fix', fixId); // To identify it later
       
       const closeBtn = this.createAppliedFixButton('close', fixId);
       const toggleBtn = this.createAppliedFixButton('toggle', fixId);
@@ -1236,14 +1238,12 @@ Your job:
       let rateBtn: HTMLButtonElement | null = null;
       if (this.enableRating) {
         rateBtn = this.createAppliedFixButton('rate', fixId);
-        controlsContainer.appendChild(rateBtn);
+        // controlsContainer.appendChild(rateBtn); // OLD
       }
-      controlsContainer.appendChild(copyBtn); // Order based on typical UIs
-      controlsContainer.appendChild(toggleBtn);
-      controlsContainer.appendChild(closeBtn);
-      document.body.appendChild(controlsContainer);
-      // TODO PHASE 2: Position controlsContainer near actualAppliedElement using getBoundingClientRect()
-      // For now, it will appear at the bottom of the body or default position.
+      // controlsContainer.appendChild(copyBtn); // OLD
+      // controlsContainer.appendChild(toggleBtn); // OLD
+      // controlsContainer.appendChild(closeBtn); // OLD
+      // document.body.appendChild(controlsContainer); // OLD
       // --- End Controls Container ---
 
       const finalStableSelector = stableSelector || this.stableSelectorForCurrentCycle;
@@ -1315,8 +1315,9 @@ Your job:
         this.removeSelectionHighlight();
         this.currentResolvedColors = null; 
         // Controls might have been added to body, remove them too if no actual fix applied
-        const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
-        controls?.remove();
+        // const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
+        // controls?.remove();
+        this.overlayManager.hideControls(); 
         this.appliedFixes.delete(fixId); // Also remove from appliedFixes as it's not a valid applied fix
         this.appliedFixListeners.delete(fixId);
         return; 
@@ -1327,15 +1328,33 @@ Your job:
         toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e),
         copy: (e: Event) => this.handleAppliedFixCopy(fixId, e),
         ...(rateBtn && { rate: (e: Event) => this.handleAppliedFixRate(fixId, e) })
-      } as any;
+      } as any; // Cast to any due to conditional rate listener, consider defining a more precise type for listeners if preferred
       
-      this.appliedFixListeners.set(fixId, listeners);
-      closeBtn.addEventListener('click', listeners.close);
-      toggleBtn.addEventListener('click', listeners.toggle);
-      copyBtn.addEventListener('click', listeners.copy);
-      if (rateBtn && listeners.rate) {
-        rateBtn.addEventListener('click', listeners.rate);
+      // Store listeners. OverlayManager will use these to attach to the actual button instances it manages.
+      this.appliedFixListeners.set(fixId, listeners); 
+
+      // Show controls using OverlayManager
+      if (actualAppliedElement) {
+        this.overlayManager.showControls(
+          fixId,
+          actualAppliedElement,
+          // Pass the created button elements directly
+          { close: closeBtn, toggle: toggleBtn, copy: copyBtn, rate: rateBtn || undefined }, 
+          listeners // Pass the listeners object for OverlayManager to use
+        );
+      } else {
+        customWarn(`[FeedbackViewerImpl applyFixToPage] No actualAppliedElement for fix ${fixId}, controls not shown via overlay.`);
+        // Buttons were created but not added to DOM/Overlay, no specific cleanup needed for them here
+        // If listeners were stored in appliedFixListeners, that map entry will be stale but harmless or cleaned on explicit close.
       }
+
+      // Direct listener attachment to buttons is now handled by OverlayManager
+      // closeBtn.addEventListener('click', listeners.close); // OLD
+      // toggleBtn.addEventListener('click', listeners.toggle); // OLD
+      // copyBtn.addEventListener('click', listeners.copy); // OLD
+      // if (rateBtn && listeners.rate) { // OLD
+      //   rateBtn.addEventListener('click', listeners.rate); // OLD
+      // }
 
       this.fixedOuterHTMLForCurrentCycle = null; 
       this.removeSelectionHighlight();
@@ -2430,20 +2449,28 @@ Your job:
       document.addEventListener('click', clickOutsideListener, true);
     }, 0);
 
-    // const controlsContainer = rateButton.parentElement; // OLD LOGIC
-    // if (controlsContainer) { // OLD LOGIC
-    //     controlsContainer.appendChild(ratingOptionsContainer);
-    // } else {
-        // fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer); // OLD LOGIC
-        // TEMPORARY: Append to body, will be handled by overlay manager
-        // This will likely not be positioned correctly yet.
-        document.body.appendChild(ratingOptionsContainer);
-        // TODO: Position ratingOptionsContainer near rateButton (Phase 2)
-        const rateButtonRect = rateButton.getBoundingClientRect();
-        ratingOptionsContainer.style.top = `${rateButtonRect.bottom + window.scrollY}px`;
-        ratingOptionsContainer.style.left = `${rateButtonRect.left + window.scrollX - (ratingOptionsContainer.offsetWidth / 2) + (rateButtonRect.width / 2)}px`;
+    const overlayHost = this.overlayManager.getOverlayElement() || document.body;
+    if (overlayHost === document.body && !this.overlayManager.getOverlayElement()) {
+        customWarn("[FeedbackViewerLogic] OverlayManager overlay element not found, appending rating options to document.body as a fallback.");
+    }
+    overlayHost.appendChild(ratingOptionsContainer);
+    
+    // Position relative to the rateButton, which is in the controls overlay
+    const rateButtonRect = rateButton.getBoundingClientRect();
+    const overlayRect = overlayHost.getBoundingClientRect(); // Get overlay rect for offset calculation if not body
 
-    // }
+    let topPosition = rateButtonRect.bottom + window.scrollY;
+    let leftPosition = rateButtonRect.left + window.scrollX - (ratingOptionsContainer.offsetWidth / 2) + (rateButtonRect.width / 2);
+
+    // If appended to a specific overlay, adjust for overlay's own offset from viewport if it's not 0,0
+    // However, our overlay is fixed at 0,0 so overlayRect.top/left should be 0.
+    // This complexity is reduced by the overlay being full viewport fixed.
+    // topPosition -= overlayRect.top; 
+    // leftPosition -= overlayRect.left;
+
+    ratingOptionsContainer.style.top = `${topPosition}px`;
+    ratingOptionsContainer.style.left = `${leftPosition}px`;
+
   }
 
   private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
