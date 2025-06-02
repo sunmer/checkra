@@ -479,8 +479,8 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 * <span class="onboarding-suggestion" data-prompt="Improve the visual design here">Improve the visual design here</span>
 * <span class="onboarding-suggestion" data-prompt="Rewrite this hero section">Rewrite this hero section</span>
 
-* Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/publish</kbd> to get a shareable url for your changes
-* Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> for all commands.
+* Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">/publish</kbd> to get a shareable url for your changes
+* Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">/help</kbd> for all commands.
     `;
 
     return `

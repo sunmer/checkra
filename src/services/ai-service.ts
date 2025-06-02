@@ -3,14 +3,16 @@ import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
 // import html2canvas from 'html2canvas'; // Eager import removed
 import { CSS_ATOMIC_MAP } from '../utils/css-map';
-import { detectCssFramework, DetectedFramework } from '../utils/framework-detector';
-import { detectUiKit, UiKitDetection } from '../utils/ui-kit-detector';
+import { detectCssFramework } from '../utils/framework-detector';
+import { detectUiKit } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
 import {
   GenerateSuggestionRequestbody,
   AddRatingRequestBody,
   PageMetadata,
-  BackendPayloadMetadata
+  BackendPayloadMetadata,
+  UiKitDetection,
+  DetectedFramework
 } from '../types';
 
 let serviceEventEmitter: any = null; // Local reference to the event emitter
@@ -45,12 +47,12 @@ async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
   }
 }
 
-const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): Record<string,string> => {
-  const map: Record<string,string> = {};
+const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): Record<string,string | true> => {
+  const map: Record<string,string | true> = {};
   if (frameworkName === 'tailwind') {
     classesUsed.forEach(cls => {
       const decl = CSS_ATOMIC_MAP[cls];
-      if (decl) map[cls] = decl;
+      map[cls] = decl || true;
     });
   } else {
     // Fallback: compute styles directly.
@@ -75,7 +77,7 @@ const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): Record
 interface CssContext {
   comment: string;
   cssDigests: any;
-  frameworkDetection: import('../utils/framework-detector').DetectedFramework;
+  frameworkDetection: DetectedFramework;
 }
 
 const produceCssContext = (htmlString: string): CssContext => {
@@ -293,7 +295,8 @@ const fetchFeedbackBase = async (
   promptText: string,
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
-  imageDataUrl?: string | null
+  imageDataUrl?: string | null,
+  computedBackgroundColor?: string | null
 ): Promise<void> => {
   try {
     const pageMeta = await getPageMetadata(); // Renamed to pageMeta for clarity
@@ -340,7 +343,8 @@ const fetchFeedbackBase = async (
       ...pageMeta, // Spread PageMetadata
       cssDigests: cssDigestsForPayload,
       frameworkDetection: frameworkDetectionForPayload,
-      uiKitDetection: uiKitDetectionForPayload
+      uiKitDetection: uiKitDetectionForPayload,
+      computedBackgroundColor: computedBackgroundColor || undefined
     };
 
     const requestBody: GenerateSuggestionRequestbody = {
@@ -457,12 +461,43 @@ const fetchFeedbackBase = async (
                   } else {
                     customWarn('[AI Service] Received domUpdateHtml event with missing html or insertionMode:', parsedData);
                   }
-                } else {
+                } else if (currentEventType === 'resolvedColorsUpdate') {
+                  if (serviceEventEmitter) {
+                    serviceEventEmitter.emit('internalResolvedColorsUpdate', parsedData);
+                  }
+                } else if (currentEventType === 'jsonPatch') {
+                  const eventDataContent = parsedData.content; // parsedData is e.g. { content: "[{\"op\":...}]" }
+                  if (typeof eventDataContent === 'string') {
+                    if (eventDataContent === '[PATCH_START]') {
+                      customWarn('[AI Service] Received [PATCH_START] marker via jsonPatch event. Awaiting actual patch data.');
+                      // Do nothing here, wait for the next jsonPatch event with the actual payload
+                    } else {
+                      // This should be the actual patch string, e.g., "[{\"op\":...}]"
+                      try {
+                        const actualPatchPayloadArray = JSON.parse(eventDataContent);
+                        if (Array.isArray(actualPatchPayloadArray)) {
+                          if (serviceEventEmitter) {
+                            customWarn('[AI Service] Emitting aiJsonPatch with parsed array payload.');
+                            serviceEventEmitter.emit('aiJsonPatch', { payload: actualPatchPayloadArray, originalHtml: originalSentHtmlForPatch || '' });
+                          }
+                        } else {
+                          customError('[AI Service] Parsed jsonPatch content from event is not an array:', actualPatchPayloadArray);
+                          if (serviceEventEmitter) serviceEventEmitter.emit('aiError', 'Invalid JSON patch data format (not an array).');
+                        }
+                      } catch (e) {
+                        customError('[AI Service] Error parsing actual jsonPatch event content string:', eventDataContent, e);
+                        if (serviceEventEmitter) serviceEventEmitter.emit('aiError', 'Failed to parse JSON patch data string.');
+                      }
+                    }
+                  } else {
+                    customWarn('[AI Service] jsonPatch event content is not a string:', parsedData);
+                  }
+                } else { // Other explicitly typed events
                   if (serviceEventEmitter) {
                     serviceEventEmitter.emit(currentEventType, parsedData);
                   }
                 }
-                currentEventType = null;
+                currentEventType = null; // Reset after handling
               } else {
                 if (parsedData.type === 'json-patch') {
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
@@ -538,10 +573,11 @@ export const fetchFeedback = async (
   imageDataUrl: string | null,
   promptText: string,
   selectedHtml: string | null,
-  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
+  computedBackgroundColor?: string | null
 ): Promise<void> => {
   const apiUrl = `${Settings.API_URL}/checkraCompletions/generate`;
-  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl);
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, computedBackgroundColor);
 };
 
 /**

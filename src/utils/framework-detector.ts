@@ -1,10 +1,4 @@
-export interface DetectedFramework {
-  name: 'tailwind' | 'bootstrap' | 'material-ui' | 'custom';
-  version: string | 'unknown';
-  confidence: number; // 0 (no confidence) -> 1 (high confidence)
-  utilityDensity: number;
-  type: 'utility-first' | 'component-based' | 'unknown';
-}
+import { DetectedFramework } from "@/types";
 
 /**
  * Very lightweight runtime detector that inspects link/script URLs and common class patterns.

@@ -7,6 +7,8 @@
  *  D. Screenshot fallback delegated to existing extractColorsFromElement() in ai-service
  */
 
+import { DetectedFramework } from "@/types";
+
 export interface InferredColours {
   primary: string;
   accent: string;
@@ -186,7 +188,6 @@ export function ensureContrast(info: InferredColours): InferredColours {
 /* --------------------------------------------------
  * Orchestrator
  * --------------------------------------------------*/
-import { DetectedFramework } from './framework-detector';
 
 export async function resolveBrandColors(el: HTMLElement, framework: DetectedFramework, htmlContext?: string, screenshotFallback?: (el: HTMLElement) => Promise<{ primary?: string; accent?: string } | null>): Promise<{ colours: InferredColours | null; lever?: LeverValues; perf: PerfHints }> {
   const start = performance.now();

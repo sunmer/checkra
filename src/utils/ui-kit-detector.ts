@@ -1,7 +1,4 @@
-export interface UiKitDetection {
-  name: string | null;
-  confidence: number | null;
-}
+import { UiKitDetection } from "@/types";
 
 /**
  * Heuristic UI-kit detector.  Looks for attribute/class fingerprints.

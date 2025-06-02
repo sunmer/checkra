@@ -10,6 +10,7 @@ import { getSiteId } from '../utils/id';
 import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 import { customWarn, customError } from '../utils/logger';
 import { GenerateSuggestionRequestbody, AddRatingRequestBody } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
+import { ResolvedColorInfo } from '../types'; // Added ResolvedColorInfo import
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -33,20 +34,49 @@ const COPY_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height=
 
 // --- Interface for Applied Fix Data ---
 interface AppliedFixInfo {
-  originalElementId: string; // Unique ID assigned to the element (session-specific data-checkra-fix-id)
-  originalOuterHTML: string; // Store the full outerHTML (might represent multiple siblings)
-  fixedOuterHTML: string; // Store the full outerHTML suggested by AI (might represent multiple siblings)
-  appliedWrapperElement: HTMLDivElement | null; // Reference to the '.checkra-feedback-applied-fix' wrapper
-  isCurrentlyFixed: boolean; // Tracks if the displayed version in the wrapper is the fix
-  stableTargetSelector: string; // ADDED: A stable selector for the original element
-  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'; // ADDED: How the fix was applied
-  requestBody: GenerateSuggestionRequestbody; // ADDED: The request body that generated this fix
-  isRated?: boolean; // ADDED: To track if the fix has been rated
+  originalElementId: string; 
+  originalOuterHTML: string; 
+  fixedOuterHTML: string; 
+  // appliedWrapperElement: HTMLDivElement | null; // REMOVED
+  markerStartNode: Comment | null; // ADDED: Reference to the start marker comment node
+  markerEndNode: Comment | null;   // ADDED: Reference to the end marker comment node
+  actualAppliedElement: HTMLElement | null; // ADDED: The first actual element node of the applied fix
+  isCurrentlyFixed: boolean; 
+  stableTargetSelector: string; 
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'; 
+  requestBody: GenerateSuggestionRequestbody; 
+  isRated?: boolean; 
+  resolvedColors?: ResolvedColorInfo; 
 }
 
 // localStorage keys for pending actions
 const PENDING_ACTION_TYPE_KEY = 'checkra_auth_pending_action_type';
 const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
+
+// ADDED: Helper function to convert rgb/rgba to hex
+function rgbToHex(rgbString: string): string | null {
+  if (!rgbString || rgbString.toLowerCase() === 'transparent' || rgbString === 'rgba(0, 0, 0, 0)') {
+    return null; // Treat transparent as needing a default fallback (e.g., #FFFFFF)
+  }
+
+  const match = rgbString.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d*\.?\d+))?\)$/i);
+  if (!match) {
+    // If it doesn't match rgb/rgba, it might already be hex or a named color.
+    // For simplicity, if it starts with #, assume it's hex. Otherwise, can't convert here.
+    if (rgbString.startsWith('#')) return rgbString;
+    return null; // Cannot convert other formats like named colors here, fallback needed
+  }
+
+  // If alpha is 0, it's effectively transparent
+  if (match[4] && parseFloat(match[4]) === 0) {
+    return null;
+  }
+
+  const r = parseInt(match[1], 10).toString(16).padStart(2, '0');
+  const g = parseInt(match[2], 10).toString(16).padStart(2, '0');
+  const b = parseInt(match[3], 10).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`.toUpperCase();
+}
 
 /**
  * Handles the logic, state, and interactions for the feedback viewer.
@@ -67,6 +97,10 @@ export class CheckraImplementation {
   private currentFixId: string | null = null; // Unique ID for the element being worked on
   private stableSelectorForCurrentCycle: string | null = null; // ADDED: Stable selector for the current cycle
   private currentElementInsertionMode: 'replace' | 'insertBefore' | 'insertAfter' = 'replace'; // Added
+  private currentComputedBackgroundColor: string | null = null; // ADDED for backend WCAG checks
+  private currentResolvedColors: ResolvedColorInfo | null = null; // ADDED: For incoming resolved colors
+  private lastAppliedFixResolvedColors: ResolvedColorInfo | null = null; // ADDED: For rating the last applied fix
+
   private fixIdCounter: number = 0; // Counter for generating unique IDs
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
@@ -104,6 +138,7 @@ export class CheckraImplementation {
 
   private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null; // ADDED: To store request body for the current fix cycle
   private boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this); // NEW: Bound handler for request body
+  private boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this); // ADDED
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
@@ -168,6 +203,7 @@ export class CheckraImplementation {
     eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
     eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Listen for direct DOM updates
     eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Listen for request body from ai-service
+    eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate); // ADDED
 
     // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -218,17 +254,17 @@ export class CheckraImplementation {
 
     // --- Clean up listeners on applied fixes ---
     this.appliedFixListeners.forEach((listeners, fixId) => {
-      const fixInfo = this.appliedFixes.get(fixId);
-      if (fixInfo?.appliedWrapperElement) {
-        const closeBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-close-btn');
-        const toggleBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-toggle');
-        closeBtn?.removeEventListener('click', listeners.close);
-        toggleBtn?.removeEventListener('click', listeners.toggle);
-        const copyBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-copy-btn');
-        copyBtn?.removeEventListener('click', listeners.copy);
-        const rateBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rate-btn');
-        rateBtn?.removeEventListener('click', listeners.rate);
-      }
+      // const fixInfo = this.appliedFixes.get(fixId); // TODO: Revisit cleanup with new marker/overlay system
+      // if (fixInfo?.appliedWrapperElement) { // OLD WRAPPER LOGIC - TO BE REPLACED
+      //   const closeBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-close-btn');
+      //   const toggleBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-toggle');
+      //   closeBtn?.removeEventListener('click', listeners.close);
+      //   toggleBtn?.removeEventListener('click', listeners.toggle);
+      //   const copyBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-copy-btn');
+      //   copyBtn?.removeEventListener('click', listeners.copy);
+      //   const rateBtn = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rate-btn');
+      //   rateBtn?.removeEventListener('click', listeners.rate);
+      // }
     });
     this.appliedFixListeners.clear();
     // We don't clear this.appliedFixes itself, as the fixes might persist beyond the viewer's lifecycle if not closed.
@@ -252,6 +288,7 @@ export class CheckraImplementation {
     eventEmitter.off('aiJsonPatch', this.boundHandleJsonPatch);
     eventEmitter.off('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Unsubscribe from direct DOM updates
     eventEmitter.off('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Unsubscribe from request body event
+    eventEmitter.off('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate); // ADDED
 
     this.domElements = null;
     this.domManager = null;
@@ -294,6 +331,28 @@ export class CheckraImplementation {
 
     this.currentImageDataUrl = imageDataUrl;
     this.currentElementInsertionMode = insertionMode; 
+
+    // --- Determine and store computed background color ---
+    if (targetElement) {
+      let el: HTMLElement | null = targetElement as HTMLElement;
+      let rawBgColor = 'rgba(0, 0, 0, 0)'; // Default to transparent
+      while (el) {
+        const style = window.getComputedStyle(el);
+        rawBgColor = style.backgroundColor;
+        if (rawBgColor && rawBgColor !== 'rgba(0, 0, 0, 0)' && rawBgColor !== 'transparent') {
+          break; // Found an opaque color
+        }
+        if (el === document.body) break;
+        el = el.parentElement;
+      }
+      // Convert to hex, defaulting to #FFFFFF if conversion fails or color is transparent
+      this.currentComputedBackgroundColor = rgbToHex(rawBgColor) || '#FFFFFF';
+      customWarn('[CheckraImpl] Computed BG for context:', this.currentComputedBackgroundColor, 'from element:', targetElement, '(raw was:', rawBgColor, ')');
+    } else {
+      this.currentComputedBackgroundColor = '#FFFFFF'; // Default for body or no selection
+      customWarn('[CheckraImpl] No targetElement, defaulting computed BG to #FFFFFF');
+    }
+    // --- End: Determine computed background color ---
 
     const isElementSelected = !!(targetElement && targetElement !== document.body); 
 
@@ -415,26 +474,44 @@ export class CheckraImplementation {
     const contentWrapper = this.domElements.contentWrapper;
     contentWrapper.scrollTop = contentWrapper.scrollHeight;
 
-    if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
-      const lastAiItem = this.conversationHistory.filter(item => item.type === 'ai').pop();
-      const modeToUse = this.currentElementInsertionMode;
-      const requestBodyForFix = this.requestBodyForCurrentCycle; // Use the stored request body
-
-      if (lastAiItem && lastAiItem.fix && requestBodyForFix) {
-        this.applyFixToPage(lastAiItem.fix.fixId, lastAiItem.fix.originalHtml, lastAiItem.fix.fixedHtml, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
-      } else {
-        customWarn('[FeedbackViewerImpl] Finalized response with fix HTML, but fix data not in history item or requestBodyForFix missing.');
-        if (!requestBodyForFix) {
-          customError('[FeedbackViewerImpl] requestBodyForCurrentCycle is null - the ai-service may not have emitted requestBodyPrepared event.');
-        }
-        if (this.currentFixId && this.originalOuterHTMLForCurrentCycle && this.fixedOuterHTMLForCurrentCycle && this.stableSelectorForCurrentCycle && requestBodyForFix) {
-          this.applyFixToPage(this.currentFixId, this.originalOuterHTMLForCurrentCycle, this.fixedOuterHTMLForCurrentCycle, modeToUse, requestBodyForFix, this.stableSelectorForCurrentCycle || undefined);
-        } else {
-          customError('[FeedbackViewerImpl] Cannot apply fix from current cycle state: Missing required data (fixId, originalHTML, fixedHTML, stableSelector, or requestBodyForFix).');
-        }
+    // --- MODIFIED/SIMPLIFIED logic for applying the fix ---
+    if (
+      this.currentFixId &&
+      this.originalOuterHTMLForCurrentCycle &&
+      this.fixedOuterHTMLForCurrentCycle && // This is the source of truth for the final HTML
+      this.requestBodyForCurrentCycle &&    // Ensure we have the full request context
+      this.stableSelectorForCurrentCycle     // Ensure we have the stable selector
+    ) {
+      customWarn('[FeedbackViewerImpl] FinalizeResponse: Applying fix with all conditions met.');
+      this.applyFixToPage(
+        this.currentFixId,
+        this.originalOuterHTMLForCurrentCycle,
+        this.fixedOuterHTMLForCurrentCycle, // Use the processed HTML
+        this.currentElementInsertionMode,
+        this.requestBodyForCurrentCycle,    // Pass the stored full request body
+        this.stableSelectorForCurrentCycle
+      );
+      // Clear the request body for the current cycle AFTER it has been used for applying the fix.
+      this.requestBodyForCurrentCycle = null;
+    } else {
+      customError('[FeedbackViewerImpl] FinalizeResponse: CANNOT apply fix. One or more critical pieces of context are missing.', {
+        currentFixId: !!this.currentFixId,
+        originalOuterHTML: !!this.originalOuterHTMLForCurrentCycle,
+        fixedOuterHTML: !!this.fixedOuterHTMLForCurrentCycle,
+        requestBody: !!this.requestBodyForCurrentCycle,
+        stableSelector: !!this.stableSelectorForCurrentCycle,
+        currentInsertionMode: this.currentElementInsertionMode
+      });
+      // If fixedOuterHTMLForCurrentCycle was set but we couldn't apply, it implies an issue with other context gathering.
+      if (this.fixedOuterHTMLForCurrentCycle) {
+        customWarn('[FeedbackViewerImpl] Fixed HTML was available, but other context prevented applying the fix. The viewer might be in an inconsistent state.');
       }
-      this.requestBodyForCurrentCycle = null; // Clear after use
+      // If requestBodyForCurrentCycle was the missing piece, it might indicate an issue with the requestBodyPrepared event or its timing.
+      if (!this.requestBodyForCurrentCycle && this.fixedOuterHTMLForCurrentCycle) {
+          customError('[FeedbackViewerImpl] Critical: requestBodyForCurrentCycle was missing when trying to apply a fix for which HTML was ready.');
+      }
     }
+    // this.fixedOuterHTMLForCurrentCycle is reset within applyFixToPage (if called) or by resetStateForNewSelection.
   }
 
   public showError(error: Error | string): void {
@@ -498,6 +575,8 @@ export class CheckraImplementation {
     this.svgPlaceholderCounter = 0;
     this.activeStreamingAiItem = null; 
     this.hidePageLoaders(); // Hide page loaders on new selection
+    this.currentComputedBackgroundColor = null; // Reset for next cycle
+    this.currentResolvedColors = null; // ADDED: Reset for next cycle
   }
 
   // --- Method to render user-facing messages (warnings, info) into history ---
@@ -655,8 +734,8 @@ export class CheckraImplementation {
     // Note: The full request body with rich metadata will be provided by ai-service
     // via the 'requestBodyPrepared' event. We don't create it here anymore.
     // Just call fetchFeedback which will trigger the metadata gathering in ai-service.
-
-    fetchFeedback(imageDataToSend, promptText, processedHtmlForAI, this.currentElementInsertionMode);
+    // ADDED: Pass currentComputedBackgroundColor to fetchFeedback
+    fetchFeedback(imageDataToSend, promptText, processedHtmlForAI, this.currentElementInsertionMode, this.currentComputedBackgroundColor);
     // After submitting, clear the textarea and reset button for general prompts too
     this.domManager?.setPromptState(true, ''); 
     this.domManager?.updateSubmitButtonState(true); // Re-enable submit, assuming selection is still valid or will be re-evaluated
@@ -674,134 +753,165 @@ export class CheckraImplementation {
   private handleAppliedFixClose(fixId: string, event: Event): void {
     event.stopPropagation();
     const fixInfo = this.appliedFixes.get(fixId);
-    const wrapperElement = document.querySelector(`.checkra-feedback-applied-fix[data-checkra-fix-id="${fixId}"]`);
 
-    if (fixInfo && wrapperElement) {
-      try {
-        if (fixInfo.insertionMode === 'replace') {
-          const originalFragment = this.createFragmentFromHTML(fixInfo.originalOuterHTML);
-          if (!originalFragment || originalFragment.childNodes.length === 0) {
-            throw new Error('Failed to parse original HTML into non-empty fragment for reverting (replace mode).');
-          }
-          const firstOriginalElement = originalFragment.firstElementChild;
-          if (firstOriginalElement) {
-            firstOriginalElement.setAttribute('data-checkra-fix-id', fixId);
-          }
-          wrapperElement.replaceWith(originalFragment);
-        } else { // 'insertBefore' or 'insertAfter'
-          wrapperElement.remove(); // Simply remove the added adjacent section
-        }
+    if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
+      customWarn(`[FeedbackViewerLogic] Could not find fix info or markers for Fix ID: ${fixId} during close.`);
+      // Attempt to remove controls if they exist, even if markers are gone
+      const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
+      controls?.remove();
+      this.appliedFixes.delete(fixId);
+      this.appliedFixListeners.delete(fixId);
+      return;
+    }
 
-        const listeners = this.appliedFixListeners.get(fixId);
-        if (listeners) {
-          const closeBtn = wrapperElement.querySelector('.feedback-fix-close-btn');
-          const toggleBtn = wrapperElement.querySelector('.feedback-fix-toggle');
-          const copyBtn = wrapperElement.querySelector('.feedback-fix-copy-btn');
-          const rateBtn = wrapperElement.querySelector('.feedback-fix-rate-btn'); // Added this line
-          closeBtn?.removeEventListener('click', listeners.close);
-          toggleBtn?.removeEventListener('click', listeners.toggle);
-          copyBtn?.removeEventListener('click', listeners.copy);
-          rateBtn?.removeEventListener('click', listeners.rate);
-          this.appliedFixListeners.delete(fixId);
-        }
-        this.appliedFixes.delete(fixId);
+    const { markerStartNode, markerEndNode, originalOuterHTML, insertionMode, stableTargetSelector } = fixInfo;
+    const parent = markerStartNode.parentNode;
 
-      } catch (error) {
-        customError(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId} (mode: ${fixInfo.insertionMode}):`, error);
+    if (!parent) {
+      customError(`[FeedbackViewerLogic] Parent node of markers not found for fix ${fixId}. Cannot revert.`);
+      // Attempt to remove controls as a fallback
+      document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`)?.remove();
+      this.appliedFixes.delete(fixId);
+      this.appliedFixListeners.delete(fixId);
+      return;
+    }
+
+    try {
+      // Remove all nodes between start and end markers (inclusive of end, exclusive of start initially)
+      let currentNode = markerStartNode.nextSibling;
+      while (currentNode && currentNode !== markerEndNode) {
+        const next = currentNode.nextSibling;
+        parent.removeChild(currentNode);
+        currentNode = next;
       }
-    } else {
-      customWarn(`[FeedbackViewerLogic] Could not find fix info or wrapper element for Fix ID: ${fixId} during close.`);
-      if (wrapperElement) wrapperElement.remove();
-      if (this.appliedFixes.has(fixId)) this.appliedFixes.delete(fixId);
-      if (this.appliedFixListeners.has(fixId)) this.appliedFixListeners.delete(fixId);
+
+      if (insertionMode === 'replace') {
+        const originalFragment = this.createFragmentFromHTML(originalOuterHTML);
+        if (!originalFragment || originalFragment.childNodes.length === 0) {
+          throw new Error('Failed to parse original HTML for revert.');
+        }
+        
+        // Insert original content before where the end marker was (or is, if not removed yet)
+        parent.insertBefore(originalFragment, markerEndNode);
+
+        // Re-tag the first element of the reverted content so it can be selected again
+        let firstRevertedElement = markerStartNode.nextSibling;
+        while(firstRevertedElement && firstRevertedElement.nodeType !== Node.ELEMENT_NODE) {
+            firstRevertedElement = firstRevertedElement.nextSibling;
+        }
+        if (firstRevertedElement && firstRevertedElement !== markerEndNode) {
+            (firstRevertedElement as HTMLElement).setAttribute('data-checkra-fix-id', fixId);
+            // Also, update actualAppliedElement in fixInfo if we were to keep the fix (e.g. for a redo later)
+            // For close, we are deleting the fix, so this isn't strictly necessary for this operation.
+        } else {
+            customWarn(`[FeedbackViewerLogic] Could not find first element of reverted content for fix ${fixId} to re-tag.`);
+        }
+      } 
+      // For 'insertBefore' or 'insertAfter', removing nodes between markers is sufficient as original was not touched.
+      
+      // Remove markers themselves
+      markerStartNode.remove();
+      markerEndNode.remove();
+
+      // Remove controls (currently appended to body)
+      const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
+      controls?.remove();
+
+      // Clean up state
+      const listeners = this.appliedFixListeners.get(fixId);
+      if (listeners) {
+        // Buttons are removed with controls, so no need to remove listeners from them individually IF controls are gone
+        this.appliedFixListeners.delete(fixId);
+      }
+      this.appliedFixes.delete(fixId);
+
+    } catch (error) {
+      customError(`[FeedbackViewerLogic] Error closing/reverting fix ${fixId} (mode: ${insertionMode}):`, error);
+      // Fallback: try to remove markers and controls if error occurred mid-operation
+      markerStartNode?.remove();
+      markerEndNode?.remove();
+      document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`)?.remove();
+      this.appliedFixes.delete(fixId);
+      this.appliedFixListeners.delete(fixId);
     }
   }
 
   private handleAppliedFixToggle(fixId: string, event: Event): void {
     event.stopPropagation();
     const fixInfo = this.appliedFixes.get(fixId);
-    const wrapperElement = document.querySelector(`.checkra-feedback-applied-fix[data-checkra-fix-id="${fixId}"]`);
-    const contentContainer = wrapperElement?.querySelector('.checkra-applied-fix-content');
-    const toggleButton = wrapperElement?.querySelector<HTMLButtonElement>('.feedback-fix-toggle');
 
-    if (fixInfo && wrapperElement && contentContainer && toggleButton) {
-      try {
-        if (fixInfo.insertionMode === 'replace') {
-          const htmlToInsert = fixInfo.isCurrentlyFixed
-            ? fixInfo.originalOuterHTML
-            : fixInfo.fixedOuterHTML;
-          const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
-          if (!newContentFragment || newContentFragment.childNodes.length === 0) {
-            throw new Error('Failed to parse HTML into non-empty fragment for toggle (replace mode).');
-          }
-          if (!contentContainer) { 
-               throw new Error('Content container not found for replace mode toggle.');
-          }
-          contentContainer.innerHTML = '';
-          contentContainer.appendChild(newContentFragment);
-          fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
+    // Query for the toggle button from the body-appended controls container
+    const toggleButton = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"] .feedback-fix-toggle`) as HTMLButtonElement | null;
 
-          if (fixInfo.isCurrentlyFixed) {
-            // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
-            toggleButton.classList.add('toggled-on');
-            toggleButton.title = "Toggle Original Version";
-            // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
-          } else {
-            // toggleButton.innerHTML = DISPLAY_FIX_SVG; // REMOVED SVG swap
-            toggleButton.classList.remove('toggled-on');
-            toggleButton.title = "Toggle Fixed Version";
-            // toggleButton.style.backgroundColor = ''; // REMOVED direct style
-          }
-        } else { // 'insertBefore' or 'insertAfter'
-          fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed; 
-          if (contentContainer instanceof HTMLElement) { 
-              if (fixInfo.isCurrentlyFixed) { 
-                  contentContainer.style.display = '';
-                  // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
-                  toggleButton.classList.add('toggled-on');
-                  toggleButton.title = "Hide This Section Content"; 
-                  // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
-              } else { 
-                  contentContainer.style.display = 'none';
-                  // toggleButton.innerHTML = DISPLAY_FIX_SVG; // REMOVED SVG swap
-                  toggleButton.classList.remove('toggled-on');
-                  toggleButton.title = "Show This Section Content"; 
-                  // toggleButton.style.backgroundColor = ''; // REMOVED direct style
-              }
-          } else {
-              customError(`[FeedbackViewerLogic] Content container not found or not HTMLElement within wrapper for fixId ${fixId} during insertBefore/After toggle.`);
-          }
+    if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
+      customWarn(`[FeedbackViewerLogic] Toggle: Could not find fix info or markers for Fix ID: ${fixId}. Button update skipped if button not found.`);
+      return;
+    }
+
+    const { markerStartNode, markerEndNode, originalOuterHTML, fixedOuterHTML, insertionMode } = fixInfo;
+    const parent = markerStartNode.parentNode;
+
+    if (!parent) {
+      customError(`[FeedbackViewerLogic] Toggle: Parent node of markers not found for fix ${fixId}. Cannot toggle.`);
+      return;
+    }
+
+    // Part 1.2: Determine HTML to Insert and Clear Existing Content
+    try {
+      const htmlToInsert = fixInfo.isCurrentlyFixed ? originalOuterHTML : fixedOuterHTML;
+      
+      // Clear existing content between markers
+      let currentNode = markerStartNode.nextSibling;
+      while (currentNode && currentNode !== markerEndNode) {
+        const nextNode = currentNode.nextSibling;
+        parent.removeChild(currentNode);
+        currentNode = nextNode;
+      }
+
+      // Part 1.3: Insert new content
+      const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
+
+      if (newContentFragment && newContentFragment.childNodes.length > 0) {
+        parent.insertBefore(newContentFragment, markerEndNode);
+        // Part 1.4: Update fixInfo.actualAppliedElement
+        let firstNewElement = markerStartNode.nextSibling;
+        while(firstNewElement && firstNewElement.nodeType !== Node.ELEMENT_NODE) {
+            firstNewElement = firstNewElement.nextSibling;
         }
-      } catch (error) {
-        customError(`[FeedbackViewerLogic] Error toggling fix ${fixId} (mode: ${fixInfo.insertionMode}):`, error);
-        // Simplified error handling for toggle; try to restore a consistent state if possible
-        if (fixInfo.insertionMode === 'replace' && !fixInfo.isCurrentlyFixed) {
-          try {
-            const fixedFragment = this.createFragmentFromHTML(fixInfo.fixedOuterHTML);
-            if (fixedFragment && fixedFragment.childNodes.length > 0) {
-              contentContainer.innerHTML = '';
-              contentContainer.appendChild(fixedFragment);
-              fixInfo.isCurrentlyFixed = true;
-              // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
-              toggleButton.classList.add('toggled-on');
-              toggleButton.title = "Toggle Original Version";
-              // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
-            }
-          } catch (restoreError) {
-            customError(`[FeedbackViewerLogic] Failed to restore fixed state for ${fixId} after toggle error (replace):`, restoreError);
-          }
-        } else if (fixInfo.insertionMode !== 'replace' && !fixInfo.isCurrentlyFixed) {
-           // If adjacent and failed while trying to show it, try to ensure it's shown
-           if (wrapperElement instanceof HTMLElement) wrapperElement.style.display = '';
-           fixInfo.isCurrentlyFixed = true;
-           // toggleButton.innerHTML = HIDE_FIX_SVG; // REMOVED SVG swap
-           toggleButton.classList.add('toggled-on');
-           toggleButton.title = "Hide This Section";
-           // toggleButton.style.backgroundColor = 'rgba(60, 180, 110, 0.9)'; // REMOVED direct style
+        fixInfo.actualAppliedElement = (firstNewElement && firstNewElement !== markerEndNode) ? firstNewElement as HTMLElement : null;
+      } else {
+        customError(`[FeedbackViewerLogic] Toggle: Failed to parse HTML (or HTML was empty) for fixId: ${fixId}. Target HTML substring: ${htmlToInsert.substring(0,100)}`);
+        fixInfo.actualAppliedElement = null; // No valid element to point to if fragment is empty
+      }
+
+      // Part 1.5: Update fixInfo.isCurrentlyFixed State
+      fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
+
+      // Part 1.6: Update Toggle Button Visual State
+      if (toggleButton) { // Check if button exists before trying to update it
+        if (fixInfo.isCurrentlyFixed) {
+          toggleButton.classList.add('toggled-on');
+          toggleButton.title = "Toggle Original Version";
+        } else {
+          toggleButton.classList.remove('toggled-on');
+          toggleButton.title = "Toggle Fixed Version";
+        }
+      } else {
+        customWarn(`[FeedbackViewerLogic] Toggle: Toggle button for fix ${fixId} not found in DOM, cannot update its visual state.`);
+      }
+
+    } catch (error) {
+      customError(`[FeedbackViewerLogic] Error during toggle prep for fix ${fixId} (mode: ${insertionMode}):`, error);
+      // Attempt to restore toggle button to a consistent state reflecting current fixInfo.isCurrentlyFixed if possible
+      if (toggleButton && fixInfo) { 
+        if (fixInfo.isCurrentlyFixed) {
+          toggleButton.classList.add('toggled-on');
+          toggleButton.title = "Toggle Original Version";
+        } else {
+          toggleButton.classList.remove('toggled-on');
+          toggleButton.title = "Toggle Fixed Version";
         }
       }
-    } else {
-      customWarn(`[FeedbackViewerLogic] Could not find fix info, wrapper, content container, or toggle button for Fix ID: ${fixId} during toggle.`);
     }
   }
 
@@ -1033,7 +1143,6 @@ Your job:
 
     try {
       const originalSelectedElement = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
-
       if (!originalSelectedElement) {
         customError(`[FeedbackViewerLogic DEBUG] applyFixToPage: Original element with ID ${fixId} not found. Cannot apply fix.`);
         this.showError(`Failed to apply fix: Original target element for fix ${fixId} not found.`);
@@ -1045,153 +1154,192 @@ Your job:
         this.showError(`Failed to apply fix: Original target for fix ${fixId} has no parent.`);
         return;
       }
+      const parent = originalSelectedElement.parentNode;
 
-      const wrapper = document.createElement('div');
-      wrapper.className = 'checkra-feedback-applied-fix checkra-fix-fade-in';
-      wrapper.setAttribute('data-checkra-fix-id', fixId);
+      // --- START: New Marker-Based Fix Application ---
+      const startComment = document.createComment(` checkra-fix-start:${fixId} `);
+      const endComment = document.createComment(` checkra-fix-end:${fixId} `);
+      let actualAppliedElement: HTMLElement | null = null;
 
-      // --- Start: Enhanced Wrapper Mimicking for 'replace' mode ---
-      if (insertionMode === 'replace' && originalSelectedElement instanceof HTMLElement) {
-        const origEl = originalSelectedElement as HTMLElement;
+      if (insertionMode === 'replace') {
+        parent.insertBefore(startComment, originalSelectedElement);
+        
+        // Use a temporary div to parse fixedHtml and get actual nodes
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = fixedHtml.trim();
+        const newNodes = Array.from(tempDiv.childNodes);
 
-        // A.1. Copy Classes (excluding checkra- specific ones)
-        origEl.classList.forEach(cls => {
-          if (!cls.startsWith('checkra-') && !wrapper.classList.contains(cls)) {
-            wrapper.classList.add(cls);
+        if (newNodes.length > 0) {
+          newNodes.forEach(node => parent.insertBefore(node, originalSelectedElement));
+          actualAppliedElement = newNodes.find(node => node.nodeType === Node.ELEMENT_NODE) as HTMLElement || null;
+        } else {
+          // If fixedHtml is empty or only comments/text, insert a placeholder or handle error
+          customWarn(`[FeedbackViewerLogic] FixedHTML for ${fixId} resulted in no actual nodes. Original was kept.`);
+          // Fallback: remove startComment if no actual content is replacing originalSelectedElement
+          parent.removeChild(startComment);
+          // Keep originalSelectedElement in place, do not remove it if fixedHtml is empty.
+          // No endComment needed if nothing was effectively inserted.
+          // actualAppliedElement remains null
+        }
+        
+        // Only remove originalSelectedElement if newNodes were actually inserted
+        if (newNodes.length > 0) {
+          parent.removeChild(originalSelectedElement);
+          // Insert endComment after the last of the new nodes
+          const lastNewNode = newNodes[newNodes.length - 1];
+          if (lastNewNode.nextSibling) {
+            parent.insertBefore(endComment, lastNewNode.nextSibling);
+          } else {
+            parent.appendChild(endComment);
           }
-        });
-
-        // A.2. Copy Inline Styles
-        const origInlineStyle = origEl.getAttribute('style');
-        if (origInlineStyle && origInlineStyle.trim().length > 0) {
-          // Append original styles. Note: Inline styles from original will override CSS class styles on wrapper if they conflict.
-          // Checkra's essential styles (like position:relative for controls) are typically via CSS classes, so this should be fine.
-          // Ensure semi-colons are handled cleanly.
-          const currentWrapperStyle = wrapper.style.cssText;
-          wrapper.style.cssText = `${currentWrapperStyle}${currentWrapperStyle ? ';' : ''}${origInlineStyle}`.replace(/;\s*;+/g, ';').replace(/^\s*;|;\s*$/g, '');
+        } else {
+          // If fixedHTML was empty, remove the start comment as nothing was actually applied to replace the original
+          // and originalSelectedElement is kept.
+          // No need to re-add data-checkra-fix-id as it was never removed from originalSelectedElement
         }
 
-        // A.3. Copy ARIA Roles & Tabindex
-        const role = origEl.getAttribute('role');
-        if (role) wrapper.setAttribute('role', role);
-        const tabindex = origEl.getAttribute('tabindex');
-        if (tabindex) wrapper.setAttribute('tabindex', tabindex);
-
-        // A.4. Copy Computed Display Value
-        // This is crucial for preserving layout behavior (block, flex, grid, etc.)
-        // We apply it as an inline style to ensure it takes precedence for the wrapper's direct layout.
-        const computedDisplay = window.getComputedStyle(origEl).display;
-        if (computedDisplay && computedDisplay !== 'contents') { // Avoid setting display:contents on the main wrapper
-            // Check if display is already set by copied inline styles or classes to avoid redundancy or conflict
-            // This is a simplification; a more robust check might parse existing styles.
-            if (!wrapper.style.display || wrapper.style.display === 'block' && computedDisplay !== 'block') { 
-                 wrapper.style.display = computedDisplay;
-            }
+      } else if (insertionMode === 'insertBefore') {
+        parent.insertBefore(startComment, originalSelectedElement);
+        originalSelectedElement.insertAdjacentHTML('beforebegin', fixedHtml);
+        actualAppliedElement = startComment.nextElementSibling as HTMLElement | null;
+        // Insert endComment before the originalSelectedElement, which is after all parts of fixedHtml
+        parent.insertBefore(endComment, originalSelectedElement);
+      } else if (insertionMode === 'insertAfter') {
+        parent.insertBefore(startComment, originalSelectedElement.nextSibling);
+        originalSelectedElement.insertAdjacentHTML('afterend', fixedHtml);
+        actualAppliedElement = originalSelectedElement.nextElementSibling as HTMLElement | null;
+        // Find the true end of the inserted content to place the endComment
+        let currentElement = actualAppliedElement;
+        let lastSiblingOfFix = actualAppliedElement;
+        while(currentElement && currentElement.nextSibling !== endComment && currentElement !== originalSelectedElement) {
+            if (currentElement.nodeType === Node.COMMENT_NODE && currentElement.nodeValue === ` checkra-fix-start:${fixId} `) break; // Should not happen here, but safety
+            lastSiblingOfFix = currentElement as HTMLElement;
+            currentElement = currentElement.nextElementSibling as HTMLElement | null;
         }
-      } 
-      // --- End: Enhanced Wrapper Mimicking for 'replace' mode ---
-      // Existing logic for 'insertBefore' or 'insertAfter' class/style copying can remain as is or be harmonized later if needed.
-      else if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
-        const origEl = originalSelectedElement as HTMLElement;
-        if (origEl) {
-          origEl.classList.forEach(cls => {
-            if (!cls.startsWith('checkra-')) {
-              wrapper.classList.add(cls);
-            }
-          });
-          const origStyle = origEl.getAttribute('style');
-          if (origStyle && origStyle.trim().length > 0) {
-            const existingStyle = wrapper.getAttribute('style') || '';
-            wrapper.setAttribute('style', `${existingStyle} ${origStyle}`.trim());
-          }
+        if (lastSiblingOfFix && lastSiblingOfFix.nextSibling) {
+             parent.insertBefore(endComment, lastSiblingOfFix.nextSibling);
+        } else {
+             parent.appendChild(endComment);
         }
       }
+      // --- END: New Marker-Based Fix Application ---
 
-      const contentContainer = document.createElement('div');
-      contentContainer.className = 'checkra-applied-fix-content';
-      const fixedContentFragment = this.createFragmentFromHTML(fixedHtml);
-      if (!fixedContentFragment || fixedContentFragment.childNodes.length === 0) {
-        throw new Error('Failed to parse fixed HTML for content container fragment.');
-      }
-      contentContainer.appendChild(fixedContentFragment);
-      wrapper.appendChild(contentContainer);
-
+      // --- Controls Container (Temporary: Appended to body) ---
+      // This section will be replaced by OverlayManager in Phase 2
       const controlsContainer = document.createElement('div');
       controlsContainer.className = 'checkra-fix-controls-container';
-
+      controlsContainer.setAttribute('data-controls-for-fix', fixId); // To identify it later
+      
       const closeBtn = this.createAppliedFixButton('close', fixId);
       const toggleBtn = this.createAppliedFixButton('toggle', fixId);
       const copyBtn = this.createAppliedFixButton('copy', fixId);
-      // const rateBtn = this.createAppliedFixButton('rate', fixId); // Declaration moved down
-      
-      controlsContainer.appendChild(copyBtn);
-      controlsContainer.appendChild(toggleBtn);
-      // Conditionally add rateBtn
-      let rateBtn: HTMLButtonElement | null = null; // Declare rateBtn, initially null
+      let rateBtn: HTMLButtonElement | null = null;
       if (this.enableRating) {
         rateBtn = this.createAppliedFixButton('rate', fixId);
-        controlsContainer.appendChild(rateBtn); // Append if enabled
+        controlsContainer.appendChild(rateBtn);
       }
-      controlsContainer.appendChild(closeBtn); // Close button is last
-
-      wrapper.appendChild(controlsContainer);
-
-      const parent = originalSelectedElement.parentNode;
-
-      if (insertionMode === 'replace') {
-        parent.insertBefore(wrapper, originalSelectedElement.nextSibling);
-        originalSelectedElement.remove();
-      } else if (insertionMode === 'insertBefore') {
-        parent.insertBefore(wrapper, originalSelectedElement);
-      } else if (insertionMode === 'insertAfter') {
-        parent.insertBefore(wrapper, originalSelectedElement.nextSibling);
-      }
+      controlsContainer.appendChild(copyBtn); // Order based on typical UIs
+      controlsContainer.appendChild(toggleBtn);
+      controlsContainer.appendChild(closeBtn);
+      document.body.appendChild(controlsContainer);
+      // TODO PHASE 2: Position controlsContainer near actualAppliedElement using getBoundingClientRect()
+      // For now, it will appear at the bottom of the body or default position.
+      // --- End Controls Container ---
 
       const finalStableSelector = stableSelector || this.stableSelectorForCurrentCycle;
       if (!finalStableSelector) {
-        customError(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}. Cannot reliably apply or store fix.`);
+        customError(`[FeedbackViewerLogic] Critical error: Stable selector is missing for fix ID ${fixId}.`);
+        startComment?.remove();
+        endComment?.remove();
         this.showError(`Failed to apply fix: Stable target selector missing for fix ${fixId}.`);
-        if (wrapper.parentNode) wrapper.remove();
         return;
       }
-
+      
       const fixInfoData: AppliedFixInfo = {
         originalElementId: fixId,
         originalOuterHTML: originalHtml,
         fixedOuterHTML: fixedHtml,
-        appliedWrapperElement: wrapper,
+        markerStartNode: startComment, // These are defined in the function scope
+        markerEndNode: endComment,     // and will hold the correct Comment nodes
+        actualAppliedElement: actualAppliedElement, // Will be null if fixedHtml was empty
         isCurrentlyFixed: true,
         stableTargetSelector: finalStableSelector,
         insertionMode: insertionMode, 
-        requestBody: requestBody,
-        isRated: false, // Initialize isRated to false for a new fix
+        requestBody: requestBody, 
+        isRated: false,
+        resolvedColors: this.currentResolvedColors ? { ...this.currentResolvedColors } : undefined
       };
       this.appliedFixes.set(fixId, fixInfoData);
 
-      // Apply .rated class and disable if initially rated (e.g. from restored state)
-      if (rateBtn && fixInfoData.isRated) { // Check if rateBtn exists
-        rateBtn.classList.add('rated');
-        (rateBtn as HTMLButtonElement).disabled = true;
+      // If actualAppliedElement is null, it means fixedHtml was empty or only comments/text.
+      if (!actualAppliedElement) {
+        customWarn(`[FeedbackViewerLogic] Fix ${fixId} (${insertionMode}) resulted in no applied element. Markers may be present but content is empty. Controls not fully activated.`);
+        // For 'replace' mode, if fixedHtml was empty, originalSelectedElement was kept and only startComment was added then removed.
+        // No further marker cleanup needed here for 'replace' as it's handled within its specific block.
+        if (insertionMode === 'insertBefore' || insertionMode === 'insertAfter') {
+            // If nothing substantial was inserted between the markers for these modes.
+            let sibling = startComment.nextSibling;
+            let onlyMarkers = true;
+            while (sibling && sibling !== endComment) {
+                if (sibling.nodeType === Node.ELEMENT_NODE) {
+                    onlyMarkers = false;
+                    break;
+                }
+                sibling = sibling.nextSibling;
+            }
+            if (onlyMarkers) {
+                customWarn(`[FeedbackViewerLogic] Removing markers for ${fixId} (${insertionMode}) as no element nodes were found between them.`);
+                startComment.remove();
+                endComment.remove();
+            }
+        } 
+        // For 'replace' mode where actualAppliedElement is null, the original element was kept.
+        // The startComment was already removed if newNodes was empty.
+        // If newNodes was not empty but only contained non-element nodes, startComment and endComment might still be around the original element.
+        // This specific sub-case of 'replace' + !actualAppliedElement is tricky because originalSelectedElement itself might have been the only thing between markers briefly.
+        // The logic within the 'replace' block aims to remove originalSelectedElement only if newNodes are concrete.
+        // If originalSelectedElement is still there and markers are around it due to empty/non-element fixedHTML, they should be removed.
+        else if (insertionMode === 'replace') {
+            if (startComment.parentNode && endComment.parentNode && startComment.nextSibling === originalSelectedElement && originalSelectedElement.nextSibling === endComment) {
+                customWarn(`[FeedbackViewerLogic] Removing markers around original element for ${fixId} (replace) as fixedHTML was empty.`);
+                startComment.remove();
+                endComment.remove();
+            } else if (startComment.parentNode && startComment.nextSibling === endComment) { // If markers ended up adjacent
+                customWarn(`[FeedbackViewerLogic] Removing adjacent markers for ${fixId} (replace) as fixedHTML was effectively empty.`);
+                startComment.remove();
+                endComment.remove();
+            }
+        }
+
+        this.fixedOuterHTMLForCurrentCycle = null; 
+        this.removeSelectionHighlight();
+        this.currentResolvedColors = null; 
+        // Controls might have been added to body, remove them too if no actual fix applied
+        const controls = document.querySelector(`.checkra-fix-controls-container[data-controls-for-fix="${fixId}"]`);
+        controls?.remove();
+        this.appliedFixes.delete(fixId); // Also remove from appliedFixes as it's not a valid applied fix
+        this.appliedFixListeners.delete(fixId);
+        return; 
       }
 
       const listeners = {
         close: (e: Event) => this.handleAppliedFixClose(fixId, e),
         toggle: (e: Event) => this.handleAppliedFixToggle(fixId, e),
         copy: (e: Event) => this.handleAppliedFixCopy(fixId, e),
-        // Conditionally add rate listener if rateBtn exists/was created
         ...(rateBtn && { rate: (e: Event) => this.handleAppliedFixRate(fixId, e) })
-      } as any; // Use any here due to conditional property, or type more carefully
+      } as any;
       
       this.appliedFixListeners.set(fixId, listeners);
       closeBtn.addEventListener('click', listeners.close);
       toggleBtn.addEventListener('click', listeners.toggle);
       copyBtn.addEventListener('click', listeners.copy);
-      if (rateBtn && listeners.rate) { // Check if rateBtn and its listener exist
+      if (rateBtn && listeners.rate) {
         rateBtn.addEventListener('click', listeners.rate);
       }
 
-      this.fixedOuterHTMLForCurrentCycle = null;
+      this.fixedOuterHTMLForCurrentCycle = null; 
       this.removeSelectionHighlight();
+      this.currentResolvedColors = null; 
 
     } catch (error) {
       customError('[FeedbackViewerLogic] Error applying fix directly to page:', error);
@@ -1219,25 +1367,26 @@ Your job:
   private createAppliedFixButton(type: 'close' | 'toggle' | 'copy' | 'rate', fixId: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.setAttribute('data-fix-id', fixId);
+    button.classList.add('feedback-fix-btn'); // Common base class
 
     switch (type) {
       case 'close':
-        button.className = 'feedback-fix-close-btn';
+        button.classList.add('feedback-fix-close-btn');
         button.innerHTML = '&times;';
         button.title = 'Discard Fix (Revert to Original)';
         break;
       case 'toggle':
-        button.className = 'feedback-fix-toggle toggled-on'; // Add .toggled-on by default
+        button.classList.add('feedback-fix-toggle', 'toggled-on'); // Add .toggled-on by default
         button.innerHTML = DISPLAY_FIX_SVG; // Always use the "eye open" SVG
         button.title = 'Toggle Original Version'; // Initial title assuming fix is shown first
         break;
       case 'copy':
-        button.className = 'feedback-fix-copy-btn';
+        button.classList.add('feedback-fix-copy-btn');
         button.innerHTML = COPY_FIX_SVG;
         button.title = 'Copy prompt for this fix';
         break;
       case 'rate': // Added case for rate button
-        button.className = 'feedback-fix-rate-btn';
+        button.classList.add('feedback-fix-rate-btn');
         button.innerHTML = '★'; // Star icon
         button.title = 'Rate this fix';
         break;
@@ -2066,14 +2215,17 @@ Your job:
     const fixInfo = this.appliedFixes.get(fixId);
     const rateButton = (event.currentTarget as HTMLElement);
 
-    if (!fixInfo || !fixInfo.appliedWrapperElement || !rateButton || (rateButton as HTMLButtonElement).disabled) {
-      // Also check if button is disabled
-      customWarn(`[FeedbackViewerLogic] Cannot rate: Fix info/elements missing or already rated/disabled for Fix ID: ${fixId}.`);
+    // if (!fixInfo || !fixInfo.appliedWrapperElement || !rateButton || (rateButton as HTMLButtonElement).disabled) { // OLD CHECK
+    // Temporarily adjust check, actualAppliedElement might not be the one with controls yet
+    if (!fixInfo || !rateButton || (rateButton as HTMLButtonElement).disabled) { 
+      customWarn(`[FeedbackViewerLogic] Cannot rate: Fix info missing or button disabled for Fix ID: ${fixId}.`);
       return;
     }
 
     // Check if a rating options container already exists, remove if so to toggle off
-    let existingOptionsContainer = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rating-options');
+    // let existingOptionsContainer = fixInfo.appliedWrapperElement.querySelector('.feedback-fix-rating-options'); // OLD
+    // Query document directly for now; this will be more robust with overlay manager
+    let existingOptionsContainer = document.body.querySelector(`.feedback-fix-rating-options[data-rating-for-fix="${fixId}"]`);
     if (existingOptionsContainer) {
       existingOptionsContainer.remove();
       return; 
@@ -2081,7 +2233,8 @@ Your job:
 
     const ratingOptionsContainer = document.createElement('div');
     ratingOptionsContainer.className = 'feedback-fix-rating-options';
-    ratingOptionsContainer.style.position = 'absolute';
+    ratingOptionsContainer.setAttribute('data-rating-for-fix', fixId); // For querying
+    ratingOptionsContainer.style.position = 'absolute'; 
     ratingOptionsContainer.style.zIndex = '10000'; 
     ratingOptionsContainer.style.right = '0px'; 
     ratingOptionsContainer.style.top = '30px';
@@ -2218,6 +2371,9 @@ Your job:
                 fixId: fixId,
                 tags: selectedChips.size > 0 ? Array.from(selectedChips) : undefined,
                 generatedHtml: fixInfo.fixedOuterHTML,
+                // ADDED: Include resolved color info if available for this fix
+                resolvedPrimaryColorInfo: fixInfo.resolvedColors?.resolvedPrimaryColorInfo,
+                resolvedAccentColorInfo: fixInfo.resolvedColors?.resolvedAccentColorInfo,
               };
               console.log('POSTING fixRated payload:', feedbackPayload);
               eventEmitter.emit('fixRated', feedbackPayload);
@@ -2247,6 +2403,9 @@ Your job:
               rating: rating.value as 1 | 2 | 3 | 4,
               fixId: fixId,
               generatedHtml: fixInfo.fixedOuterHTML,
+              // ADDED: Include resolved color info if available for this fix
+              resolvedPrimaryColorInfo: fixInfo.resolvedColors?.resolvedPrimaryColorInfo,
+              resolvedAccentColorInfo: fixInfo.resolvedColors?.resolvedAccentColorInfo,
             };
             eventEmitter.emit('fixRated', feedbackPayload);
             customWarn(`[FeedbackViewerImpl] Fix rated: ${rating.value} for fixId: ${fixId}`);
@@ -2271,12 +2430,20 @@ Your job:
       document.addEventListener('click', clickOutsideListener, true);
     }, 0);
 
-    const controlsContainer = rateButton.parentElement;
-    if (controlsContainer) {
-        controlsContainer.appendChild(ratingOptionsContainer);
-    } else {
-        fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer);
-    }
+    // const controlsContainer = rateButton.parentElement; // OLD LOGIC
+    // if (controlsContainer) { // OLD LOGIC
+    //     controlsContainer.appendChild(ratingOptionsContainer);
+    // } else {
+        // fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer); // OLD LOGIC
+        // TEMPORARY: Append to body, will be handled by overlay manager
+        // This will likely not be positioned correctly yet.
+        document.body.appendChild(ratingOptionsContainer);
+        // TODO: Position ratingOptionsContainer near rateButton (Phase 2)
+        const rateButtonRect = rateButton.getBoundingClientRect();
+        ratingOptionsContainer.style.top = `${rateButtonRect.bottom + window.scrollY}px`;
+        ratingOptionsContainer.style.left = `${rateButtonRect.left + window.scrollX - (ratingOptionsContainer.offsetWidth / 2) + (rateButtonRect.width / 2)}px`;
+
+    // }
   }
 
   private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
@@ -2369,7 +2536,7 @@ Your job:
         this.originalOuterHTMLForCurrentCycle,
         finalHtmlToApply, // This is the fixedHTML
         insertionMode,
-        this.requestBodyForCurrentCycle,
+        this.requestBodyForCurrentCycle, // Pass the shared request body
         this.stableSelectorForCurrentCycle
     );
 
@@ -2380,7 +2547,11 @@ Your job:
         this.domManager?.updateLastAIMessage(this.activeStreamingAiItem.content, false); 
     }
     this.activeStreamingAiItem = null;
-    this.requestBodyForCurrentCycle = null; // Clear after use, similar to finalizeResponse
+    // Clear the request body for the current cycle AFTER it has been used by applyFixToPage via handleDomUpdate
+    if (this.requestBodyForCurrentCycle?.prompt === this.conversationHistory.find(item => item.type === 'user')?.content) {
+        // Basic check to see if it's the same cycle, can be made more robust
+        this.requestBodyForCurrentCycle = null;
+    }
 
     // Note: applyFixToPage itself calls removeSelectionHighlight, so no need to call it here again.
     // Also, if mode is 'replace', applyFixToPage doesn't nullify currentlyHighlightedElement directly,
@@ -2412,6 +2583,14 @@ Your job:
     }
     const dimmedElements = document.querySelectorAll('.checkra-element-dimmed');
     dimmedElements.forEach(el => el.classList.remove('checkra-element-dimmed'));
+  }
+
+  // --- END: New Types for Color Resolution Event ---
+  // ADDED: New handler for resolved colors event
+  private handleResolvedColorsUpdate(colors: ResolvedColorInfo): void {
+    customWarn('[CheckraImpl] Received internalResolvedColorsUpdate:', colors);
+    this.currentResolvedColors = colors;
+    // Optionally, you could emit another event here if other UI parts need to react instantly
   }
 
   // --- End of CheckraImplementation class ---
