@@ -1,60 +1,60 @@
-import { UiKitDetection } from "@/types";
+import { UiKitDetection } from "../types";
 
 /**
- * Heuristic UI-kit detector.  Looks for attribute/class fingerprints.
- * Currently recognises Flowbite (Tailwind), Preline (Tailwind) and Bootstrap-JS helpers.
+ * Lightweight runtime detector for common UI kits.
+ * Looks for specific script tags, data attributes, or global objects.
  */
-export function detectUiKit(html: string): UiKitDetection {
-  if (!html) return { name: null, confidence: null };
-  const lower = html.toLowerCase();
+export function detectUiKit(htmlStringOrContextElement?: string | HTMLElement): UiKitDetection {
+  const detected: UiKitDetection = { name: null, confidence: null };
+  let content = '';
+  let elementContext: Document | HTMLElement = document;
 
-  type KitSig = { name: string; patterns: RegExp[] };
+  if (typeof htmlStringOrContextElement === 'string') {
+    content = htmlStringOrContextElement.toLowerCase();
+  } else if (htmlStringOrContextElement instanceof HTMLElement) {
+    content = htmlStringOrContextElement.outerHTML.toLowerCase();
+    elementContext = htmlStringOrContextElement.ownerDocument || document;
+  } else {
+    content = document.body.outerHTML.toLowerCase(); // Default to whole body
+  }
 
-  const signatures: KitSig[] = [
-    {
-      name: 'flowbite',
-      patterns: [/data-modal-toggle=/, /data-tooltip-target=/, /flowbite/i]
-    },
-    {
-      name: 'preline',
-      patterns: [/class="[^"]*hs-/, /data-hs-/]
-    },
-    {
-      name: 'daisyui',
-      // DaisyUI uses global classes like btn, card, alert but to reduce false positives look for a combo with daisy specific variables.
-      patterns: [/class="[^"]*(btn|card|alert)[^"]*"/, /data-theme=/]
-    },
-    {
-      name: 'shadcn',
-      // Shadcn/ui leverages Radix primitives – look for data-state attributes plus shadcn classes (e.g., bg-background).
-      patterns: [/data-state=/, /bg-background|text-foreground/]
-    },
-    {
-      name: 'chakra-ui',
-      patterns: [/data-testid="chakra-/, /--chakra-colors-/, /class="[^"]*chakra-/]
-    },
-    {
-      name: 'mui',
-      patterns: [/class="[^"]*mui[a-z0-9-]*-/i, /class="[^"]*Mui[A-Z]/]
-    },
-    {
-      name: 'bootstrap',
-      patterns: [/data-bs-toggle=/, /data-bs-dismiss=/, /data-bs-target=/]
+  // Check for Flowbite (data-hs-* attributes are actually Preline, Flowbite uses data-popover-target etc. and specific classes)
+  // Flowbite often relies on classes like 'flowbite' or specific component classes, and JS via `new Flowbite()` or similar.
+  // More reliable for Flowbite might be checking for `window.Flowbite` or distinctive classes if no script tags are obvious.
+  if (content.includes('flowbite') || (typeof window !== 'undefined' && (window as any).Flowbite)) {
+    detected.name = 'flowbite';
+    detected.confidence = 0.8;
+    return detected;
+  }
+  // Check for Preline (data-hs-* attributes)
+  if (/data-hs-[\w-]+/.test(content) || content.includes('preline.js')) {
+    detected.name = 'preline';
+    detected.confidence = 0.9; // data-hs attributes are quite specific
+    return detected;
+  }
+  
+  // Add checks for other UI kits like Bootstrap components (data-bs-*), MUI (Mui- class prefixes)
+  // This requires more context or specific patterns for those libraries if not covered by detectCssFramework.
+
+  // Example for Bootstrap components (if not already primary CSS framework)
+  if (/data-bs-(toggle|target|dismiss)/.test(content)) {
+    if (detected.name !== 'bootstrap') { // Avoid overriding if already detected as primary framework
+        detected.name = 'bootstrap-components'; // Differentiate from Bootstrap as CSS framework
+        detected.confidence = (detected.confidence || 0) + 0.7;
     }
-  ];
+  }
 
-  let best: UiKitDetection = { name: null, confidence: 0 };
+  // Example for MUI (often has Mui- class prefixes)
+  if (/class="([^"]*\s)?mui-/.test(content)) {
+     if (detected.name !== 'material-ui') { // Avoid overriding
+        detected.name = 'material-ui-components';
+        detected.confidence = (detected.confidence || 0) + 0.7;
+     }
+  }
+  
+  if (detected.name && detected.confidence) {
+    detected.confidence = Math.min(1, detected.confidence);
+  }
 
-  signatures.forEach(sig => {
-    const hits = sig.patterns.filter(p => p.test(lower)).length;
-    if (hits > 0) {
-      const confidence = Math.min(1, hits / sig.patterns.length);
-      if (confidence > (best.confidence ?? 0)) {
-        best = { name: sig.name, confidence };
-      }
-    }
-  });
-
-  if (!best.name) return { name: null, confidence: null };
-  return best;
+  return detected;
 }

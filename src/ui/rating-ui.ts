@@ -74,8 +74,8 @@ export class RatingUI {
             rating: rating.value as 3 | 4,
             fixId: fixId,
             generatedHtml: fixInfo.fixedOuterHTML,
-            resolvedPrimaryColorInfo: fixInfo.resolvedColors?.resolvedPrimaryColorInfo,
-            resolvedAccentColorInfo: fixInfo.resolvedColors?.resolvedAccentColorInfo,
+            resolvedPrimaryColorInfo: fixInfo.resolvedColors?.primary,
+            resolvedAccentColorInfo: fixInfo.resolvedColors?.accent,
           };
           onRateCallback(feedbackPayload);
           this.hideRatingPopover();
@@ -189,8 +189,8 @@ export class RatingUI {
         fixId: fixId,
         tags: selectedChips.size > 0 ? Array.from(selectedChips) : undefined,
         generatedHtml: fixInfo.fixedOuterHTML,
-        resolvedPrimaryColorInfo: fixInfo.resolvedColors?.resolvedPrimaryColorInfo,
-        resolvedAccentColorInfo: fixInfo.resolvedColors?.resolvedAccentColorInfo,
+        resolvedPrimaryColorInfo: fixInfo.resolvedColors?.primary,
+        resolvedAccentColorInfo: fixInfo.resolvedColors?.accent,
       };
       onRateCallback(feedbackPayload);
       onFormSubmitOrCancel(); // This will hide the popover

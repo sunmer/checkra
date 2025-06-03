@@ -152,8 +152,8 @@ export interface ColorResolutionDetails {
 }
 
 export interface ResolvedColorInfo {
-  resolvedPrimaryColorInfo?: ColorResolutionDetails;
-  resolvedAccentColorInfo?: ColorResolutionDetails;
+  primary?: ColorResolutionDetails;
+  accent?: ColorResolutionDetails;
   // Potentially other color types if backend expands, e.g., resolvedTextColorInfo
 }
 // --- END: New Types for Color Resolution Event ---

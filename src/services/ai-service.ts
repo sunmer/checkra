@@ -1,8 +1,6 @@
 import Settings from '../settings';
 import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
-// import html2canvas from 'html2canvas'; // Eager import removed
-import { CSS_ATOMIC_MAP } from '../utils/css-map';
 import { detectCssFramework } from '../utils/framework-detector';
 import { detectUiKit } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
@@ -51,8 +49,7 @@ const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): Record
   const map: Record<string,string | true> = {};
   if (frameworkName === 'tailwind') {
     classesUsed.forEach(cls => {
-      const decl = CSS_ATOMIC_MAP[cls];
-      map[cls] = decl || true;
+      map[cls] = true;
     });
   } else {
     // Fallback: compute styles directly.
@@ -192,33 +189,6 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
   }
 };
 
-// ---------- NEW HELPER: mapHexToUtilityToken -----------------------------
-/**
- * Try to translate a hex colour (e.g. "#2563eb") to a utility class token
- * understood by the detected CSS framework (e.g. "bg-blue-600" for Tailwind).
- * Currently supports Tailwind by scanning CSS_ATOMIC_MAP.  Returns null if no
- * mapping is found.
- */
-function mapHexToUtilityToken(hex: string | undefined | null, frameworkName: string): string | null {
-  if (!hex) return null;
-  const normalised = hex.trim().toLowerCase();
-  if (!normalised.startsWith('#')) return null;
-
-  if (frameworkName === 'tailwind') {
-    for (const [token, decl] of Object.entries(CSS_ATOMIC_MAP)) {
-      if (decl && decl.toLowerCase().includes(normalised)) {
-        // Only keep colour-related utility classes
-        if (token.startsWith('bg-') || token.startsWith('text-') || token.startsWith('border-')) {
-          return token;
-        }
-      }
-    }
-  }
-  // TODO: Add Bootstrap / MUI palette lookup here if desired
-  return null;
-}
-// ------------------------------------------------------------------------
-
 /**
  * Gathers metadata from the current page.
  */
@@ -256,16 +226,12 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
       extractColorsFromElement
     );
     if (colours) {
-      const primaryToken = mapHexToUtilityToken(colours.primary, frameworkInfo.name);
-      const accentToken  = mapHexToUtilityToken(colours.accent, frameworkInfo.name);
-
       metadata.brand = {
         inferred: colours,
-        primary: primaryToken ? primaryToken : colours.primary,
-        accent: accentToken ? accentToken : colours.accent,
-        // Pass through tokens as separate fields for backend debugging
-        primaryUtilityToken: primaryToken || null,
-        accentUtilityToken : accentToken  || null,
+        primary: colours.primary,
+        accent: colours.accent,
+        primaryUtilityToken: null,
+        accentUtilityToken : null,
       } as any;
     }
     if (lever) {
@@ -276,9 +242,9 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
     // @ts-ignore
     (metadata as any).perfHints = perf;
     // generate palette if not already done
-    if (colours?.primary && colours?.accent) {
-      const palette = generateColorScheme(colours.primary, colours.accent);
-      if (palette.length === 5) (metadata.brand as any).palette = palette;
+    if (metadata.brand && colours?.primary) {
+        const palette = generateColorScheme(colours.primary, colours.accent);
+        if (palette.length === 5) (metadata.brand as any).palette = palette;
     }
   } catch (err) {
     customWarn('[Checkra Service] Brand extraction failed:', err);
@@ -319,7 +285,7 @@ const fetchFeedbackBase = async (
       processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
       cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
-      uiKitDetectionForPayload = sanitizedHtml ? detectUiKit(sanitizedHtml) : undefined; // Moved here
+      uiKitDetectionForPayload = detectUiKit(sanitizedHtml);
 
       if (insertionMode === 'replace' && sanitizedHtml && sanitizedHtml.length >= 500) {
         originalSentHtmlForPatch = sanitizedHtml;
@@ -336,6 +302,7 @@ const fetchFeedbackBase = async (
       frameworkDetectionForPayload = globalFramework;
       // uiKitDetectionForPayload can be based on document.body.outerHTML if needed, but might be too broad.
       // For now, uiKitDetectionForPayload will only be set if selectedHtml is present.
+      uiKitDetectionForPayload = detectUiKit(); // Call without args to check document.body
     }
     
     // Construct BackendPayloadMetadata
