@@ -7,99 +7,52 @@ import { eventEmitter } from '../core/index';
 import { generateStableSelector } from '../utils/selector-utils';
 import { AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
 import { customWarn, customError } from '../utils/logger';
-import { GenerateSuggestionRequestbody, AddRatingRequestBody, ResolvedColorInfo } from '../types'; // Added BackendPayloadMetadata and RequestBodyFeedback import
-import { OverlayManager, ControlButtonCallbacks } from './overlay-manager'; // MODIFIED: Import ControlButtonCallbacks
-import { AppliedFixStore, AppliedFixInfo } from './applied-fix-store'; // ADDED AppliedFixStore import
-import { RatingUI } from './rating-ui'; // ADDED RatingUI import
-import { SnapshotService, SnapshotOperationResult } from '../services/snapshot-service'; // ADDED SnapshotService import
-import { StatsFetcher, StatsFetcherResult, getFriendlyQueryName } from '../analytics/stats-fetcher'; // ADDED StatsFetcher imports
-import { AuthPendingActionHelper, PendingAction } from '../auth/auth-pending-action-helper'; // ADDED AuthPendingActionHelper import
+import { GenerateSuggestionRequestbody, AddRatingRequestBody, ResolvedColorInfo } from '../types';
+import { OverlayManager, ControlButtonCallbacks } from './overlay-manager';
+import { AppliedFixStore, AppliedFixInfo } from './applied-fix-store';
+import { RatingUI } from './rating-ui';
+import { SnapshotService, SnapshotOperationResult } from '../services/snapshot-service';
+import { StatsFetcher, StatsFetcherResult, getFriendlyQueryName } from '../analytics/stats-fetcher';
+import { AuthPendingActionHelper, PendingAction } from '../auth/auth-pending-action-helper';
+import { rgbToHex } from '../utils/color';
+import { createCenteredLoaderElement } from './loader-factory';
+import { SPECIFIC_HTML_REGEX, GENERIC_HTML_REGEX, SVG_PLACEHOLDER_REGEX } from '../utils/regex';
+import { ConversationHistory, type ConversationItem } from './conversation-history';
 
-
-interface ConversationItem {
-  type: 'user' | 'ai' | 'usermessage' | 'error';
-  content: string;
-  isStreaming?: boolean; // Optional flag for AI messages
-  fix?: { // Optional fix data for AI messages
-    originalHtml: string;
-    fixedHtml: string;
-    fixId: string;
-  };
-}
-const CONVERSATION_HISTORY_KEY = 'checkra_conversation_history';
-
-// Regex patterns for extracting HTML
-const SPECIFIC_HTML_REGEX = /# Complete HTML with All Fixes\s*```(?:html)?\n([\s\S]*?)\n```/i;
-const GENERIC_HTML_REGEX = /```(?:html)?\n([\s\S]*?)\n```/i;
-// Regex for finding SVG placeholders during restoration - UPDATED
-const SVG_PLACEHOLDER_REGEX = /<svg\s+data-checkra-id="([^\"\)]+").*?>[\s\S]*?<\/svg>/g;
-
-// localStorage keys for pending actions
-// const PENDING_ACTION_TYPE_KEY = 'checkra_auth_pending_action_type';
-// const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
-
-// ADDED: Helper function to convert rgb/rgba to hex
-function rgbToHex(rgbString: string): string | null {
-  if (!rgbString || rgbString.toLowerCase() === 'transparent' || rgbString === 'rgba(0, 0, 0, 0)') {
-    return null; // Treat transparent as needing a default fallback (e.g., #FFFFFF)
-  }
-
-  const match = rgbString.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d*\.?\d+))?\)$/i);
-  if (!match) {
-    // If it doesn't match rgb/rgba, it might already be hex or a named color.
-    // For simplicity, if it starts with #, assume it's hex. Otherwise, can't convert here.
-    if (rgbString.startsWith('#')) return rgbString;
-    return null; // Cannot convert other formats like named colors here, fallback needed
-  }
-
-  // If alpha is 0, it's effectively transparent
-  if (match[4] && parseFloat(match[4]) === 0) {
-    return null;
-  }
-
-  const r = parseInt(match[1], 10).toString(16).padStart(2, '0');
-  const g = parseInt(match[2], 10).toString(16).padStart(2, '0');
-  const b = parseInt(match[3], 10).toString(16).padStart(2, '0');
-  return `#${r}${g}${b}`.toUpperCase();
-}
-
-/**
- * Handles the logic, state, and interactions for the feedback viewer.
- */
 export class CheckraImplementation {
   private domElements: CheckraViewerElements | null = null;
   private domManager: CheckraDOM | null = null;
   private settingsModal: SettingsModal | null = null;
-  private overlayManager: OverlayManager; // ADDED: OverlayManager instance
-  private optionsInitialVisibility: boolean; // To store the initial visibility from options
-  private enableRating: boolean; // ADDED: Store enableRating option
-  private appliedFixStore: AppliedFixStore; // ADDED AppliedFixStore instance
-  private ratingUI: RatingUI; // ADDED RatingUI instance
-  private snapshotService: SnapshotService; // ADDED SnapshotService instance
-  private statsFetcher: StatsFetcher; // ADDED StatsFetcher instance
-  private authPendingActionHelper: AuthPendingActionHelper; // ADDED AuthPendingActionHelper instance
+  private overlayManager: OverlayManager;
+  private optionsInitialVisibility: boolean;
+  private enableRating: boolean;
+  private appliedFixStore: AppliedFixStore;
+  private ratingUI: RatingUI;
+  private snapshotService: SnapshotService;
+  private statsFetcher: StatsFetcher;
+  private authPendingActionHelper: AuthPendingActionHelper;
+  private conversationHistoryManager: ConversationHistory;
 
   // --- State ---
   private isVisible: boolean = false;
   private currentImageDataUrl: string | null = null;
-  private currentlyHighlightedElement: Element | null = null; // << ADDED: Track element with outline
-  private originalOuterHTMLForCurrentCycle: string | null = null; // Store the initial HTML of the selected element
-  private fixedOuterHTMLForCurrentCycle: string | null = null; // Store the AI's suggested HTML (could be multiple elements)
-  private currentFixId: string | null = null; // Unique ID for the element being worked on
-  private stableSelectorForCurrentCycle: string | null = null; // ADDED: Stable selector for the current cycle
-  private currentElementInsertionMode: 'replace' | 'insertBefore' | 'insertAfter' = 'replace'; // Added
-  private currentComputedBackgroundColor: string | null = null; // ADDED for backend WCAG checks
-  private currentResolvedColors: ResolvedColorInfo | null = null; // ADDED: For incoming resolved colors
+  private currentlyHighlightedElement: Element | null = null;
+  private originalOuterHTMLForCurrentCycle: string | null = null;
+  private fixedOuterHTMLForCurrentCycle: string | null = null;
+  private currentFixId: string | null = null;
+  private stableSelectorForCurrentCycle: string | null = null;
+  private currentElementInsertionMode: 'replace' | 'insertBefore' | 'insertAfter' = 'replace';
+  private currentComputedBackgroundColor: string | null = null;
+  private currentResolvedColors: ResolvedColorInfo | null = null;
 
-  private fixIdCounter: number = 0; // Counter for generating unique IDs
+  private fixIdCounter: number = 0;
   private originalSvgsMap: Map<string, string> = new Map();
   private svgPlaceholderCounter: number = 0;
-  private activeStreamingAiItem: ConversationItem | null = null; // ADDED: To track the current AI message being streamed
-  private selectionPlusIconElement: HTMLDivElement | null = null; // Added for persistent '+' icon
-  private pageReplaceLoaderElement: HTMLDivElement | null = null; // Loader for 'replace' mode
+  private selectionPlusIconElement: HTMLDivElement | null = null;
+  private pageReplaceLoaderElement: HTMLDivElement | null = null;
 
   // --- Quick Suggestion Flow ---
-  private queuedPromptText: string | null = null; // Stores prompt chosen before element selection
+  private queuedPromptText: string | null = null;
 
   private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
 
@@ -108,32 +61,32 @@ export class CheckraImplementation {
   private boundRenderUserMessage = this.renderUserMessage.bind(this);
   private boundShowError = this.showError.bind(this);
   private boundFinalizeResponse = this.finalizeResponse.bind(this);
-  private boundToggle = this.toggle.bind(this); // ADDED: Bound toggle method
-  private boundShowFromApi = this.showFromApi.bind(this); // ADDED: Bound method for API show
-  private boundHandleSuggestionClick = this.handleSuggestionClick.bind(this); // NEW: Bound handler for onboarding suggestion
-  private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed'; // ADDED
-  private conversationHistory: ConversationItem[] = [];
+  private boundToggle = this.toggle.bind(this);
+  private boundShowFromApi = this.showFromApi.bind(this);
+  private boundHandleSuggestionClick = this.handleSuggestionClick.bind(this);
+  private readonly PANEL_CLOSED_BY_USER_KEY = 'checkra_panel_explicitly_closed';
 
   private boundHandleJsonPatch = this.handleJsonPatch.bind(this);
-  private boundHandleDomUpdate = this.handleDomUpdate.bind(this); // NEW: Bound handler for direct DOM updates
+  private boundHandleDomUpdate = this.handleDomUpdate.bind(this);
 
-  private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null; // ADDED: To store request body for the current fix cycle
-  private boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this); // NEW: Bound handler for request body
-  private boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this); // ADDED
+  private requestBodyForCurrentCycle: GenerateSuggestionRequestbody | null = null;
+  private boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this);
+  private boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
-    initialVisibilityFromOptions: boolean = false, // New parameter
-    enableRating: boolean = false // ADDED: enableRating parameter
+    initialVisibilityFromOptions: boolean = false,
+    enableRating: boolean = false
   ) {
     this.optionsInitialVisibility = initialVisibilityFromOptions;
-    this.enableRating = enableRating; // Store it
-    this.overlayManager = new OverlayManager(); // ADDED: Instantiate OverlayManager
-    this.appliedFixStore = new AppliedFixStore(); // ADDED: Instantiate AppliedFixStore
-    this.ratingUI = new RatingUI(); // ADDED: Instantiate RatingUI
-    this.snapshotService = new SnapshotService(); // ADDED: Instantiate SnapshotService
-    this.statsFetcher = new StatsFetcher(); // ADDED: Instantiate StatsFetcher
-    this.authPendingActionHelper = new AuthPendingActionHelper(); // ADDED: Instantiate AuthPendingActionHelper
+    this.enableRating = enableRating;
+    this.overlayManager = new OverlayManager();
+    this.appliedFixStore = new AppliedFixStore();
+    this.ratingUI = new RatingUI();
+    this.snapshotService = new SnapshotService();
+    this.statsFetcher = new StatsFetcher();
+    this.authPendingActionHelper = new AuthPendingActionHelper();
+    this.conversationHistoryManager = new ConversationHistory();
     // Bind methods
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
@@ -142,108 +95,82 @@ export class CheckraImplementation {
     this.handleMiniSelectClick = this.handleMiniSelectClick.bind(this);
     this.handleSettingsClick = this.handleSettingsClick.bind(this);
     this.boundHandleEscapeKey = this.handleEscapeKey.bind(this);
-    this.boundUpdateResponse = this.updateResponse.bind(this);
-    this.boundRenderUserMessage = this.renderUserMessage.bind(this);
-    this.boundShowError = this.showError.bind(this);
-    this.boundFinalizeResponse = this.finalizeResponse.bind(this);
   }
 
   public initialize(
     domManager: CheckraDOM,
     settingsModal: SettingsModal
   ): void {
-    // --- ALWAYS reset conversation history and onboarding flag on page load ---
     try {
-      localStorage.removeItem(CONVERSATION_HISTORY_KEY);
+      this.conversationHistoryManager.clearHistory();
       localStorage.removeItem('checkra_onboarded');
     } catch (e) {
       // Failing silently is acceptable; some environments block localStorage
     }
 
-    // Get elements from domManager inside initialize
     const handleClose = () => this.hide(true, true);
     this.domElements = domManager.create(handleClose);
-    this.domManager = domManager; // Store reference to DOM manager
+    this.domManager = domManager;
     this.settingsModal = settingsModal;
-    this.loadHistory();
-    if (this.domManager && this.conversationHistory.length > 0) {
-      this.domManager.renderFullHistory(this.conversationHistory);
-    }
-    this.ratingUI.applyStyles(); // ADDED: Apply RatingUI styles
+    this.conversationHistoryManager.setDomManager(domManager);
 
-    // --- Setup Listeners ---
+    this.ratingUI.applyStyles();
+
     this.domElements.promptTextarea.addEventListener('keydown', this.handleTextareaKeydown);
     this.domElements.submitButton.addEventListener('click', this.handleSubmit);
-
-    // Add listener for mini select button
     this.domElements.miniSelectButton?.addEventListener('click', this.handleMiniSelectClick);
-
-    // Add listener for settings button
     this.domElements.settingsButton?.addEventListener('click', this.handleSettingsClick);
     eventEmitter.on('aiResponseChunk', this.boundUpdateResponse);
     eventEmitter.on('aiUserMessage', this.boundRenderUserMessage);
     eventEmitter.on('aiError', this.boundShowError);
     eventEmitter.on('aiFinalized', this.boundFinalizeResponse);
-    eventEmitter.on('toggleViewerShortcut', this.boundToggle); // ADDED: Subscribe to toggle shortcut event
-    eventEmitter.on('showViewerApi', this.boundShowFromApi); // ADDED: Listen for API show event
-    // Listen for onboarding suggestion clicks
+    eventEmitter.on('toggleViewerShortcut', this.boundToggle);
+    eventEmitter.on('showViewerApi', this.boundShowFromApi);
     eventEmitter.on('onboardingSuggestionClicked', this.boundHandleSuggestionClick);
     eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
-    eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate); // NEW: Listen for direct DOM updates
-    eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared); // NEW: Listen for request body from ai-service
-    eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate); // ADDED
+    eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate);
+    eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
+    eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
 
-    // Add event listener for stats badges clicks (delegated to responseContent)
     this.domElements.responseContent.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
       if (target.classList.contains('checkra-stat-badge') && target.dataset.queryname) {
-        // MODIFIED: Call new handler that uses StatsFetcher
         this.initiateStatsFetch(target.dataset.queryname);
       }
     });
 
     this.addGlobalListeners();
 
-    // --- Initial Visibility Logic --- 
     const panelWasClosedByUser = localStorage.getItem(this.PANEL_CLOSED_BY_USER_KEY) === 'true';
 
     if (this.optionsInitialVisibility && !panelWasClosedByUser) {
-      this.showFromApi(false); // Show programmatically, don't mark as user action for clearing flags
+      this.showFromApi(false);
     } else {
-      // Panel is intended to be hidden or was closed by user.
-      // Ensure it's hidden if not already (though DOM manager likely handles this by not calling .show())
       if (this.isVisible) {
-        this.hide(false); // Programmatic hide if somehow visible
+        this.hide(false);
       }
-      // Show availability toast if panel is hidden and toast not shown this session
-      // Ensure this.domManager is checked, and also this.isVisible before showing toast.
       if (this.domManager && !this.isVisible && !sessionStorage.getItem('checkra_toast_shown_session')) {
-        setTimeout(() => { // setTimeout to allow other UI updates to settle
-          if (this.domManager && !this.isVisible) { // Double check, state might change rapidly
+        setTimeout(() => {
+          if (this.domManager && !this.isVisible) {
              this.domManager.showAvailabilityToast();
              sessionStorage.setItem('checkra_toast_shown_session', 'true');
           }
-        }, 250); 
+        }, 250);
       }
     }
-    // Handle Supabase error query params (e.g. server_error) to avoid auth loops
     this.handleAuthErrorInUrl();
-
-    // Check for and handle pending actions after auth callback
     this.handlePendingActionAfterLogin();
-    eventEmitter.emit('feedbackViewerImplReady'); // Emit event after all initialization
+    eventEmitter.emit('feedbackViewerImplReady');
   }
 
   public cleanup(): void {
     if (!this.domElements) return;
 
-    // Remove general listeners
     this.domElements.promptTextarea.removeEventListener('keydown', this.handleTextareaKeydown);
     this.domElements.submitButton.removeEventListener('click', this.handleSubmit);
 
-    this.overlayManager.removeAllControlsAndOverlay(); // MODIFIED: Ensures all controls managed by OverlayManager are cleaned up
+    this.overlayManager.removeAllControlsAndOverlay();
 
-    // Remove mini select listener
     this.domElements.miniSelectButton?.removeEventListener('click', this.handleMiniSelectClick);
     eventEmitter.off('aiResponseChunk', this.boundUpdateResponse);
     eventEmitter.off('aiUserMessage', this.boundRenderUserMessage);
@@ -369,23 +296,19 @@ export class CheckraImplementation {
   public updateResponse(chunk: string): void {
     if (!this.domManager || !this.domElements) return;
 
-    const currentStreamItem = this.activeStreamingAiItem;
+    const currentStreamItem = this.conversationHistoryManager.getActiveStreamingAIItem();
 
     if (currentStreamItem) {
-    } else {
-      const lastItemInHistory = this.conversationHistory.length > 0 ? this.conversationHistory[this.conversationHistory.length - 1] : null;
-      customWarn(`[FeedbackViewerImpl] updateResponse: activeStreamingAiItem is null. Last item in history: ${lastItemInHistory?.type}, streaming: ${lastItemInHistory?.isStreaming}`);
-      return;
-    }
+      const newContent = currentStreamItem.content + chunk;
+      this.conversationHistoryManager.updateLastAIMessage(newContent, true);
 
-    if (currentStreamItem.type === 'ai' && currentStreamItem.isStreaming) {
-      currentStreamItem.content += chunk;
-      this.domManager.updateLastAIMessage(currentStreamItem.content, true);
-
-      const hasHtmlCode = GENERIC_HTML_REGEX.test(currentStreamItem.content);
+      const hasHtmlCode = GENERIC_HTML_REGEX.test(newContent);
       this.domManager.updateLoaderVisibility(true, hasHtmlCode ? 'Creating new version...' : 'Loading...');
     } else {
-      customWarn(`[FeedbackViewerImpl] updateResponse called but currentStreamItem (activeStreamingAiItem) is not an AI message or not streaming. Type: ${currentStreamItem.type}, Streaming: ${currentStreamItem.isStreaming}`);
+      const history = this.conversationHistoryManager.getHistory();
+      const lastItemInHistory = history.length > 0 ? history[history.length - 1] : null;
+      customWarn(`[FeedbackViewerImpl] updateResponse: activeStreamingAiItem is null. Last item in history: ${lastItemInHistory?.type}, streaming: ${lastItemInHistory?.isStreaming}`);
+      return;
     }
   }
 
@@ -394,42 +317,40 @@ export class CheckraImplementation {
 
     this.hidePageLoaders(); // Hide page loaders when response is finalized
 
-    const streamToFinalize = this.activeStreamingAiItem;
+    const streamToFinalize = this.conversationHistoryManager.getActiveStreamingAIItem();
 
     if (streamToFinalize && streamToFinalize.type === 'ai' && streamToFinalize.isStreaming) {
-      streamToFinalize.isStreaming = false;
       this.extractAndStoreFixHtml();
       
+      let fixDataForHistory: { originalHtml: string; fixedHtml: string; fixId: string } | undefined = undefined;
       if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
-        streamToFinalize.fix = {
+        fixDataForHistory = {
           originalHtml: this.originalOuterHTMLForCurrentCycle,
           fixedHtml: this.fixedOuterHTMLForCurrentCycle,
           fixId: this.currentFixId
         };
       }
-      this.saveHistory();
-      this.domManager.updateLastAIMessage(streamToFinalize.content, false);
-      this.activeStreamingAiItem = null;
+      this.conversationHistoryManager.finalizeLastAIItem(fixDataForHistory);
     } else {
       customWarn(`[FeedbackViewerImpl] finalizeResponse called but no active AI message was streaming or found. Active item state: type=${streamToFinalize?.type}, streaming=${streamToFinalize?.isStreaming}`);
-      const lastHistoryAI = [...this.conversationHistory].reverse().find(item => item.type === 'ai' && item.isStreaming);
+      const history = this.conversationHistoryManager.getHistory();
+      const lastHistoryAI = [...history].reverse().find(item => item.type === 'ai' && item.isStreaming);
+
       if (lastHistoryAI) {
         customWarn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - found a different streaming AI item in history. Finalizing it.", lastHistoryAI);
-        lastHistoryAI.isStreaming = false;
-        this.extractAndStoreFixHtml(); // Ensure fix HTML is extracted for this fallback case too
+        this.extractAndStoreFixHtml();
+        let fixDataForHistory: { originalHtml: string; fixedHtml: string; fixId: string } | undefined = undefined;
         if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForCurrentCycle && this.currentFixId) {
-            lastHistoryAI.fix = { // Also store fix data if applicable
-                originalHtml: this.originalOuterHTMLForCurrentCycle,
-                fixedHtml: this.fixedOuterHTMLForCurrentCycle,
-                fixId: this.currentFixId
+            fixDataForHistory = {
+              originalHtml: this.originalOuterHTMLForCurrentCycle,
+              fixedHtml: this.fixedOuterHTMLForCurrentCycle,
+              fixId: this.currentFixId
             };
         }
-        this.saveHistory();
-        this.domManager.updateLastAIMessage(lastHistoryAI.content, false);
+        this.conversationHistoryManager.finalizeLastAIItem(fixDataForHistory);
       } else {
          customWarn("[FeedbackViewerImpl DEBUG] finalizeResponse: Fallback - no streaming AI item found in history either.");
       }
-      this.activeStreamingAiItem = null;
     }
 
     this.domManager.updateLoaderVisibility(false);
@@ -502,8 +423,7 @@ export class CheckraImplementation {
       content: errorHtmlContent, // This will be HTML
     };
 
-    this.conversationHistory.push(errorItem);
-    this.saveHistory(errorItem); // Pass the new item to save incrementally
+    this.conversationHistoryManager.saveHistory(errorItem);
 
     if (this.domManager) {
       this.domManager.appendHistoryItem(errorItem); // Use appendHistoryItem
@@ -538,7 +458,6 @@ export class CheckraImplementation {
     this.stableSelectorForCurrentCycle = null;
     this.originalSvgsMap.clear();
     this.svgPlaceholderCounter = 0;
-    this.activeStreamingAiItem = null; 
     this.hidePageLoaders(); // Hide page loaders on new selection
     this.currentComputedBackgroundColor = null; // Reset for next cycle
     this.currentResolvedColors = null; // ADDED: Reset for next cycle
@@ -551,9 +470,7 @@ export class CheckraImplementation {
       return;
     }
     const userMessageItem: ConversationItem = { type: 'usermessage', content: message };
-    // We save it to history, and appendHistoryItem will also render it.
-    this.saveHistory(userMessageItem); 
-    // No direct call to domManager.appendHistoryItem here as saveHistory handles it.
+    this.conversationHistoryManager.saveHistory(userMessageItem);
   }
 
   // --- UI Event Handlers ---
@@ -667,17 +584,10 @@ export class CheckraImplementation {
       // imageDataToSend remains null, so no image will be sent
     }
 
-    this.saveHistory({ type: 'user', content: promptText });
+    this.conversationHistoryManager.saveHistory({ type: 'user', content: promptText });
     
     const newAiPlaceholder: ConversationItem = { type: 'ai', content: '', isStreaming: true };
-    this.saveHistory(newAiPlaceholder);
-    if (this.conversationHistory.length > 0 && 
-        this.conversationHistory[this.conversationHistory.length - 1].type === 'ai') {
-      this.activeStreamingAiItem = this.conversationHistory[this.conversationHistory.length - 1];
-    } else {
-      customError("[FeedbackViewerLogic ERROR] handleSubmit: Failed to set activeStreamingAiItem after adding AI placeholder.");
-      this.activeStreamingAiItem = null;
-    }
+    this.conversationHistoryManager.saveHistory(newAiPlaceholder);
 
     let processedHtmlForAI = this.originalOuterHTMLForCurrentCycle; 
     this.originalSvgsMap.clear();
@@ -743,7 +653,6 @@ export class CheckraImplementation {
           throw new Error('Failed to parse original HTML for revert.');
         }
         parent.insertBefore(originalFragment, markerEndNode);
-        // No need to re-tag or update actualAppliedElement as the fix is being removed.
       }
       
       markerStartNode.remove();
@@ -801,21 +710,17 @@ export class CheckraImplementation {
             firstNewElement = firstNewElement.nextSibling;
         }
         
-        // Check if actual element changed or if controls were not visible (e.g., after toggling to empty then back to content)
-        if (fixInfo.actualAppliedElement !== newActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)) { 
+        if (fixInfo.actualAppliedElement !== newActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)) {
             const oldActualAppliedElement = fixInfo.actualAppliedElement;
             fixInfo.actualAppliedElement = newActualAppliedElement;
 
-            if (newActualAppliedElement) { 
-                // If new element exists, and it's different, or controls were hidden, update/show controls
+            if (newActualAppliedElement) {
                 if (newActualAppliedElement !== oldActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)){
                     this.overlayManager.showControlsForFix(fixId, newActualAppliedElement, this.getControlCallbacksForFix(fixId));
                 } else {
-                    // Element is the same, controls are visible, just ensure position is correct
                     this.overlayManager.updateControlsPositionForFix(fixId, newActualAppliedElement);
                 }
             } else {
-                // No new element found (e.g., toggled to an empty string or only comments)
                 this.overlayManager.hideControlsForFix(fixId);
             }
         }
@@ -892,14 +797,12 @@ export class CheckraImplementation {
       uniqueSelector: stableTargetSelector,
       originalOuterHTMLSnippet: originalOuterHTML.substring(0, 250) + (originalOuterHTML.length > 250 ? '...' : ''),
       originalTextContentSnippet: originalTextContent.substring(0, 150) + (originalTextContent.length > 150 ? '...' : ''),
-      // Provide full HTML for the assistant to work with, snippets are for quick identification aids.
       originalOuterHTML: originalOuterHTML,
       proposedOuterHTML: fixedOuterHTML
     };
 
     const jsonPayloadString = JSON.stringify(jsonPayload, null, 2);
 
-    // Construct the full prompt including instructions for the AI coding assistant
     const fullPrompt = `
 You are an autonomous coding agent with read-write access to the repository.
 
@@ -994,7 +897,8 @@ Your job:
       // Already set via JSON patch handling; skip extraction
       return;
     }
-    const aiItems = this.conversationHistory.filter(item => item.type === 'ai');
+    const history = this.conversationHistoryManager.getHistory();
+    const aiItems = history.filter(item => item.type === 'ai');
     const lastAiItem = aiItems.length > 0 ? aiItems[aiItems.length - 1] : null;
 
     if (!lastAiItem || !lastAiItem.content) {
@@ -1051,7 +955,7 @@ Your job:
 
           // Clean the AI bubble to only show analysis portion (if any)
           if (analysisPortion && lastAiItem) {
-            lastAiItem.content = analysisPortion;
+            this.conversationHistoryManager.setLastAIItemContent(analysisPortion);
           }
         } else {
           customWarn('[FeedbackViewerLogic DEBUG] extractAndStoreFixHtml: Fallback extraction failed to produce valid HTML fragment.');
@@ -1337,53 +1241,6 @@ Your job:
     eventEmitter.emit('viewerDidShow'); // Emit after showing
   }
 
-  private loadHistory(): void {
-    try {
-      const storedHistory = localStorage.getItem(CONVERSATION_HISTORY_KEY);
-      if (storedHistory) {
-        const parsedHistory = JSON.parse(storedHistory) as ConversationItem[];
-        // Ensure loaded items have isStreaming set to false for past AI messages
-        this.conversationHistory = parsedHistory.map(item => {
-          if (item.type === 'ai') {
-            return { ...item, isStreaming: false };
-          }
-          return item;
-        });
-        // TODO: Add call to domManager to render this history
-      } else {
-        this.conversationHistory = [];
-      }
-    } catch (e) {
-      customError('[FeedbackViewerImpl] Failed to load or parse conversation history:', e);
-      this.conversationHistory = []; // Start fresh on error
-      localStorage.removeItem(CONVERSATION_HISTORY_KEY); // Clear corrupted data
-    }
-  }
-
-  private saveHistory(newItem?: ConversationItem): void { // Made newItem optional
-    if (newItem) {
-      if (newItem.type === 'ai') {
-        newItem.isStreaming = true; // New AI messages start streaming
-        // newItem.content = ''; // Content will be provided or start empty
-      }
-      this.conversationHistory.push(newItem);
-    }
-    try {
-      // Always save the full history state when called
-      localStorage.setItem(CONVERSATION_HISTORY_KEY, JSON.stringify(this.conversationHistory));
-    } catch (e) {
-      customError('[FeedbackViewerImpl] Failed to save conversation history:', e);
-    }
-
-    // Trigger DOM update ONLY if a NEW item was added
-    if (this.domManager && newItem) {
-      this.domManager.appendHistoryItem(newItem);
-    } else if (this.domManager) {
-      // If newItem is null, it means an update happened in updateResponse/finalizeResponse.
-      // Those methods are now responsible for calling domManager.updateLastAIMessage directly.
-      // So, no DOM update needed here when newItem is null.
-    }
-  }
   private removeSelectionHighlight(): void {
     if (this.currentlyHighlightedElement) {
       this.currentlyHighlightedElement.classList.remove(
@@ -1394,362 +1251,18 @@ Your job:
         'checkra-selected-insert-before',
         'checkra-selected-insert-after',
         'checkra-selected-replace',
-        'checkra-element-dimmed' // Ensure dimmed is removed here too
+        'checkra-element-dimmed'
       );
     }
     if (this.selectionPlusIconElement && this.selectionPlusIconElement.parentNode) {
-      this.selectionPlusIconElement.classList.remove('loading'); // Ensure loading is removed from plus icon
+      this.selectionPlusIconElement.classList.remove('loading');
       this.selectionPlusIconElement.parentNode.removeChild(this.selectionPlusIconElement);
       this.selectionPlusIconElement = null;
     }
-    // Also ensure replace loader is removed if selection is cleared while it was active
     if (this.pageReplaceLoaderElement) {
         this.pageReplaceLoaderElement.remove();
         this.pageReplaceLoaderElement = null;
     }
-  }
-
-  // --- NEW Command Handlers using SnapshotService ---
-  private async handlePublishCommand(): Promise<void> {
-    if (this.appliedFixStore.getSize() === 0) {
-      this.renderUserMessage("No changes have been applied to publish.");
-      return;
-    }
-    this.renderUserMessage("Publishing changes...");
-    try {
-      const result: SnapshotOperationResult = await this.snapshotService.publishSnapshot(this.appliedFixStore.getAll());
-      this.renderUserMessage(result.message); // Display message from service (can be multi-part)
-      if (result.success && result.cdnUrl) {
-        this.renderUserMessage(`Share URL: <a href="${result.cdnUrl}" target="_blank" rel="noopener noreferrer">${result.cdnUrl}</a>`);
-      } else if (!result.success && result.snapshotId) {
-        // Handle cases like promotion failed but was stored
-        this.renderUserMessage(`Snapshot ID (stored but not fully published): ${result.snapshotId.substring(0,8)}...`);
-      }
-    } catch (error) {
-      if (error instanceof AuthenticationRequiredError) {
-        // Pass the current applied fixes map to be stored for resumption
-        await this.handleAuthenticationRequiredAndRedirect('publish', Array.from(this.appliedFixStore.getAll().entries()), error);
-        this.renderUserMessage("Authentication required to publish. Please log in to continue.");
-      } else {
-        customError("[FeedbackViewerImpl] Error during publish command:", error);
-        const displayErrorMessage = error instanceof Error ? error.message : String(error);
-        this.showError(`Failed to publish: ${displayErrorMessage}`);
-      }
-    }
-  }
-
-  private async handleSaveDraftCommand(): Promise<void> {
-    if (this.appliedFixStore.getSize() === 0) {
-      this.renderUserMessage("No changes have been applied to save as a draft.");
-      return;
-    }
-    this.renderUserMessage("Saving draft...");
-    try {
-      const result: SnapshotOperationResult = await this.snapshotService.saveSnapshotAsDraft(this.appliedFixStore.getAll());
-      this.renderUserMessage(result.message);
-      if (result.success && result.accessUrl) {
-        this.renderUserMessage(`Access your draft (owner only): <a href="${result.accessUrl}" target="_blank" rel="noopener noreferrer">${result.accessUrl}</a>`);
-      }
-    } catch (error) {
-      if (error instanceof AuthenticationRequiredError) {
-        // Pass the current applied fixes map to be stored for resumption
-        await this.handleAuthenticationRequiredAndRedirect('saveDraft', Array.from(this.appliedFixStore.getAll().entries()), error);
-        this.renderUserMessage("Authentication required to save draft. Please log in and try again.");
-      } else {
-        customError("[FeedbackViewerImpl] Error during save draft command:", error);
-        const displayErrorMessage = error instanceof Error ? error.message : String(error);
-        this.showError(`Failed to save draft: ${displayErrorMessage}`);
-      }
-    }
-  }
-  // --- END NEW Command Handlers ---
-
-  private handleJsonPatch(patchEvent: { payload: any; originalHtml: string }): void {
-    try {
-      const { payload, originalHtml } = patchEvent;
-
-      let patchArray: any = null;
-      if (typeof payload === 'string') {
-        try {
-          patchArray = JSON.parse(payload);
-        } catch (e) {
-          customError('[FeedbackViewerImpl] Failed to parse JSON patch payload string:', e, payload);
-          this.showError('Failed to parse JSON patch from AI response.');
-          return;
-        }
-      } else {
-        patchArray = payload;
-      }
-
-      customWarn('[FeedbackViewerImpl] Received aiJsonPatch payload. Type:', typeof patchArray, 'Array?', Array.isArray(patchArray));
- 
-      if (!Array.isArray(patchArray)) {
-        customError('[FeedbackViewerImpl] Patch payload is not an array:', patchArray);
-        this.showError('Invalid JSON patch received from AI.');
-        return;
-      }
-
-      customWarn('[FeedbackViewerImpl] Patch array length:', patchArray.length, 'First element snippet:', JSON.stringify(patchArray[0]).slice(0,150));
- 
-      // Extract the replacement HTML from the patch (root-level replace op)
-      let updatedHtml: string | null = null;
-      for (const op of patchArray) {
-        if (op && op.op === 'replace' && (op.path === '' || op.path === '/')) {
-          updatedHtml = op.value as string;
-          break;
-        }
-      }
-
-      if (!updatedHtml || typeof updatedHtml !== 'string') {
-        customWarn('[FeedbackViewerImpl] No applicable replace op found in JSON patch. Falling back to originalHtml.');
-        updatedHtml = originalHtml;
-      }
-
-      // Clean up: if the value includes commentary or markdown before the real HTML, trim to first HTML tag
-      const firstTagIndex = updatedHtml.indexOf('<');
-      if (firstTagIndex > 0) {
-        updatedHtml = updatedHtml.slice(firstTagIndex);
-      }
-
-      // Restore any SVG placeholders back to real SVGs
-      try {
-        updatedHtml = this.postprocessHtmlFromAI(updatedHtml);
-      } catch (e) {
-        customWarn('[FeedbackViewerImpl] postprocessHtmlFromAI failed on JSON patch HTML:', e);
-      }
-
-      // Remove any leading comment or plaintext nodes that are not valid elements
-      const scrubLeadingNonElement = (html: string): string => {
-        const frag = this.createFragmentFromHTML(html);
-        if (!frag) return html;
-
-        // Remove nodes from the start until we hit an element node
-        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
-          const textNode = frag.firstChild;
-          if (textNode.nodeType === Node.TEXT_NODE) {
-            // If it's just whitespace, remove; if it's visible text (human commentary), also drop it.
-            const textContent = textNode.textContent || '';
-            if (textContent.trim() === '') {
-              textNode.parentNode?.removeChild(textNode);
-            } else {
-              // For non-whitespace text, also remove – commentary should not be inserted into DOM
-              textNode.parentNode?.removeChild(textNode);
-            }
-          } else {
-            // Comment node – always remove
-            textNode.parentNode?.removeChild(textNode);
-          }
-        }
-
-        // Serialize back by creating a temporary container
-        const tempContainer = document.createElement('div');
-        tempContainer.appendChild(frag);
-        return tempContainer.innerHTML;
-      };
-
-      updatedHtml = scrubLeadingNonElement(updatedHtml);
-
-      const testFrag = this.createFragmentFromHTML(updatedHtml);
-      if (!testFrag || testFrag.childNodes.length === 0) {
-        customError('[FeedbackViewerImpl] Parsed HTML from JSON patch is empty/invalid after scrubbing – will skip applying.');
-        return;
-      }
-
-      this.fixedOuterHTMLForCurrentCycle = updatedHtml;
-
-      // Ensure there is an active AI placeholder to mark as non-streaming (content was already streamed)
-      if (this.activeStreamingAiItem) {
-        // We simply keep whatever analysis content was streamed; no need to clear it.
-      }
-
-      // After storing fixed HTML, we rely on finalizeResponse (triggered by aiFinalized) to apply the fix.
-
-    } catch (err) {
-      customError('[FeedbackViewerImpl] Error handling aiJsonPatch event:', err);
-      this.showError('An error occurred while applying AI suggested changes.');
-    }
-  }
-
-  // ADDED: Handler for the rating button click
-  private handleAppliedFixRate(fixId: string, anchorElement: HTMLElement): void {
-    if (!this.enableRating) {
-      customWarn('[FeedbackViewerImpl] Rating is disabled. handleAppliedFixRate should not have been called.');
-      return;
-    }
-
-    const fixInfo = this.appliedFixStore.get(fixId);
-    if (!fixInfo) {
-      customWarn(`[FeedbackViewerLogic] Cannot rate: Fix info missing for Fix ID: ${fixId}.`);
-      return;
-    }
-
-    // If already rated, do nothing (RatingUI might also handle this, but good to check)
-    if (fixInfo.isRated) {
-      customWarn(`[FeedbackViewerImpl] Fix ${fixId} already rated. Ignoring request.`);
-      // Optionally, OverlayManager could visually indicate this on the button itself permanently after first rating.
-      return;
-    }
-
-    // Define the callback for when a rating is actually submitted from RatingUI
-    const onRatingSubmitted = (payload: AddRatingRequestBody) => {
-      eventEmitter.emit('fixRated', payload); // Emit event for ai-service or other listeners
-      fixInfo.isRated = true;
-      // Visually update the button via OverlayManager if possible, or RatingUI handles its own closure
-      // For now, assume RatingUI closes itself. We might want to tell OverlayManager to make the button look 'rated'.
-      // Let's disable the button directly for now via the anchorElement reference, though OverlayManager might be better.
-      if (anchorElement && anchorElement instanceof HTMLButtonElement) {
-        anchorElement.classList.add('rated');
-        anchorElement.disabled = true; 
-      }
-      customWarn(`[FeedbackViewerImpl] Rating submitted for ${fixId}. Button styled as rated.`);
-    };
-
-    // Define the callback for when the popover is closed without submitting
-    const onPopoverClosedWithoutSubmit = () => {
-      customWarn(`[FeedbackViewerImpl] Rating popover closed without submission for ${fixId}.`);
-      // Potentially re-enable the button if it was temporarily disabled, though not current flow.
-    };
-
-    // Show the popover using RatingUI service
-    this.ratingUI.showRatingPopover(
-      fixInfo,
-      anchorElement, // This is the rate button, used for positioning
-      fixId,
-      onRatingSubmitted,
-      onPopoverClosedWithoutSubmit
-    );
-
-    // --- REMOVE ALL OLD DOM MANIPULATION LOGIC FOR RATING POPOVER FROM HERE ---
-    // All the code that created ratingOptionsContainer, ratings, optionElement,
-    // feedbackForm, feedbackInput, chipsContainer, submitBtn, and their listeners
-    // should be deleted from this method as RatingUI now handles it.
-  }
-
-  private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
-    customWarn('[CheckraImplementation] Received aiDomUpdateReceived', data);
-    if (!this.currentlyHighlightedElement) {
-      customError('[CheckraImplementation] No currentlyHighlightedElement to apply DOM update to.');
-      this.showError('No element was selected to apply the changes to.');
-      return;
-    }
-
-    const { html, insertionMode } = data;
-    let processedHtml = html;
-
-    const fenceRegex = /^```(?:html)?\n([\s\S]*?)\n```$/i;
-    const fenceMatch = processedHtml.match(fenceRegex);
-    if (fenceMatch && fenceMatch[1]) {
-      processedHtml = fenceMatch[1].trim();
-      customWarn('[CheckraImplementation] Stripped Markdown fences from domUpdateHtml content.');
-    }
-
-    try {
-      processedHtml = this.postprocessHtmlFromAI(processedHtml); 
-      const scrubLeadingNonElement = (incomingHtml: string): string => {
-        const frag = this.createFragmentFromHTML(incomingHtml);
-        if (!frag) return incomingHtml;
-        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
-          const textNode = frag.firstChild;
-          if (textNode.nodeType === Node.TEXT_NODE) {
-            const textContent = textNode.textContent || '';
-            if (textContent.trim() === '') {
-              textNode.parentNode?.removeChild(textNode);
-            } else {
-              textNode.parentNode?.removeChild(textNode);
-            }
-          } else {
-            textNode.parentNode?.removeChild(textNode);
-          }
-        }
-        const tempContainer = document.createElement('div');
-        tempContainer.appendChild(frag);
-        return tempContainer.innerHTML;
-      };
-      processedHtml = scrubLeadingNonElement(processedHtml);
-
-    } catch (e) {
-      customWarn('[CheckraImplementation] postprocessHtmlFromAI or scrubbing failed on domUpdateHtml:', e);
-    }
-
-    const finalHtmlToApply = processedHtml;
-
-    const testFrag = this.createFragmentFromHTML(finalHtmlToApply);
-    if (!testFrag || testFrag.childNodes.length === 0) {
-      customError('[CheckraImplementation] HTML for domUpdate is empty/invalid after processing. Aborting DOM update.');
-      this.showError('AI generated empty content, nothing to apply.');
-      return;
-    }
-
-    // Ensure necessary context is available before calling applyFixToPage
-    if (!this.currentFixId || !this.originalOuterHTMLForCurrentCycle || !this.requestBodyForCurrentCycle || !this.stableSelectorForCurrentCycle) {
-        customError('[CheckraImplementation] Missing context for applyFixToPage in handleDomUpdate.', {
-            fixId: this.currentFixId,
-            originalHtml: this.originalOuterHTMLForCurrentCycle,
-            requestBody: this.requestBodyForCurrentCycle,
-            stableSelector: this.stableSelectorForCurrentCycle
-        });
-        this.showError('Internal error: Could not apply changes due to missing context.');
-        // Fallback to direct insertion without controls if context is missing, to at least show the HTML.
-        // This is a degraded experience but better than nothing if context is somehow lost.
-        if (this.currentlyHighlightedElement) {
-          customWarn('[CheckraImplementation] Fallback: performing direct DOM insertion in handleDomUpdate due to missing context for controls.')
-          try {
-              switch (insertionMode) {
-                  case 'insertBefore': this.currentlyHighlightedElement.insertAdjacentHTML('beforebegin', finalHtmlToApply); break;
-                  case 'insertAfter': this.currentlyHighlightedElement.insertAdjacentHTML('afterend', finalHtmlToApply); break;
-                  case 'replace': this.currentlyHighlightedElement.outerHTML = finalHtmlToApply; this.currentlyHighlightedElement = null; break;
-              }
-              this.removeSelectionHighlight();
-          } catch (directInsertError) {
-              customError('[CheckraImplementation] Error during fallback direct DOM insertion:', directInsertError);
-          }
-        } else {
-          customError('[CheckraImplementation] Cannot perform fallback direct DOM insertion, currentlyHighlightedElement is null.');
-        }
-        return;
-    }
-
-    // Call applyFixToPage to ensure controls are added and fix is tracked
-    this.applyFixToPage(
-        this.currentFixId,
-        this.originalOuterHTMLForCurrentCycle,
-        finalHtmlToApply, // This is the fixedHTML
-        insertionMode,
-        this.requestBodyForCurrentCycle, // Pass the shared request body
-        this.stableSelectorForCurrentCycle
-    );
-
-    customWarn(`[CheckraImplementation] DOM update via applyFixToPage initiated with mode: ${insertionMode}`);
-      
-    if (this.activeStreamingAiItem) {
-        this.activeStreamingAiItem.isStreaming = false;
-        this.domManager?.updateLastAIMessage(this.activeStreamingAiItem.content, false); 
-    }
-    this.activeStreamingAiItem = null;
-    // Clear the request body for the current cycle AFTER it has been used by applyFixToPage via handleDomUpdate
-    if (this.requestBodyForCurrentCycle?.prompt === this.conversationHistory.find(item => item.type === 'user')?.content) {
-        // Basic check to see if it's the same cycle, can be made more robust
-        this.requestBodyForCurrentCycle = null;
-    }
-
-    // Note: applyFixToPage itself calls removeSelectionHighlight, so no need to call it here again.
-    // Also, if mode is 'replace', applyFixToPage doesn't nullify currentlyHighlightedElement directly,
-    // but the element with data-checkra-fix-id is removed and replaced by the wrapper.
-    // The original selection highlight should be gone due to applyFixToPage's own call.
-  }
-
-  private showReplaceLoader(targetElement: Element): void {
-    if (this.pageReplaceLoaderElement) {
-        this.pageReplaceLoaderElement.remove(); // Remove if already exists
-    }
-    this.pageReplaceLoaderElement = createCenteredLoaderElement(); // Uses the module-level helper
-    
-    if (!targetElement.classList.contains('checkra-highlight-container')) {
-        targetElement.classList.add('checkra-highlight-container');
-    }
-
-    targetElement.appendChild(this.pageReplaceLoaderElement);
-    targetElement.classList.add('checkra-element-dimmed');
   }
 
   private hidePageLoaders(): void {
@@ -1971,7 +1484,7 @@ Your job:
       </div>
     `;
     
-    this.saveHistory({ type: 'usermessage', content: badgesHtml }); // Kept as 'usermessage'
+    this.conversationHistoryManager.saveHistory({ type: 'usermessage', content: badgesHtml }); // Kept as 'usermessage'
   }
 
   // NEW: Method to initiate stats fetch and handle its result
@@ -2017,18 +1530,320 @@ Your job:
     }
   }
 
+  // Method to be restored and updated
+  private handleJsonPatch(patchEvent: { payload: any; originalHtml: string }): void {
+    try {
+      const { payload, originalHtml } = patchEvent;
+
+      let patchArray: any = null;
+      if (typeof payload === 'string') {
+        try {
+          patchArray = JSON.parse(payload);
+        } catch (e) {
+          customError('[FeedbackViewerImpl] Failed to parse JSON patch payload string:', e, payload);
+          this.showError('Failed to parse JSON patch from AI response.');
+          return;
+        }
+      } else {
+        patchArray = payload;
+      }
+
+      customWarn('[FeedbackViewerImpl] Received aiJsonPatch payload. Type:', typeof patchArray, 'Array?', Array.isArray(patchArray));
+ 
+      if (!Array.isArray(patchArray)) {
+        customError('[FeedbackViewerImpl] Patch payload is not an array:', patchArray);
+        this.showError('Invalid JSON patch received from AI.');
+        return;
+      }
+
+      customWarn('[FeedbackViewerImpl] Patch array length:', patchArray.length, 'First element snippet:', JSON.stringify(patchArray[0]).slice(0,150));
+ 
+      let updatedHtml: string | null = null;
+      for (const op of patchArray) {
+        if (op && op.op === 'replace' && (op.path === '' || op.path === '/')) {
+          updatedHtml = op.value as string;
+          break;
+        }
+      }
+
+      if (!updatedHtml || typeof updatedHtml !== 'string') {
+        customWarn('[FeedbackViewerImpl] No applicable replace op found in JSON patch. Falling back to originalHtml.');
+        updatedHtml = originalHtml;
+      }
+
+      const firstTagIndex = updatedHtml.indexOf('<');
+      if (firstTagIndex > 0) {
+        updatedHtml = updatedHtml.slice(firstTagIndex);
+      }
+
+      try {
+        updatedHtml = this.postprocessHtmlFromAI(updatedHtml);
+      } catch (e) {
+        customWarn('[FeedbackViewerImpl] postprocessHtmlFromAI failed on JSON patch HTML:', e);
+      }
+
+      const scrubLeadingNonElement = (html: string): string => {
+        const frag = this.createFragmentFromHTML(html);
+        if (!frag) return html;
+
+        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+          const textNode = frag.firstChild;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            const textContent = textNode.textContent || '';
+            if (textContent.trim() === '') {
+              textNode.parentNode?.removeChild(textNode);
+            } else {
+              textNode.parentNode?.removeChild(textNode);
+            }
+          } else {
+            textNode.parentNode?.removeChild(textNode);
+          }
+        }
+
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(frag);
+        return tempContainer.innerHTML;
+      };
+
+      updatedHtml = scrubLeadingNonElement(updatedHtml);
+
+      const testFrag = this.createFragmentFromHTML(updatedHtml);
+      if (!testFrag || testFrag.childNodes.length === 0) {
+        customError('[FeedbackViewerImpl] Parsed HTML from JSON patch is empty/invalid after scrubbing – will skip applying.');
+        return;
+      }
+
+      this.fixedOuterHTMLForCurrentCycle = updatedHtml;
+      // The activeStreamingAiItem is implicitly handled by ConversationHistoryManager.
+      // finalizeResponse, triggered by aiFinalized event, will take care of updating the UI and history state.
+
+    } catch (err) {
+      customError('[FeedbackViewerImpl] Error handling aiJsonPatch event:', err);
+      this.showError('An error occurred while applying AI suggested changes.');
+    }
+  }
+
+  // Method to be restored and updated
+  private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
+    customWarn('[CheckraImplementation] Received aiDomUpdateReceived', data);
+    if (!this.currentlyHighlightedElement && this.stableSelectorForCurrentCycle !== 'body') {
+      customError('[CheckraImplementation] No currentlyHighlightedElement to apply DOM update to (and not a body update).');
+      this.showError('No element was selected to apply the changes to.');
+      return;
+    }
+
+    const { html, insertionMode } = data;
+    let processedHtml = html;
+
+    const fenceRegex = /^```(?:html)?\n([\s\S]*?)\n```$/i;
+    const fenceMatch = processedHtml.match(fenceRegex);
+    if (fenceMatch && fenceMatch[1]) {
+      processedHtml = fenceMatch[1].trim();
+      customWarn('[CheckraImplementation] Stripped Markdown fences from domUpdateHtml content.');
+    }
+
+    try {
+      processedHtml = this.postprocessHtmlFromAI(processedHtml); 
+      const scrubLeadingNonElement = (incomingHtml: string): string => {
+        const frag = this.createFragmentFromHTML(incomingHtml);
+        if (!frag) return incomingHtml;
+        while (frag.firstChild && (frag.firstChild.nodeType === Node.COMMENT_NODE || frag.firstChild.nodeType === Node.TEXT_NODE)) {
+          const textNode = frag.firstChild;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            const textContent = textNode.textContent || '';
+            if (textContent.trim() === '') {
+              textNode.parentNode?.removeChild(textNode);
+            } else {
+              textNode.parentNode?.removeChild(textNode);
+            }
+          } else {
+            textNode.parentNode?.removeChild(textNode);
+          }
+        }
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(frag);
+        return tempContainer.innerHTML;
+      };
+      processedHtml = scrubLeadingNonElement(processedHtml);
+
+    } catch (e) {
+      customWarn('[CheckraImplementation] postprocessHtmlFromAI or scrubbing failed on domUpdateHtml:', e);
+    }
+
+    const finalHtmlToApply = processedHtml;
+
+    const testFrag = this.createFragmentFromHTML(finalHtmlToApply);
+    if (!testFrag || testFrag.childNodes.length === 0) {
+      customError('[CheckraImplementation] HTML for domUpdate is empty/invalid after processing. Aborting DOM update.');
+      this.showError('AI generated empty content, nothing to apply.');
+      return;
+    }
+
+    if (!this.currentFixId || !this.originalOuterHTMLForCurrentCycle || !this.requestBodyForCurrentCycle || !this.stableSelectorForCurrentCycle) {
+        customError('[CheckraImplementation] Missing context for applyFixToPage in handleDomUpdate.', {
+            fixId: this.currentFixId,
+            originalHtml: this.originalOuterHTMLForCurrentCycle,
+            requestBody: this.requestBodyForCurrentCycle,
+            stableSelector: this.stableSelectorForCurrentCycle
+        });
+        this.showError('Internal error: Could not apply changes due to missing context.');
+        if (this.currentlyHighlightedElement) {
+          customWarn('[CheckraImplementation] Fallback: performing direct DOM insertion in handleDomUpdate due to missing context for controls.')
+          try {
+              switch (insertionMode) {
+                  case 'insertBefore': this.currentlyHighlightedElement.insertAdjacentHTML('beforebegin', finalHtmlToApply); break;
+                  case 'insertAfter': this.currentlyHighlightedElement.insertAdjacentHTML('afterend', finalHtmlToApply); break;
+                  case 'replace': this.currentlyHighlightedElement.outerHTML = finalHtmlToApply; this.currentlyHighlightedElement = null; break;
+              }
+              this.removeSelectionHighlight();
+          } catch (directInsertError) {
+              customError('[CheckraImplementation] Error during fallback direct DOM insertion:', directInsertError);
+          }
+        } else if (this.stableSelectorForCurrentCycle === 'body') {
+            document.body.innerHTML = finalHtmlToApply;
+            this.removeSelectionHighlight();
+        } else {
+          customError('[CheckraImplementation] Cannot perform fallback direct DOM insertion, currentlyHighlightedElement is null and not a body update.');
+        }
+        return;
+    }
+
+    this.applyFixToPage(
+        this.currentFixId,
+        this.originalOuterHTMLForCurrentCycle,
+        finalHtmlToApply,
+        insertionMode,
+        this.requestBodyForCurrentCycle,
+        this.stableSelectorForCurrentCycle
+    );
+    // MODIFIED: Simplified string to avoid template literal issues for diagnostics
+    customWarn('[CheckraImplementation] DOM update via applyFixToPage initiated with mode: ' + insertionMode);
+        
+    this.conversationHistoryManager.finalizeLastAIItem();
+
+    const userMessages = this.conversationHistoryManager.getHistory().filter(item => item.type === 'user');
+    const lastUserPrompt = userMessages.length > 0 ? userMessages[userMessages.length -1].content : null;
+    if (this.requestBodyForCurrentCycle?.prompt === lastUserPrompt) {
+        this.requestBodyForCurrentCycle = null;
+    }
+  }
+
+  // Method to be restored
+  private async handlePublishCommand(): Promise<void> {
+    if (this.appliedFixStore.getSize() === 0) {
+      this.renderUserMessage("No changes have been applied to publish.");
+      return;
+    }
+    this.renderUserMessage("Publishing changes...");
+    try {
+      const result: SnapshotOperationResult = await this.snapshotService.publishSnapshot(this.appliedFixStore.getAll());
+      this.renderUserMessage(result.message);
+      if (result.success && result.cdnUrl) {
+        // MODIFIED: Simplified string
+        this.renderUserMessage('Share URL: <a href="' + result.cdnUrl + '" target="_blank" rel="noopener noreferrer">' + result.cdnUrl + '</a>');
+      } else if (!result.success && result.snapshotId) {
+        // MODIFIED: Simplified string
+        this.renderUserMessage('Snapshot ID (stored but not fully published): ' + result.snapshotId.substring(0,8) + '...');
+      }
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError) {
+        await this.handleAuthenticationRequiredAndRedirect('publish', Array.from(this.appliedFixStore.getAll().entries()), error);
+        this.renderUserMessage("Authentication required to publish. Please log in to continue.");
+      } else {
+        customError("[FeedbackViewerImpl] Error during publish command:", error);
+        const displayErrorMessage = error instanceof Error ? error.message : String(error);
+        // MODIFIED: Simplified string for diagnostics
+        this.showError('Failed to publish: ' + displayErrorMessage);
+      }
+    }
+  }
+
+  // Method to be restored
+  private async handleSaveDraftCommand(): Promise<void> {
+    if (this.appliedFixStore.getSize() === 0) {
+      this.renderUserMessage("No changes have been applied to save as a draft.");
+      return;
+    }
+    this.renderUserMessage("Saving draft...");
+    try {
+      const result: SnapshotOperationResult = await this.snapshotService.saveSnapshotAsDraft(this.appliedFixStore.getAll());
+      this.renderUserMessage(result.message);
+      if (result.success && result.accessUrl) {
+        // MODIFIED: Simplified string
+        this.renderUserMessage('Access your draft (owner only): <a href="' + result.accessUrl + '" target="_blank" rel="noopener noreferrer">' + result.accessUrl + '</a>');
+      }
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError) {
+        await this.handleAuthenticationRequiredAndRedirect('saveDraft', Array.from(this.appliedFixStore.getAll().entries()), error);
+        this.renderUserMessage("Authentication required to save draft. Please log in and try again.");
+      } else {
+        customError("[FeedbackViewerImpl] Error during save draft command:", error);
+        const displayErrorMessage = error instanceof Error ? error.message : String(error);
+        // MODIFIED: Simplified string
+        this.showError('Failed to save draft: ' + displayErrorMessage);
+      }
+    }
+  }
+  
+  // Method to be restored
+  private showReplaceLoader(targetElement: Element): void {
+    if (this.pageReplaceLoaderElement) {
+        this.pageReplaceLoaderElement.remove();
+    }
+    this.pageReplaceLoaderElement = createCenteredLoaderElement();
+    
+    if (!targetElement.classList.contains('checkra-highlight-container')) {
+        targetElement.classList.add('checkra-highlight-container');
+    }
+
+    targetElement.appendChild(this.pageReplaceLoaderElement);
+    targetElement.classList.add('checkra-element-dimmed');
+  }
+
+  // Method to be restored
+  private handleAppliedFixRate(fixId: string, anchorElement: HTMLElement): void {
+    if (!this.enableRating) {
+      customWarn('[FeedbackViewerImpl] Rating is disabled. handleAppliedFixRate should not have been called.');
+      return;
+    }
+
+    const fixInfo = this.appliedFixStore.get(fixId);
+    if (!fixInfo) {
+      // MODIFIED: Simplified string
+      customWarn('[FeedbackViewerLogic] Cannot rate: Fix info missing for Fix ID: ' + fixId);
+      return;
+    }
+
+    if (fixInfo.isRated) {
+      // MODIFIED: Simplified string
+      customWarn('[FeedbackViewerImpl] Fix ' + fixId + ' already rated. Ignoring request.');
+      return;
+    }
+
+    const onRatingSubmitted = (payload: AddRatingRequestBody) => {
+      eventEmitter.emit('fixRated', payload);
+      fixInfo.isRated = true;
+      if (anchorElement && anchorElement instanceof HTMLButtonElement) {
+        anchorElement.classList.add('rated');
+        anchorElement.disabled = true;
+      }
+      // MODIFIED: Simplified string
+      customWarn('[FeedbackViewerImpl] Rating submitted for ' + fixId + '. Button styled as rated.');
+    };
+
+    const onPopoverClosedWithoutSubmit = () => {
+      // MODIFIED: Simplified string
+      customWarn('[FeedbackViewerImpl] Rating popover closed without submission for ' + fixId);
+    };
+
+    this.ratingUI.showRatingPopover(
+      fixInfo,
+      anchorElement,
+      fixId,
+      onRatingSubmitted,
+      onPopoverClosedWithoutSubmit
+    );
+  }
+
   // --- END of CheckraImplementation class ---
-}
-
-// Helper function placed at module level (createCenteredLoaderElement)
-// REMOVE getFriendlyQueryName from here as it's now in stats-fetcher.ts
-function createCenteredLoaderElement(): HTMLDivElement {
-    const loaderOuter = document.createElement('div');
-    loaderOuter.className = 'checkra-replace-loader'; // Positioned container
-
-    const spinnerInner = document.createElement('div');
-    spinnerInner.className = 'checkra-spinner-inner'; // Actual spinning element with border
-    loaderOuter.appendChild(spinnerInner);
-
-    return loaderOuter;
 }
