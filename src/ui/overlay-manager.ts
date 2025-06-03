@@ -7,7 +7,7 @@ const CONTROLS_CONTAINER_CLASS = 'checkra-fix-controls-container';
 const CLOSE_SVG = '&times;';
 const TOGGLE_SHOW_ORIGINAL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const TOGGLE_SHOW_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-const COPY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+const COPY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
 const RATE_SVG = '★';
 
 export interface ControlButtonCallbacks {
@@ -67,19 +67,19 @@ export class OverlayManager {
     const closeButton = document.createElement('button');
     closeButton.innerHTML = CLOSE_SVG;
     closeButton.title = 'Discard Fix (Revert to Original)';
-    closeButton.className = 'feedback-fix-btn checkra-control-btn checkra-close-btn';
+    closeButton.className = 'feedback-fix-btn checkra-close-btn';
     closeButton.addEventListener('click', (e) => { e.stopPropagation(); callbacks.onClose(); });
 
     const toggleButton = document.createElement('button');
     toggleButton.innerHTML = TOGGLE_SHOW_ORIGINAL_SVG; // Initial: Fix is shown, button toggles to original
     toggleButton.title = 'Toggle Original Version';
-    toggleButton.className = 'feedback-fix-btn checkra-control-btn checkra-toggle-btn toggled-on';
+    toggleButton.className = 'feedback-fix-btn checkra-toggle-btn toggled-on';
     toggleButton.addEventListener('click', (e) => { e.stopPropagation(); callbacks.onToggle(); });
 
     const copyButton = document.createElement('button');
     copyButton.innerHTML = COPY_SVG;
     copyButton.title = 'Copy Prompt for This Fix';
-    copyButton.className = 'feedback-fix-btn checkra-control-btn checkra-copy-btn';
+    copyButton.className = 'feedback-fix-btn checkra-copy-btn';
     copyButton.addEventListener('click', (e) => { e.stopPropagation(); callbacks.onCopy(); });
 
     let rateButton: HTMLButtonElement | undefined;
@@ -87,7 +87,7 @@ export class OverlayManager {
       rateButton = document.createElement('button');
       rateButton.innerHTML = RATE_SVG;
       rateButton.title = 'Rate This Fix';
-      rateButton.className = 'feedback-fix-btn checkra-control-btn checkra-rate-btn';
+      rateButton.className = 'feedback-fix-btn checkra-rate-btn';
       // Store callback in a variable to ensure correct closure capture
       const onRateCallback = callbacks.onRate;
       rateButton.addEventListener('click', (e) => {

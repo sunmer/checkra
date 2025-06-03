@@ -145,35 +145,36 @@
 }
 
 /* Specific styles for close button */
-.feedback-fix-btn.feedback-fix-close-btn:hover {
+.feedback-fix-btn.checkra-close-btn:hover {
   background-color: rgba(220, 60, 60, 0.9);
   color: white;
 }
 
 /* Specific styles for copy button */
-.feedback-fix-btn.feedback-fix-copy-btn:hover {
-  background-color: rgba(60, 110, 200, 0.9);
+.feedback-fix-btn.checkra-copy-btn:hover {
+  background-color: rgba(60, 110, 200, 0.9); /* Blue hover - already as requested */
   color: white;
 }
 
 /* Specific styles for toggle button */
-.feedback-fix-btn.feedback-fix-toggle:hover {
+.feedback-fix-btn.checkra-toggle-btn:hover {
+  /* General hover for toggle, distinct from toggled-on state */
+  color: white; /* Example: ensure icon stays white */
+}
+
+/* NEW class for active/toggled-on state for .checkra-toggle-btn */
+.feedback-fix-btn.checkra-toggle-btn.toggled-on {
+  background-color: rgba(60, 180, 110, 0.9) !important; /* Green background - as requested */
   color: white;
 }
 
-/* NEW class for active/toggled-on state */
-.feedback-fix-btn.feedback-fix-toggle.toggled-on {
-  background-color: rgba(60, 180, 110, 0.9) !important;
-  color: white;
-}
-
-.feedback-fix-btn.feedback-fix-toggle.toggled-on:hover {
-  background-color: rgba(50, 160, 90, 0.9) !important;
+.feedback-fix-btn.checkra-toggle-btn.toggled-on:hover {
+  background-color: rgba(50, 160, 90, 0.9) !important; /* Darker green on hover when on */
 }
 
 /* Icon sizing within buttons */
-.feedback-fix-btn.feedback-fix-copy-btn svg,
-.feedback-fix-btn.feedback-fix-toggle svg {
+.feedback-fix-btn.checkra-copy-btn svg,
+.feedback-fix-btn.checkra-toggle-btn svg {
   width: 12px;
   height: 12px;
   stroke: currentColor;
@@ -184,18 +185,24 @@
   color: #ffeb3b;
 }
 
-/* Styles for the Rate Button when rated */
-.feedback-fix-btn.feedback-fix-rate-btn.rated {
-  color: #ffeb3b;
+/* Styles for the Rate Button when rated (general, e.g., any rating given) */
+.feedback-fix-btn.checkra-rate-btn.rated {
+  color: #ffeb3b; /* Star is yellow */
   background-color: rgba(50, 50, 50, 0.8);
   cursor: default !important;
   opacity: 0.7;
 }
 
-.feedback-fix-btn.feedback-fix-rate-btn.rated:hover {
+.feedback-fix-btn.checkra-rate-btn.rated:hover {
   transform: none;
   color: #ffeb3b;
   background-color: rgba(50, 50, 50, 0.8);
+}
+
+/* ADDED: Styles for the Rate Button when rating submitted successfully */
+.feedback-fix-btn.checkra-rate-btn.rated-successfully {
+  color: #ffd700; /* Gold/Yellow star for success */
+  /* Optionally, other styles to indicate success, e.g., a subtle animation or background pulse */
 }
 
 /* --- ADDED: Styles for the new Custom Rating Options Dropdown --- */

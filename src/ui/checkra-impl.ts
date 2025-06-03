@@ -964,19 +964,34 @@ Your job:
       customWarn('[FeedbackViewerLogic] Cannot rate: Fix info missing for Fix ID: ' + fixId);
       return;
     }
+    // Prevent re-rating if already rated
     if (fixInfo.isRated) {
-      customWarn('[FeedbackViewerImpl] Fix ' + fixId + ' already rated. Ignoring request.');
-      return;
-    }
-    const onRatingSubmitted = (payload: AddRatingRequestBody) => {
-      eventEmitter.emit('fixRated', payload);
-      fixInfo.isRated = true;
+      customWarn('[FeedbackViewerImpl] Fix ' + fixId + ' has already been rated. Re-rating is not allowed.');
+      // Ensure the button reflects its final state if somehow it lost it
       if (anchorElement && anchorElement instanceof HTMLButtonElement) {
-        anchorElement.classList.add('rated');
+        anchorElement.classList.remove('rated'); 
+        anchorElement.classList.add('rated-successfully'); // Assume if isRated is true, it was successful
         anchorElement.disabled = true;
       }
-      customWarn('[FeedbackViewerImpl] Rating submitted for ' + fixId + '. Button styled as rated.');
+      return;
+    }
+
+    const onRatingSubmitted = async (payload: AddRatingRequestBody) => {
+      // Assuming eventEmitter.emit('fixRated', payload) might involve an async operation 
+      // or trigger one. For simplicity, we'll assume success after this point for UI update.
+      // If 'fixRated' had a promise or callback for actual backend success, we'd use that.
+      eventEmitter.emit('fixRated', payload);
+      fixInfo.isRated = true; // Mark as rated
+
+      if (anchorElement && anchorElement instanceof HTMLButtonElement) {
+        anchorElement.classList.remove('rated'); // Remove general 'rated' if it was there
+        anchorElement.classList.add('rated-successfully'); // Add specific success class for yellow star
+        anchorElement.disabled = true; // Disable button after successful rating
+      }
+      customWarn('[FeedbackViewerImpl] Rating submitted for ' + fixId + '. Button styled as rated-successfully and disabled.');
+      this.ratingUI.hideRatingPopover();
     };
+
     const onPopoverClosedWithoutSubmit = () => {
       customWarn('[FeedbackViewerImpl] Rating popover closed without submission for ' + fixId);
     };

@@ -2,7 +2,6 @@ import type { CheckraImplementation } from './checkra-impl';
 import type { SnapshotService } from '../services/snapshot-service';
 import { logout } from '../auth/auth';
 import { customError } from '../utils/logger';
-import type { AuthPendingActionHelper, AuthCallbackInterface } from '../auth/auth-pending-action-helper';
 import { AuthenticationRequiredError } from '../auth/auth';
 
 export class CommandDispatcher {
