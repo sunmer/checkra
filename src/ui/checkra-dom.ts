@@ -240,7 +240,7 @@ export class CheckraDOM {
     if (onboardingContainer) {
       onboardingContainer.addEventListener('click', (e: MouseEvent) => {
         const target = e.target as HTMLElement;
-        if (target && target.classList.contains('onboarding-suggestion')) {
+        if (target && target.classList.contains('checkra-onboarding-suggestion')) {
           const promptText = target.dataset.prompt || target.textContent || '';
           if (promptText.trim()) {
             eventEmitter.emit('onboardingSuggestionClicked', promptText.trim());
@@ -475,9 +475,9 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 * ${selectButtonRepresentation} Select any element on your page
 * Then, try one of these prompts:
 
-* <span class="onboarding-suggestion" data-prompt="Change this headline to be more exciting">Change this headline to be more exciting</span>
-* <span class="onboarding-suggestion" data-prompt="Improve the visual design here">Improve the visual design here</span>
-* <span class="onboarding-suggestion" data-prompt="Rewrite this hero section">Rewrite this hero section</span>
+* <span class="checkra-onboarding-suggestion" data-prompt="Change this headline to be more exciting">Change this headline to be more exciting</span>
+* <span class="checkra-onboarding-suggestion" data-prompt="Improve the visual design here">Improve the visual design here</span>
+* <span class="checkra-onboarding-suggestion" data-prompt="Rewrite this hero section">Rewrite this hero section</span>
 
 * Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">/publish</kbd> to get a shareable url for your changes
 * Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">/help</kbd> for all commands.
