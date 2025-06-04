@@ -1,6 +1,6 @@
 import { fetchFeedback } from '../services/ai-service';
 import { SELECT_SVG_ICON, type CheckraViewerElements } from './checkra-dom';
-import type { CheckraDOM } from './checkra-dom';
+import { CheckraDOM } from './checkra-dom';
 import type { SettingsModal } from './settings-modal';
 import { eventEmitter } from '../core/index';
 import { AuthenticationRequiredError } from '../auth/auth';
@@ -229,24 +229,40 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     }
   }
 
-  public finalizeResponse(): void {
-    if (!this.domManager || !this.domElements) return;
+  public async finalizeResponse(): Promise<void> {
+    customWarn('[CheckraImpl finalizeResponse] INVOKED.');
+
+    if (!this.domManager || !this.domElements) {
+      customError('[CheckraImpl finalizeResponse] DOMManager or DOMElements not available. Aborting UI updates.');
+      return;
+    }
+    customWarn('[CheckraImpl finalizeResponse] DOMManager and DOMElements are available.');
+
     this.selectionManager?.hidePageLoaders();
+    customWarn('[CheckraImpl finalizeResponse] Called hidePageLoaders (for page-specific loaders).');
+
     const streamToFinalize = this.conversationHistoryManager.getActiveStreamingAIItem();
+    customWarn(`[CheckraImpl finalizeResponse] Active streaming AI item before processing: ${streamToFinalize ? streamToFinalize.type + ' - ' + streamToFinalize.content.substring(0,30) : 'null'}`);
 
     if (streamToFinalize && streamToFinalize.type === 'ai' && streamToFinalize.isStreaming) {
+      customWarn('[CheckraImpl finalizeResponse] Found active AI stream to finalize in history.');
       if (this.fixedOuterHTMLForCurrentCycle === null) {
-        customWarn('[CheckraImpl finalizeResponse] fixedOuterHTMLForCurrentCycle is null, attempting to extract from stream.');
+        customWarn('[CheckraImpl finalizeResponse] fixedOuterHTMLForCurrentCycle is null, attempting to extract from final stream content.');
         const lastAiItemContent = streamToFinalize.content;
+        // If the content is purely text, extractHtmlFromResponse might return null for fixedHtml
         const extractionResult: ExtractedFix = this.aiResponsePipeline.extractHtmlFromResponse(lastAiItemContent);
-        this.fixedOuterHTMLForCurrentCycle = extractionResult.fixedHtml;
-        customWarn('[CheckraImpl finalizeResponse] After extractHtmlFromResponse, fixedOuterHTMLForCurrentCycle:', this.fixedOuterHTMLForCurrentCycle?.substring(0, 200));
+        this.fixedOuterHTMLForCurrentCycle = extractionResult.fixedHtml; // This might still be null if no HTML fix
+        customWarn(`[CheckraImpl finalizeResponse] After extractHtmlFromResponse, fixedOuterHTMLForCurrentCycle snippet: ${this.fixedOuterHTMLForCurrentCycle?.substring(0, 50)}`);
         
-        if (extractionResult.analysisPortion && extractionResult.analysisPortion !== lastAiItemContent) {
+        // Ensure the analysis portion (text) is what's stored if fixedHtml was extracted
+        if (extractionResult.analysisPortion && extractionResult.analysisPortion !== lastAiItemContent && extractionResult.fixedHtml) {
+          customWarn('[CheckraImpl finalizeResponse] Analysis portion differs and fix HTML extracted. Updating last AI item content in history with analysis.');
           this.conversationHistoryManager.setLastAIItemContent(extractionResult.analysisPortion);
+        } else {
+          customWarn('[CheckraImpl finalizeResponse] No separate analysis portion to update, or no fix HTML extracted. Content in history is final text from stream.');
         }
       } else {
-        customWarn('[CheckraImpl finalizeResponse] fixedOuterHTMLForCurrentCycle was already set (likely by JSON patch). Skipping extraction from stream.');
+        customWarn(`[CheckraImpl finalizeResponse] fixedOuterHTMLForCurrentCycle was already set (e.g., by handleDomUpdate or handleJsonPatch). Snippet: ${this.fixedOuterHTMLForCurrentCycle?.substring(0,50)}`);
       }
 
       let fixDataForHistory: { originalHtml: string; fixedHtml: string; fixId: string } | undefined = undefined;
@@ -256,55 +272,46 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
           fixedHtml: this.fixedOuterHTMLForCurrentCycle,
           fixId: this.currentFixIdForAI
         };
+        customWarn('[CheckraImpl finalizeResponse] Prepared fixDataForHistory for conversation history.');
       }
+      // Always finalize the item in history to mark it as not streaming, even if no fixData
       this.conversationHistoryManager.finalizeLastAIItem(fixDataForHistory);
+      customWarn('[CheckraImpl finalizeResponse] Called conversationHistoryManager.finalizeLastAIItem.');
     } else {
-      customWarn(`[CheckraImpl finalizeResponse] No active AI message was streaming or streamToFinalize is null.`);
-      if (this.fixedOuterHTMLForCurrentCycle === null) {
-        const history = this.conversationHistoryManager.getHistory();
-        const lastHistoryAIItem = [...history].reverse().find(item => item.type === 'ai' && item.isStreaming);
-        if (lastHistoryAIItem) {
-          customWarn("[CheckraImpl finalizeResponse DEBUG] Fallback - found a different streaming AI item in history. Finalizing it.", lastHistoryAIItem);
-          const extractionResult: ExtractedFix = this.aiResponsePipeline.extractHtmlFromResponse(lastHistoryAIItem.content);
-          this.fixedOuterHTMLForCurrentCycle = extractionResult.fixedHtml;
-          customWarn('[CheckraImpl finalizeResponse - Fallback] After extractHtmlFromResponse, fixedOuterHTMLForCurrentCycle:', this.fixedOuterHTMLForCurrentCycle?.substring(0, 200));
-          let fixDataForHistory: { originalHtml: string; fixedHtml: string; fixId: string } | undefined = undefined;
-          if (this.fixedOuterHTMLForCurrentCycle && this.originalOuterHTMLForAI && this.currentFixIdForAI) {
-              fixDataForHistory = {
-                originalHtml: this.originalOuterHTMLForAI,
-                fixedHtml: this.fixedOuterHTMLForCurrentCycle,
-                fixId: this.currentFixIdForAI
-              };
-          }
-          if (extractionResult.analysisPortion && extractionResult.analysisPortion !== lastHistoryAIItem.content) {
-              this.conversationHistoryManager.setLastAIItemContent(extractionResult.analysisPortion);
-          }
-          this.conversationHistoryManager.finalizeLastAIItem(fixDataForHistory); 
-        } else {
-           customWarn("[CheckraImpl finalizeResponse DEBUG] Fallback - no streaming AI item found in history either.");
-        }
+      customWarn(`[CheckraImpl finalizeResponse] No active AI message was streaming, or streamToFinalize is null/not AI type. streamToFinalize: ${!!streamToFinalize}`);
+      // This case can happen if the stream ends without a currently active streaming item, or if the last item wasn't AI.
+      // We should still ensure any previous AI message that *might* have been streaming is finalized.
+      const history = this.conversationHistoryManager.getHistory();
+      const lastHistoryAIItem = [...history].reverse().find(item => item.type === 'ai');
+      if (lastHistoryAIItem && lastHistoryAIItem.isStreaming) {
+        customWarn("[CheckraImpl finalizeResponse] Fallback: Finalizing the most recent AI item in history as not streaming because no active stream was found.");
+        this.conversationHistoryManager.finalizeLastAIItem(undefined); // Finalize without specific fix data
+      } else {
+        customWarn("[CheckraImpl finalizeResponse] No streaming AI item to finalize explicitly. UI updates will proceed.");
       }
     }
     
+    customWarn('[CheckraImpl finalizeResponse] Proceeding to UI finalization (loader, prompt state).');
     this.domManager.updateLoaderVisibility(false);
+    customWarn('[CheckraImpl finalizeResponse] Called domManager.updateLoaderVisibility(false).');
     this.domManager.setPromptState(true);
+    customWarn('[CheckraImpl finalizeResponse] Called domManager.setPromptState(true).');
     this.domManager.updateSubmitButtonState(true);
-    const contentWrapper = this.domElements.contentWrapper;
-    contentWrapper.scrollTop = contentWrapper.scrollHeight;
+    customWarn('[CheckraImpl finalizeResponse] Called domManager.updateSubmitButtonState(true). UI finalization complete.');
 
     customWarn('[CheckraImpl finalizeResponse] Conditions for fixApplier.apply:', {
         currentFixIdForAI: !!this.currentFixIdForAI,
         originalOuterHTMLForAI: !!this.originalOuterHTMLForAI,
-        fixedOuterHTMLForCurrentCycle: !!this.fixedOuterHTMLForCurrentCycle,
+        fixedOuterHTMLForCurrentCycle: !!this.fixedOuterHTMLForCurrentCycle, // This might be null for text-only responses
         requestBodyForCurrentCycle: !!this.requestBodyForCurrentCycle,
         stableSelectorForAI: !!this.stableSelectorForAI
     });
-    customWarn('[CheckraImpl finalizeResponse] Value of fixedOuterHTMLForCurrentCycle before apply:', this.fixedOuterHTMLForCurrentCycle?.substring(0, 200));
+    customWarn(`[CheckraImpl finalizeResponse] Value of fixedOuterHTMLForCurrentCycle before apply attempt: ${this.fixedOuterHTMLForCurrentCycle?.substring(0, 100)}`);
 
     if (
       this.currentFixIdForAI &&
       this.originalOuterHTMLForAI &&
-      this.fixedOuterHTMLForCurrentCycle && 
+      this.fixedOuterHTMLForCurrentCycle && // Only attempt apply if there's actually HTML
       this.requestBodyForCurrentCycle &&
       this.stableSelectorForAI
     ) {
@@ -320,19 +327,38 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
         getControlCallbacks: this.getControlCallbacksForFix
       });
       if (appliedFixInfo) {
-        customWarn('[FeedbackViewerImpl] Fix applied successfully by FixApplier:', appliedFixInfo.originalElementId);
+        customWarn('[CheckraImpl finalizeResponse] Fix applied successfully by FixApplier.');
+        this.selectionManager?.removeSelectionHighlight(); 
+        await renderLucideIcons();
       } else {
         this.showError(`Failed to apply fix: ${this.currentFixIdForAI}. See console for details.`);
+        customError('[CheckraImpl finalizeResponse] fixApplier.apply returned null/false.');
       }
-      this.requestBodyForCurrentCycle = null;
-      this.fixedOuterHTMLForCurrentCycle = null;
-      this.selectionManager?.removeSelectionHighlight();
-      this.currentResolvedColors = null;
     } else {
-      customError('[CheckraImpl finalizeResponse] One or more conditions NOT MET. CANNOT call fixApplier.apply.');
+      customWarn('[CheckraImpl finalizeResponse] One or more conditions NOT MET for fixApplier.apply, or no HTML fix content. No fix applied.');
       if (this.fixedOuterHTMLForCurrentCycle === null && this.currentFixIdForAI) {
-        customWarn('[CheckraImpl finalizeResponse] fixedOuterHTMLForCurrentCycle is null, possibly due to extraction/patch error. Fix not applied.')
+        customWarn('[CheckraImpl finalizeResponse] fixedOuterHTMLForCurrentCycle is null (text-only AI response or extraction error). Fix not applied.')
       }
+    }
+    
+    // Store whether there was HTML content before nullifying, to decide on resetting selection
+    const hadHtmlFixContent = !!this.fixedOuterHTMLForCurrentCycle;
+
+    // Reset state variables for the next cycle
+    this.requestBodyForCurrentCycle = null;
+    this.fixedOuterHTMLForCurrentCycle = null; 
+    this.currentResolvedColors = null;
+    
+    // If there was HTML content processed (even if application failed for other reasons),
+    // or if the fix applier indicates a structural change was made,
+    // then reset the selection context.
+    // Otherwise (e.g., text-only response), keep the selection context for potential re-prompt.
+    if (hadHtmlFixContent) { 
+        customWarn('[CheckraImpl finalizeResponse] Resetting selection context as HTML fix content was processed.');
+        this.resetStateForNewSelection(); // This clears currentFixIdForAI, originalOuterHTMLForAI etc.
+        this.selectionManager?.removeSelectionHighlight();
+    } else {
+        customWarn('[CheckraImpl finalizeResponse] No HTML fix content was processed (e.g. text-only response). Retaining selection context for potential re-prompt.');
     }
   }
 
@@ -415,10 +441,24 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
         return;
       }
     }
+
+    // Ensure that an element has been selected OR the prompt is general (does not require an element context)
+    // For now, the main check is if originalOuterHTMLForAI and currentFixIdForAI are set, implying element selection.
     if (!this.domManager || !this.domElements || !this.originalOuterHTMLForAI || !this.currentFixIdForAI) {
+      // If these are not set, it means no element was properly selected for context-specific feedback.
+      // However, a user might still want to submit a general prompt that doesn't target a specific element.
+      // The current logic shows an error. We might need to refine this if general prompts are allowed
+      // without prior selection (e.g. after an onboarding click if user then types something else general).
+      // For the onboarding flow, selection is expected after the click.
       this.showError(`First select an element on your website using the${SELECT_SVG_ICON}`);
       return;
     }
+
+    // Hide onboarding view if it's active, as we are now submitting the actual prompt.
+    if (this.domManager && this.domManager.isOnboardingVisible()) { 
+        this.domManager.showOnboardingView(false);
+    }
+
     if (!promptText) {
       this.showError('Please enter a description or question.');
       return;
@@ -670,6 +710,10 @@ Your job:
   private handleMiniSelectClick(e: MouseEvent): void {
     e.stopPropagation();
     if (this.selectionManager) {
+      // Clear any existing active selection before starting a new one
+      this.selectionManager.removeSelectionHighlight();
+      this.resetStateForNewSelection(); // Clears originalOuterHTMLForAI, currentFixIdForAI, etc.
+      
       this.selectionManager.startElementSelection('replace', this.boundPrepareForInputFromSelection);
     } else {
       customError('[CheckraImpl] SelectionManager not initialized. Cannot start screen capture.');
@@ -844,11 +888,7 @@ Your job:
 
   private async handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): Promise<void> {
     customWarn('[CheckraImplementation] Received aiDomUpdateReceived', data);
-    if (!this.targetElementForAI && this.stableSelectorForAI !== 'body') {
-      customError('[CheckraImplementation] No targetElementForAI to apply DOM update to (and not a body update).');
-      this.showError('No element was selected to apply the changes to.');
-      return;
-    }
+    
     const { html, insertionMode } = data;
     let processedHtml = html;
     const fenceRegex = /^```(?:html)?\n([\s\S]*?)\n```$/i;
@@ -863,59 +903,26 @@ Your job:
     if (!testFrag || testFrag.childNodes.length === 0) {
       customError('[CheckraImplementation] HTML for domUpdate is empty/invalid after pipeline processing. Aborting.');
       this.showError('AI generated empty content, nothing to apply.');
+      // Ensure finalizeResponse doesn't try to apply an empty fix if this was the only HTML received
+      this.fixedOuterHTMLForCurrentCycle = null; 
       return;
     }
 
-    if (!this.currentFixIdForAI || !this.originalOuterHTMLForAI || !this.requestBodyForCurrentCycle || !this.stableSelectorForAI) {
-        customError('[CheckraImplementation] Missing context for applyFixToPage in handleDomUpdate.', {
-            fixId: this.currentFixIdForAI,
-            originalHtml: this.originalOuterHTMLForAI,
-            requestBody: this.requestBodyForCurrentCycle,
-            stableSelector: this.stableSelectorForAI
-        });
-        this.showError('Internal error: Could not apply changes due to missing context.');
-        if (this.targetElementForAI) {
-          customWarn('[CheckraImplementation] Fallback: performing direct DOM insertion in handleDomUpdate.')
-          try {
-              switch (insertionMode) {
-                  case 'insertBefore': this.targetElementForAI.insertAdjacentHTML('beforebegin', finalHtmlToApply); break;
-                  case 'insertAfter': this.targetElementForAI.insertAdjacentHTML('afterend', finalHtmlToApply); break;
-                  case 'replace': this.targetElementForAI.outerHTML = finalHtmlToApply; this.targetElementForAI = null; break;
-              }
-              this.selectionManager?.removeSelectionHighlight();
-          } catch (directInsertError) {
-              customError('[CheckraImplementation] Error during fallback direct DOM insertion:', directInsertError);
-          }
-        } else if (this.stableSelectorForAI === 'body') {
-            document.body.innerHTML = finalHtmlToApply;
-            this.selectionManager?.removeSelectionHighlight();
-        } else {
-          customError('[CheckraImplementation] Cannot perform fallback direct DOM insertion.');
-        }
-        return;
-    }
+    // Set the necessary properties for finalizeResponse to use
+    this.fixedOuterHTMLForCurrentCycle = finalHtmlToApply;
+    this.currentElementInsertionModeForAI = insertionMode;
 
-    const appliedFixInfo = this.fixApplier.apply({
-        fixId: this.currentFixIdForAI,
-        originalHtml: this.originalOuterHTMLForAI,
-        fixedHtml: finalHtmlToApply,
-        insertionMode: insertionMode,
-        requestBody: this.requestBodyForCurrentCycle,
-        stableSelector: this.stableSelectorForAI,
-        currentResolvedColors: this.currentResolvedColors,
-        getControlCallbacks: this.getControlCallbacksForFix
-    });
-    if (appliedFixInfo) {
-        customWarn(`[CheckraImplementation] DOM update via FixApplier successful for mode: ${insertionMode}`);
-        await renderLucideIcons();
-    } else {
-        this.showError(`Failed to apply direct DOM update for fix: ${this.currentFixIdForAI}.`);
-    }
-    this.conversationHistoryManager.finalizeLastAIItem();
-    this.requestBodyForCurrentCycle = null;
-    this.fixedOuterHTMLForCurrentCycle = null;
-    this.selectionManager?.removeSelectionHighlight();
-    this.currentResolvedColors = null;
+    customWarn(`[CheckraImplementation handleDomUpdate] fixedOuterHTMLForCurrentCycle set from domUpdateHtml. Insertion mode: ${this.currentElementInsertionModeForAI}. Content snippet:`, finalHtmlToApply.substring(0,200));
+    
+    // Do NOT call fixApplier.apply here. Let finalizeResponse handle it.
+    // Do NOT nullify instance variables here.
+
+    // It might be appropriate to finalize the AI item in history if this is the terminal HTML update
+    // However, aiFinalized event should still trigger finalizeResponse for the actual application.
+    // For now, let's assume that if a domUpdateHtml comes, it might be followed by more content OR aiFinalized.
+    // If it's the *only* content, finalizeResponse will pick it up.
+    // If there was other streaming text that formed an analysis, that text will be in the AI bubble,
+    // and this HTML will be used for the fix.
   }
 
   private handleRequestBodyPrepared(requestBody: GenerateSuggestionRequestbody): void {
@@ -928,16 +935,38 @@ Your job:
   }
 
   private handleSuggestionClick(promptText: string): void {
-    if (!promptText) return;
+    if (!promptText || !this.domManager || !this.domElements?.promptTextarea) {
+        customWarn('[CheckraImpl] handleSuggestionClick: No prompt text or DOM elements not ready.');
+        return;
+    }
+
+    this.domElements.promptTextarea.value = promptText;
+    this.domElements.promptTextarea.focus();
+
     this.queuedPromptText = promptText;
-    if (this.selectionManager) {
-      this.selectionManager.startElementSelection('replace', this.boundPrepareForInputFromSelection);
-    } else {
-      customError('[CheckraImpl] SelectionManager not initialized. Cannot start quick suggestion flow.');
+
+    // Check if an element is already selected
+    if (this.originalOuterHTMLForAI && this.currentFixIdForAI && this.targetElementForAI) {
+      customWarn('[CheckraImpl] Suggestion clicked, and an element was already selected. Submitting immediately.');
+      // The prompt is in queuedPromptText, prepareForInputFromSelection will pick it up if it calls handleSubmit
+      // Or handleSubmit will use the textarea value. Ensure textarea has the correct prompt.
       if (this.domElements?.promptTextarea) {
-        this.domElements.promptTextarea.value = promptText;
-        this.domElements.promptTextarea.focus();
+        this.domElements.promptTextarea.value = promptText; // Ensure textarea has the chip's prompt
       }
+      // Since prepareForInputFromSelection is what usually populates promptTextarea if queuedPromptText is set,
+      // and then calls handleSubmit, we can directly call handleSubmit here as the selection is already done.
+      this.handleSubmit(); 
+    } else if (this.selectionManager) {
+      customWarn('[CheckraImpl] Suggestion clicked. Prompt queued. Starting element selection as no element was pre-selected.');
+      this.selectionManager.startElementSelection('replace', this.boundPrepareForInputFromSelection);
+      if (this.domElements?.promptTextarea) {
+        this.domElements.promptTextarea.placeholder = 'Please select an element on the page to apply this suggestion.';
+      }
+      this.domManager.updateSubmitButtonState(true);
+    } else {
+      customError('[CheckraImpl] SelectionManager not initialized. Cannot start element selection after suggestion click.');
+      this.showError('Could not start element selection. Please try again.');
+      this.queuedPromptText = null; // Clear queued prompt as we can't proceed
     }
   }
 

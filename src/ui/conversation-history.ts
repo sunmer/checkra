@@ -72,6 +72,7 @@ export class ConversationHistory {
         newItem.isStreaming = true; 
       }
       this.history.push(newItem);
+      console.warn(`[ConversationHistory] Pushed new item to history: type=${newItem.type}, content snippet=${newItem.content.substring(0, 50)}`);
     }
     try {
       localStorage.setItem(CONVERSATION_HISTORY_KEY, JSON.stringify(this.history));
@@ -80,7 +81,12 @@ export class ConversationHistory {
     }
 
     if (this.domManager && newItem) {
+      console.warn(`[ConversationHistory] Calling domManager.appendHistoryItem for type=${newItem.type}`);
       this.domManager.appendHistoryItem(newItem);
+    } else if (!this.domManager && newItem) {
+      console.warn(`[ConversationHistory] domManager is NOT set. Cannot call appendHistoryItem for type=${newItem.type}`);
+    } else if (this.domManager && !newItem) {
+      console.warn('[ConversationHistory] domManager is set, but newItem is null/undefined. Not calling appendHistoryItem. This typically happens on updates like finalizeLastAIItem.');
     }
   }
 

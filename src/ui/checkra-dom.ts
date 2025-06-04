@@ -12,7 +12,7 @@ const SETTINGS_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height=
 
 // Loader SVG reused inside submit button
 const BUTTON_LOADER_SVG = `
-<svg class="button-loader" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
+<svg class="checkra-button-loader" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
 
 interface ConversationItem {
   type: 'user' | 'ai' | 'usermessage' | 'error';
@@ -45,7 +45,7 @@ export interface CheckraViewerElements {
 }
 
 export const SUBMIT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 -2 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-icon lucide-send"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
-export const SELECT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="4"></circle><path d="m16 16-1.5-1.5"></path></svg>`;
+export const SELECT_SVG_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg>`;
 
 /**
  * Manages the DOM elements, styling, positioning, dragging, and resizing
@@ -462,6 +462,11 @@ export class CheckraDOM {
     }
   }
 
+  public isOnboardingVisible(): boolean {
+    return !!this.elements?.onboardingContainer &&
+           !this.elements.onboardingContainer.classList.contains('hidden');
+  }
+
   // Updated onboarding content to be Markdown within an AI bubble
   private createOnboardingView(): string {
     const selectButtonRepresentation =
@@ -472,12 +477,11 @@ export class CheckraDOM {
 Use this panel to edit your website with AI, ship variations, and analyze what works.
 
 **How to get started:**
-* ${selectButtonRepresentation} Select any element on your page
-* Then, try one of these prompts:
+* Click any prompt below and then select a part of your website:
 
-* <span class="checkra-onboarding-suggestion" data-prompt="Change this headline to be more exciting">Change this headline to be more exciting</span>
-* <span class="checkra-onboarding-suggestion" data-prompt="Improve the visual design here">Improve the visual design here</span>
-* <span class="checkra-onboarding-suggestion" data-prompt="Rewrite this hero section">Rewrite this hero section</span>
+* <span class="checkra-onboarding-suggestion" data-prompt="Audit the conversion potential of this section">Audit the conversion potential of this section</span>
+* <span class="checkra-onboarding-suggestion" data-prompt="Help me drive more clicks to this section">Help me drive more clicks to this section</span>
+* <span class="checkra-onboarding-suggestion" data-prompt="Improve the copywriting here">Improve the copywriting here</span>
 
 * Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">/publish</kbd> to get a shareable url for your changes
 * Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555; color: #fff;">/help</kbd> for all commands.
@@ -507,19 +511,46 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   }
   private createMessageElement(item: ConversationItem): HTMLDivElement {
     const messageDiv = document.createElement('div');
-    
-    // Use innerHTML for ai, usermessage, and error types to allow HTML/SVG rendering
-    if (item.type === 'ai' || item.type === 'usermessage' || item.type === 'error') { 
-      messageDiv.innerHTML = item.content; 
+    let contentToRender = item.content;
+    let isHtmlContent = false;
+
+    if (item.type === 'ai') {
+      const lines = item.content.split('\n');
+      const hasBulletPoints = lines.some(line => /^\s*[-*•]/.test(line));
+
+      if (hasBulletPoints) {
+        contentToRender = '<ul>\n' + lines.map(line => {
+          const match = line.match(/^(\s*[-*•])(.*)/);
+          if (match) {
+            return `<li>${match[2].trim()}</li>`;
+          }
+          return line.trim() ? `<li>${line.trim()}</li>` : ''; // Wrap non-empty, non-bullet lines too
+        }).filter(line => line).join('\n') + '\n</ul>';
+        isHtmlContent = true;
+      } else {
+        contentToRender = marked.parse(item.content) as string;
+        isHtmlContent = true;
+      }
+    } else if (item.type === 'usermessage' || item.type === 'error') {
+      // These types are expected to be HTML (usermessage can be, error is plain but rendered as HTML)
+      contentToRender = item.content; 
+      isHtmlContent = true; // Assume error messages are HTML-safe or will be escaped by browser
     } else {
-      messageDiv.textContent = item.content;
+      // This covers item.type === 'user' (plain text prompt)
+      // contentToRender remains item.content (plain text)
+      isHtmlContent = false;
+    }
+
+    if (isHtmlContent) {
+      messageDiv.innerHTML = contentToRender;
+    } else {
+      messageDiv.textContent = contentToRender;
     }
 
     if (item.type === 'ai' && item.isStreaming) {
       messageDiv.classList.add('streaming');
     }
-    // TODO: Add data-id for easier updates if needed
-    messageDiv.classList.add('checkra-message-bubble', `message-${item.type}`);
+    messageDiv.classList.add('checkra-message-bubble', `checkra-message-${item.type}`);
     return messageDiv;
   }
 
@@ -530,15 +561,9 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
     this.elements.responseContent.classList.add('visible');
 
     history.forEach(item => {
-      // For AI messages that are not streaming, parse them with marked.
-      // Streaming messages will be updated by updateLastAIMessage.
-      let displayItem = { ...item };
-      if (item.type === 'ai' && !item.isStreaming && item.content) {
-        displayItem.content = marked.parse(item.content) as string;
-      }
-      // User messages (type: 'usermessage') might already be HTML
-
-      const messageEl = this.createMessageElement(displayItem);
+      // createMessageElement will handle all necessary parsing/formatting for AI messages.
+      // User messages (type: 'usermessage') might already be HTML.
+      const messageEl = this.createMessageElement(item);
       this.elements!.responseContent.appendChild(messageEl);
     });
     // Scroll to bottom
@@ -547,19 +572,15 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 
   public appendHistoryItem(item: ConversationItem): void {
     if (!this.elements) return;
-    this.elements.responseContent.classList.remove('hidden');
-    this.elements.responseContent.classList.add('visible');
+    console.warn(`[CheckraDOM] appendHistoryItem called for type=${item.type}. Current responseContent classes: ${this.elements.responseContent.className}`);
 
-    let displayItem = { ...item };
-    if (item.type === 'ai' && item.content && !item.isStreaming) { // Parse if not streaming
-      displayItem.content = marked.parse(item.content) as string;
-    } else if (item.type === 'ai' && item.isStreaming) {
-      // For streaming AI, content is initially empty or placeholder, updated by updateLastAIMessage
-      // If there's initial content (e.g. "AI is thinking..."), let it pass through createMessageElement
-    }
-    // User messages (type: 'usermessage') might already be HTML
+    this.elements.responseContent.classList.remove('checkra-hidden');
+    this.elements.responseContent.classList.add('checkra-visible');
+    console.warn(`[CheckraDOM] After ensuring visibility, responseContent classes: ${this.elements.responseContent.className}`);
 
-    const messageEl = this.createMessageElement(displayItem);
+    // createMessageElement will handle all necessary parsing/formatting for AI messages.
+    // User messages (type: 'usermessage') might already be HTML.
+    const messageEl = this.createMessageElement(item);
     this.elements.responseContent.appendChild(messageEl);
     this.elements.contentWrapper.scrollTop = this.elements.contentWrapper.scrollHeight;
   }
@@ -567,11 +588,26 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   public updateLastAIMessage(newContent: string, isStreaming: boolean): void {
     if (!this.elements) return;
     const { responseContent } = this.elements;
-    const lastAiMessageBubble = responseContent.querySelector('.message-ai:last-child');
-
+    const lastAiMessageBubble = responseContent.querySelector('.checkra-message-bubble.checkra-message-ai:last-child');
 
     if (lastAiMessageBubble) {
-      lastAiMessageBubble.innerHTML = marked.parse(newContent) as string;
+      let contentToRender = newContent;
+      const lines = newContent.split('\n');
+      const hasBulletPoints = lines.some(line => /^\s*[-*•]/.test(line));
+
+      if (hasBulletPoints) {
+        contentToRender = '<ul>\n' + lines.map(line => {
+          const match = line.match(/^(\s*[-*•])(.*)/);
+          if (match) {
+            return `<li>${match[2].trim()}</li>`;
+          }
+          return line.trim() ? `<li>${line.trim()}</li>` : '';
+        }).filter(line => line).join('\n') + '\n</ul>';
+      } else {
+        contentToRender = marked.parse(newContent) as string;
+      }
+      
+      lastAiMessageBubble.innerHTML = contentToRender;
       lastAiMessageBubble.classList.toggle('streaming', isStreaming);
       this.attachCodeCopyButtonsTo(lastAiMessageBubble as HTMLElement);
       // Access contentWrapper via this.elements if needed for scrolling

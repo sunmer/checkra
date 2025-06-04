@@ -55,6 +55,7 @@ export class CheckraDOM {
   private settingsButton: HTMLButtonElement | null = null;
   private buttonRow: HTMLDivElement | null = null;
   private resizeHandle: HTMLDivElement | null = null;
+  private onSuggestionClickCallback: ((suggestionText: string) => void) | null = null;
 
   public show(): void {
     if (!this.viewer) return;
@@ -121,7 +122,11 @@ export class CheckraDOM {
         case 'usermessage': typeClass = 'checkra-message-usermessage'; break;
     }
     if (typeClass) bubble.classList.add(typeClass);
-    // ... (rest of createMessageBubble, ensure classList changes use prefixed names if they were generic)
+    if (item.type === 'ai' && item.isStreaming) {
+      // Current logic might already handle adding a loader or relies on text updates
+    } else if (typeof item.content === 'string') {
+      bubble.innerHTML = item.content; // Use innerHTML to render HTML content from AI
+    }
     return bubble;
   }
 
@@ -162,41 +167,150 @@ export class CheckraDOM {
         <button class="checkra-onboarding-button" id="checkra-onboarding-got-it">Got it!</button>
         <button class="checkra-onboarding-link-button" id="checkra-onboarding-audit-page">Or, run a full page audit</button>
     `;
-    // ... (event listener for got it button)
+
+    const gotItButton = container.querySelector('#checkra-onboarding-got-it');
+    if (gotItButton && this.promptTextarea) { // Ensure promptTextarea exists for focus
+      gotItButton.addEventListener('click', () => {
+        this.showOnboardingView(false);
+        this.showPromptInputArea(true);
+        localStorage.setItem('checkra_onboarded', 'true');
+        this.promptTextarea!.focus(); // Non-null assertion as we checked it
+      });
+    }
+
+    const auditButton = container.querySelector('#checkra-onboarding-audit-page');
+    if (auditButton && this.onSuggestionClickCallback) {
+        auditButton.addEventListener('click', () => {
+            if (this.onSuggestionClickCallback) {
+                this.onSuggestionClickCallback('/audit page'); 
+            }
+        });
+    }
+
+    const suggestionSpans = container.querySelectorAll('.checkra-onboarding-suggestion');
+    suggestionSpans.forEach(span => {
+      span.addEventListener('click', (e) => {
+        const suggestionText = (e.target as HTMLElement).dataset.suggestion;
+        if (suggestionText && this.onSuggestionClickCallback) {
+          this.onSuggestionClickCallback(suggestionText);
+        }
+      });
+    });
+
     return container;
   }
 
-  public create(onCloseCallback: () => void): CheckraViewerElements {
+  public create(
+    onCloseCallback: () => void, 
+    onSuggestionClick: (suggestionText: string) => void
+    ): CheckraViewerElements {
+    this.onSuggestionClickCallback = onSuggestionClick;
     this.viewer = document.createElement('div');
-    // ... (assign all other this.property values)
-    const loadingIndicator = document.createElement('div'); // This was a local var, should be this.loadingIndicator
-    this.loadingIndicator = loadingIndicator; // Assign to class property
+    this.viewer.id = 'checkra-feedback-viewer';
+    this.viewer.classList.add('checkra-hidden');
+
+    this.header = document.createElement('div');
+    this.header.id = 'checkra-feedback-response-header';
+
+    this.contentWrapper = document.createElement('div');
+    this.contentWrapper.id = 'checkra-feedback-content-wrapper';
+
+    this.responseContent = document.createElement('div');
+    this.responseContent.id = 'checkra-feedback-response-content';
+    this.responseContent.classList.add('checkra-hidden');
+
+    this.conversationHistoryContainer = document.createElement('div');
+    this.conversationHistoryContainer.id = 'checkra-conversation-history';
+
+    this.promptTextarea = document.createElement('textarea');
+    this.promptTextarea.id = 'checkra-prompt-textarea';
+    this.promptTextarea.placeholder = 'Describe what you want to change or analyze...';
+    this.promptTextarea.rows = 3;
+
+    this.userMessageContainer = document.createElement('div');
+    this.userMessageContainer.id = 'checkra-user-message-container';
+    this.userMessageContainer.classList.add('checkra-hidden');
+    this.userMessageTextElement = document.createElement('p');
+    this.userMessageContainer.appendChild(this.userMessageTextElement);
+
+    this.loadingIndicator = document.createElement('div');
     this.loadingIndicator.id = 'checkra-feedback-loading-indicator';
     this.loadingIndicator.classList.add('checkra-hidden');
     const loadingSpinner = document.createElement('div');
     loadingSpinner.className = 'checkra-loading-spinner';
     this.loadingIndicator.appendChild(loadingSpinner);
-    this.loadingTextElement = document.createElement('span'); // Assuming this was also missing a this.
+    this.loadingTextElement = document.createElement('span');
     this.loadingIndicator.appendChild(this.loadingTextElement);
 
-    // Example for submitButton if it wasn't being assigned to this.submitButton
-    const submitButton = document.createElement('button'); 
-    this.submitButton = submitButton; // Assign to class property
-    this.submitButton.id = 'checkra-feedback-submit-button';
-    // ... other submitButton setups
+    this.closeButton = document.createElement('button');
+    this.closeButton.id = 'checkra-close-viewer-btn';
+    this.closeButton.innerHTML = CLOSE_SVG_ICON; 
+    this.closeButton.title = 'Close Checkra Panel';
+    this.closeButton.addEventListener('click', onCloseCallback);
+    
+    this.buttonRow = document.createElement('div');
+    this.buttonRow.id = 'checkra-button-row';
 
-    const submitButtonLoader = document.createElement('div');
-    this.submitButtonLoader = submitButtonLoader; // Assign to class property
+    this.submitButton = document.createElement('button');
+    this.submitButton.id = 'checkra-feedback-submit-button';
+    this.submitButtonIcon = document.createElement('span');
+    this.submitButtonIcon.innerHTML = SUBMIT_SVG_ICON;
+    this.submitButton.appendChild(this.submitButtonIcon);
+    this.submitButtonLoader = document.createElement('div');
     this.submitButtonLoader.className = 'checkra-button-loader checkra-hidden';
     this.submitButtonLoader.innerHTML = '&nbsp;'; 
     this.submitButton.appendChild(this.submitButtonLoader);
-    
-    // Similar assignments for other elements like submitButtonIcon, viewer, header, etc.
-    // Ensure all elements accessed via `this.` in other methods are initialized and assigned to `this.` here.
+    this.submitButton.title = 'Submit Feedback (Ctrl+Enter or Cmd+Enter)';
 
-    // Construct and return the CheckraViewerElements object using `this.` properties
+    this.miniSelectButton = document.createElement('button');
+    this.miniSelectButton.id = 'checkra-mini-select-btn';
+    this.miniSelectButton.innerHTML = SELECT_SVG_ICON;
+    this.miniSelectButton.title = 'Select Element (S)';
+
+    this.settingsButton = document.createElement('button');
+    this.settingsButton.id = 'checkra-header-settings-btn';
+    this.settingsButton.innerHTML = SETTINGS_SVG_ICON;
+    this.settingsButton.title = 'Settings';
+
+    this.actionButtonsContainer = document.createElement('div');
+    this.actionButtonsContainer.id = 'checkra-feedback-action-buttons';
+    this.previewApplyButton = document.createElement('button');
+    this.previewApplyButton.className = 'preview-apply-fix'; 
+    this.previewApplyButton.textContent = 'Apply Fix';
+    this.previewApplyButton.classList.add('checkra-hidden');
+    this.cancelFixButton = document.createElement('button');
+    this.cancelFixButton.className = 'cancel-fix';
+    this.cancelFixButton.textContent = 'Cancel';
+    this.cancelFixButton.classList.add('checkra-hidden');
+    this.actionButtonsContainer.appendChild(this.previewApplyButton);
+    this.actionButtonsContainer.appendChild(this.cancelFixButton);
+    
+    this.onboardingContainer = this.createOnboardingContent();
+
+    this.header.appendChild(this.settingsButton);
+    this.header.appendChild(this.loadingIndicator);
+    this.header.appendChild(this.actionButtonsContainer); 
+    this.header.appendChild(this.closeButton);
+
+    this.contentWrapper.appendChild(this.onboardingContainer);
+    this.contentWrapper.appendChild(this.responseContent);
+    this.contentWrapper.appendChild(this.userMessageContainer);
+    this.contentWrapper.appendChild(this.conversationHistoryContainer);
+
+    const textareaContainer = document.createElement('div');
+    textareaContainer.id = 'checkra-textarea-container';
+    this.buttonRow.appendChild(this.miniSelectButton);
+    this.buttonRow.appendChild(this.submitButton);
+    textareaContainer.appendChild(this.promptTextarea);
+    textareaContainer.appendChild(this.buttonRow);
+
+    this.viewer.appendChild(this.header);
+    this.viewer.appendChild(this.contentWrapper);
+    this.viewer.appendChild(textareaContainer);
+    document.body.appendChild(this.viewer);
+
     return {
-        viewer: this.viewer!, // Use non-null assertion if sure they are assigned
+        viewer: this.viewer!,
         header: this.header!,
         contentWrapper: this.contentWrapper!,
         responseContent: this.responseContent!,
