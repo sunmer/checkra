@@ -323,7 +323,6 @@ const fetchFeedbackBase = async (
 
     let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
     let processedHtml = sanitizedHtml;
-    let originalSentHtmlForPatch: string | null = null;
     let analysisBuffer = ''; // Renamed from analysisAccumulator for clarity with new event
     
     // These will now be part of BackendPayloadMetadata
@@ -337,13 +336,6 @@ const fetchFeedbackBase = async (
       cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
       uiKitDetectionForPayload = detectUiKit(sanitizedHtml);
-
-      if (insertionMode === 'replace' && sanitizedHtml && sanitizedHtml.length >= 500) {
-        originalSentHtmlForPatch = sanitizedHtml;
-        customWarn('[AI Service] JSON Patch mode activated: insertionMode is replace and selectedHtml.length >= 500.');
-      } else if (insertionMode === 'replace') {
-        customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
-      }
     } else {
       // No element selected, perform global detections
       frameworkDetectionForPayload = detectCssFramework(); // Global detection

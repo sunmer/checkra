@@ -238,7 +238,6 @@ function analyzeClassesForFramework(
 
     // Pre-compute utility density using more accurate detection
     let tailwindUtilityMatches = 0;
-    let bootstrapUtilityMatches = 0;
     let totalUtilityMatches = 0;
 
     classesToAnalyze.forEach(cls => {
@@ -252,7 +251,6 @@ function analyzeClassesForFramework(
             tailwindUtilityMatches++;
             totalUtilityMatches++;
         } else if (isBootstrapClass(cls)) {
-            bootstrapUtilityMatches++;
             totalUtilityMatches++;
         }
     });

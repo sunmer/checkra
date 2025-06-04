@@ -7,13 +7,13 @@ import { UiKitDetection } from "../types";
 export function detectUiKit(htmlStringOrContextElement?: string | HTMLElement): UiKitDetection {
   const detected: UiKitDetection = { name: null, confidence: null };
   let content = '';
-  let elementContext: Document | HTMLElement = document;
+  // let elementContext: Document | HTMLElement = document; // Not used in current string-based logic
 
   if (typeof htmlStringOrContextElement === 'string') {
     content = htmlStringOrContextElement.toLowerCase();
   } else if (htmlStringOrContextElement instanceof HTMLElement) {
     content = htmlStringOrContextElement.outerHTML.toLowerCase();
-    elementContext = htmlStringOrContextElement.ownerDocument || document;
+    // elementContext = htmlStringOrContextElement.ownerDocument || document; // Not used
   } else {
     content = document.body.outerHTML.toLowerCase(); // Default to whole body
   }
