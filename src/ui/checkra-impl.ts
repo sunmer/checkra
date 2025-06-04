@@ -75,6 +75,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   public boundHandleDomUpdate = this.handleDomUpdate.bind(this);
   public boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this);
   public boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
+  public boundHandleAiAnalysisFinalized = this.handleAiAnalysisFinalized.bind(this);
   private boundPrepareForInputFromSelection = this.prepareForInputFromSelection.bind(this);
 
   constructor(
@@ -114,6 +115,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.boundHandleDomUpdate = this.handleDomUpdate.bind(this);
     this.boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this);
     this.boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
+    this.boundHandleAiAnalysisFinalized = this.handleAiAnalysisFinalized.bind(this);
     this.getControlCallbacksForFix = this.getControlCallbacksForFix.bind(this);
   }
 
@@ -155,6 +157,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate);
     eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
     eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
+    eventEmitter.on('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
 
     this.domElements.responseContent.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
@@ -202,6 +205,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.off('aiDomUpdateReceived', this.boundHandleDomUpdate);
     eventEmitter.off('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
     eventEmitter.off('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
+    eventEmitter.off('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
     this.viewerEvents.unsubscribe();
     this.domElements = null;
     this.domManager = null;
@@ -1069,5 +1073,35 @@ Your job:
   public async handleSaveDraftCommand(): Promise<void> {
     customWarn('[CheckraImpl] Resuming handleSaveDraftCommand via CommandDispatcher after auth.');
     await this.commandDispatcher.tryHandleCommand('/save');
+  }
+
+  private handleAiAnalysisFinalized(fullAnalysisText: string): void {
+    customWarn('[CheckraImpl] handleAiAnalysisFinalized received:', fullAnalysisText.substring(0, 100));
+    
+    // The primary goal is to update the content of the AI message that was streaming this analysis.
+    // This could be an active streaming item, or the last AI item if streaming ended just before this event.
+    const streamingItem = this.conversationHistoryManager.getActiveStreamingAIItem();
+    const history = this.conversationHistoryManager.getHistory();
+    const lastAiItemInHistory = history.length > 0 && history[history.length -1].type === 'ai' ? history[history.length -1] : null;
+
+    if (streamingItem) {
+      customWarn('[CheckraImpl] handleAiAnalysisFinalized: Updating active streaming AI item.');
+      this.conversationHistoryManager.setLastAIItemContent(fullAnalysisText); 
+    } else if (lastAiItemInHistory) {
+      customWarn('[CheckraImpl] handleAiAnalysisFinalized: No active stream, updating last AI item in history.');
+      this.conversationHistoryManager.setLastAIItemContent(fullAnalysisText);
+    } else {
+      customWarn('[CheckraImpl] handleAiAnalysisFinalized: No active streaming AI item or last AI item to update.');
+      return; // Nothing to update
+    }
+
+    // Update the DOM with the final, non-streaming analysis text.
+    // updateLastAIMessage will format it (list or markdown) and set isStreaming to false internally via DOM.
+    if (this.domManager) {
+      this.domManager.updateLastAIMessage(fullAnalysisText, false);
+    }
+    
+    // Note: We do NOT finalize the overall response here (loaders, etc.).
+    // That is the job of finalizeResponse() which is triggered by the 'aiFinalized' event (end of entire SSE stream).
   }
 }

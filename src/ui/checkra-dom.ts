@@ -469,9 +469,6 @@ export class CheckraDOM {
 
   // Updated onboarding content to be Markdown within an AI bubble
   private createOnboardingView(): string {
-    const selectButtonRepresentation =
-      `<span class="onboarding-button-representation" title="Select Element">${SELECT_SVG_ICON}</span>`;
-
     const markdownContent = `
 ### Welcome to Checkra!
 Use this panel to edit your website with AI, ship variations, and analyze what works.

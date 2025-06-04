@@ -324,9 +324,7 @@ const fetchFeedbackBase = async (
     let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
     let processedHtml = sanitizedHtml;
     let originalSentHtmlForPatch: string | null = null;
-    let jsonPatchAccumulator: string = '';
-    let patchStartSeen: boolean = false;
-    let analysisAccumulator: string = '';
+    let analysisBuffer = ''; // Renamed from analysisAccumulator for clarity with new event
     
     // These will now be part of BackendPayloadMetadata
     let cssDigestsForPayload: CssContext['cssDigests'] | null = null;
@@ -421,148 +419,119 @@ const fetchFeedbackBase = async (
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
-        if (buffer.trim()) {
-          if (buffer.startsWith('data:')) {
-            try {
-              const jsonString = buffer.substring(5).trim();
-              if (jsonString) {
-                const data = JSON.parse(jsonString);
-                if (originalSentHtmlForPatch) {
-                  if (typeof data.content === 'string') {
-                    jsonPatchAccumulator += data.content;
-                  }
-                } else if (data.type === 'json-patch') {
-                  let parsedPayload: any = jsonPatchAccumulator;
-                  try { parsedPayload = JSON.parse(jsonPatchAccumulator || jsonString); } catch (e) { /* ... */ }
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: data.payload || parsedPayload, originalHtml: originalSentHtmlForPatch });
-                } else if (data.content) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', data.content);
-                } else { /* ... */ }
-              }
-            } catch (e) { /* ... */ }
-          }
-        }
-        if (originalSentHtmlForPatch && jsonPatchAccumulator.length > 0) {
-          let parsedPayload: any = jsonPatchAccumulator;
-          try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-          if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
-        }
+        // Process any remaining buffer content if necessary (though SSE usually ends with \n\n)
+        // The main aiFinalized event should handle the end of all data.
         if (serviceEventEmitter) serviceEventEmitter.emit('aiFinalized');
         break;
       }
 
       buffer += decoder.decode(value, { stream: true });
       let lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      buffer = lines.pop() || ''; // Keep the last partial line in buffer
 
       for (const line of lines) {
         if (line.startsWith('event:')) {
           currentEventType = line.substring(6).trim();
         } else if (line.startsWith('data:')) {
-          try {
-            const jsonString = line.substring(5).trim();
-            if (jsonString) {
+          const jsonString = line.substring(5).trim();
+          if (jsonString) {
+            try {
               const parsedData = JSON.parse(jsonString);
-              if (currentEventType) {
-                if (currentEventType === 'domUpdateHtml') {
-                  if (parsedData.html && parsedData.insertionMode) {
-                    if (serviceEventEmitter) {
-                      serviceEventEmitter.emit('aiDomUpdateReceived', {
-                        html: parsedData.html,
-                        insertionMode: parsedData.insertionMode,
-                      });
-                    }
-                  } else {
-                    customWarn('[AI Service] Received domUpdateHtml event with missing html or insertionMode:', parsedData);
-                  }
-                } else if (currentEventType === 'resolvedColorsUpdate') {
+              if (!currentEventType) {
+                // This case is for old-style messages without an event type, or if an event type was missed.
+                // Based on new spec, all data should be under an event type.
+                // We can log this as unexpected or try to infer based on payload.
+                customWarn('[AI Service] SSE data received without a preceding event type:', parsedData);
+                // For now, we will not process data without an explicit event type under the new model.
+                continue;
+              }
+
+              switch (currentEventType) {
+                case 'colors':
                   if (serviceEventEmitter) {
                     serviceEventEmitter.emit('internalResolvedColorsUpdate', parsedData);
                   }
-                } else if (currentEventType === 'jsonPatch') {
-                  const eventDataContent = parsedData.content; 
-                  if (typeof eventDataContent === 'string') {
-                    if (eventDataContent === '[PATCH_START]') {
-                      customWarn('[AI Service] Received [PATCH_START] marker via jsonPatch event. Awaiting actual patch data.');
-                    } else {
-                      try {
-                        const actualPatchPayloadArray = JSON.parse(eventDataContent);
-                        if (Array.isArray(actualPatchPayloadArray)) {
-                          if (serviceEventEmitter) {
-                            customWarn('[AI Service] Emitting aiJsonPatch with parsed array payload.');
-                            serviceEventEmitter.emit('aiJsonPatch', { payload: actualPatchPayloadArray, originalHtml: originalSentHtmlForPatch || '' });
-                          }
-                        } else {
-                          customError('[AI Service] Parsed jsonPatch content from event is not an array:', actualPatchPayloadArray);
-                          if (serviceEventEmitter) serviceEventEmitter.emit('aiError', 'Invalid JSON patch data format (not an array).');
-                        }
-                      } catch (e) {
-                        customError('[AI Service] Error parsing actual jsonPatch event content string:', eventDataContent, e);
-                        if (serviceEventEmitter) serviceEventEmitter.emit('aiError', 'Failed to parse JSON patch data string.');
-                      }
+                  break;
+                case 'analysis':
+                  if (parsedData.chunk && typeof parsedData.chunk === 'string') {
+                    analysisBuffer += parsedData.chunk;
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiResponseChunk', parsedData.chunk);
                     }
                   } else {
-                    customWarn('[AI Service] jsonPatch event content is not a string:', parsedData);
+                    customWarn('[AI Service] analysis event received without a valid string chunk:', parsedData);
                   }
-                } else { 
+                  break;
+                case 'analysisDone':
                   if (serviceEventEmitter) {
-                    serviceEventEmitter.emit(currentEventType, parsedData);
+                    // Emit a new event for clarity, carrying the full analysis
+                    serviceEventEmitter.emit('aiAnalysisFinalized', analysisBuffer);
                   }
-                }
-                currentEventType = null; 
-              } else {
-                if (parsedData.type === 'json-patch') {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
-                } else if (originalSentHtmlForPatch) {
-                  const raw = parsedData.content;
-                  const cleaned = typeof raw === 'string' ? raw.replace(/\u001b/g, '') : '';
-
-                  if (patchStartSeen) { 
-                      jsonPatchAccumulator += cleaned;
-                  } else { 
-                      analysisAccumulator += cleaned; 
-                      const markerIndexInCleaned = cleaned.indexOf('[PATCH_START]');
-                      if (markerIndexInCleaned !== -1) { 
-                          const preMarkerTextInChunk = cleaned.substring(0, markerIndexInCleaned);
-                          if (preMarkerTextInChunk.trim().length > 0 && serviceEventEmitter) {
-                              serviceEventEmitter.emit('aiResponseChunk', preMarkerTextInChunk); 
-                          }
-                          patchStartSeen = true;
-                          const postMarkerTextInChunk = cleaned.substring(markerIndexInCleaned + '[PATCH_START]'.length);
-                          if (postMarkerTextInChunk.length > 0) {
-                              jsonPatchAccumulator += postMarkerTextInChunk;
-                          }
-                      } else { 
-                          if (cleaned.trim().length > 0 && serviceEventEmitter) {
-                              serviceEventEmitter.emit('aiResponseChunk', cleaned); 
-                          }
-                      }
+                  analysisBuffer = ''; // Reset for next potential message cycle
+                  break;
+                case 'htmlReplace':
+                case 'htmlForPatch': // Simplest option: treat htmlForPatch as htmlReplace
+                  if (parsedData.html && typeof parsedData.html === 'string') {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: parsedData.html,
+                        insertionMode: 'replace' 
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] Event ', currentEventType, ' received without valid HTML string:', parsedData);
                   }
-                } else if (parsedData.userMessage) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiUserMessage', parsedData.userMessage);
-                } else if (parsedData.content) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', parsedData.content);
-                } else if (parsedData.error) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
-                } 
+                  break;
+                case 'htmlInsertBefore':
+                  if (parsedData.html && typeof parsedData.html === 'string') {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: parsedData.html,
+                        insertionMode: 'insertBefore'
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] htmlInsertBefore event received without valid HTML string:', parsedData);
+                  }
+                  break;
+                case 'htmlInsertAfter':
+                  if (parsedData.html && typeof parsedData.html === 'string') {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: parsedData.html,
+                        insertionMode: 'insertAfter'
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] htmlInsertAfter event received without valid HTML string:', parsedData);
+                  }
+                  break;
+                default:
+                  // Handle any other custom events if the backend might send them,
+                  // or log as unrecognized.
+                  customWarn(`[AI Service] Received unrecognized SSE event type '${currentEventType}':`, parsedData);
+                  if (serviceEventEmitter) {
+                      // Forward other events if a generic handler exists or if specific conditions met
+                      // For instance, if there was a generic 'aiCustomEvent' or similar.
+                      // serviceEventEmitter.emit(currentEventType, parsedData);
+                  }
+                  break;
               }
+              currentEventType = null; // Reset after processing data for an event
+            } catch (e) {
+              customError('[AI Service] Error parsing SSE data JSON:', jsonString, e);
+              if (serviceEventEmitter) {
+                serviceEventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
+              }
+              currentEventType = null; // Reset event type on error too
             }
-          } catch (e) {
-            if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
-            currentEventType = null;
           }
+        } else if (line.trim() === '') {
+          // Empty line often signifies end of an event block in SSE, reset currentEventType if needed
+          // Though our logic resets it after processing 'data:'
+          currentEventType = null;
         }
       }
-    }
-
-    if (originalSentHtmlForPatch && !patchStartSeen && analysisAccumulator.trim().length > 0 && serviceEventEmitter) {
-      serviceEventEmitter.emit('aiResponseChunk', analysisAccumulator);
-    }
-
-    if (originalSentHtmlForPatch && patchStartSeen && jsonPatchAccumulator.length > 0 && serviceEventEmitter) {
-      let parsedPayload: any = jsonPatchAccumulator;
-      try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-      serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
     }
   } catch (error) {
     customError("Error in fetchFeedbackBase:", error);
