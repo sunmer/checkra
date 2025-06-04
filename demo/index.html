@@ -30,6 +30,11 @@
     rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
+  <script>
+    localStorage.clear(); // Keep this if it's for specific playground testing unrelated to Checkra init
+    window.CheckraConfig = { isVisible: false, enableRating: true };
+  </script>
+
   <!-- Placeholder for Checkra library CSS (injected by Vite plugin) -->
   %CHECKRA_CSS_LINK%
 

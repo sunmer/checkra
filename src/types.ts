@@ -1,6 +1,4 @@
 import type { CheckraAPI } from './core/index'; // type-only import to avoid runtime cycle
-import { DetectedFramework } from './utils/framework-detector';
-import { UiKitDetection } from './utils/ui-kit-detector';
 
 /**
  * Configuration options for the Checkra feedback module.
@@ -52,6 +50,8 @@ export interface PageMetadataBrand {
   accent?: string | null;
   palette?: string[];
   inferred?: BrandInferred;
+  resolvedPrimaryColorInfo?: ColorResolutionDetails;
+  resolvedAccentColorInfo?: ColorResolutionDetails;
 }
 
 export interface PageMetadata {
@@ -74,6 +74,7 @@ export interface BackendPayloadMetadata extends PageMetadata {
   uiKitDetection?: UiKitDetection;
   perfHints?: PerfHints;
   leverValues?: LeverValues;
+  computedBackgroundColor?: string;
 }
 
 export interface GenerateSuggestionRequestbody {
@@ -91,6 +92,15 @@ export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
   feedback?: string;
   generatedHtml?: string;
   tags?: string[];
+  resolvedPrimaryColorInfo?: ColorResolutionDetails;
+  resolvedAccentColorInfo?: ColorResolutionDetails;
+  /** Optional screenshot of rendered HTML in base64 (JPEG or PNG) */
+  imageData?: {
+    mime: string; // e.g., 'image/jpeg'
+    data: string; // base64 string WITHOUT the data URI prefix for compactness
+    width: number;
+    height: number;
+  };
 }
 
 // --- New Shared Interfaces ---
@@ -114,3 +124,43 @@ export interface LeverValues {
   motionPreset?: string;
 }
 // --- End Updated and New Interfaces ---
+
+export interface UiKitDetection {
+  name: string | null;
+  confidence: number | null;
+}
+
+export interface DetectedFramework {
+  name: 'tailwind' | 'bootstrap' | 'material-ui' | 'custom';
+  version: string | 'unknown';
+  confidence: number; // 0 (no confidence) -> 1 (high confidence)
+  utilityDensity: number;
+  type: 'utility-first' | 'component-based' | 'unknown';
+}
+
+// --- ADDED: New Types for Color Resolution Event ---
+export type ColorSource = 
+  'input' 
+  | 'palette-primary' 
+  | 'palette-accent' 
+  | 'fallback-white' 
+  | 'fallback-black' 
+  | 'adjusted-contrast' 
+  | 'utility-class' 
+  | 'css-variable';
+
+export interface ColorResolutionDetails {
+  originalColor?: string;
+  resolvedColor: string;
+  source: ColorSource;
+  contrastAchieved?: number;
+  wasAdjusted?: boolean;
+  reason?: string;
+}
+
+export interface ResolvedColorInfo {
+  primary?: ColorResolutionDetails;
+  accent?: ColorResolutionDetails;
+  // Potentially other color types if backend expands, e.g., resolvedTextColorInfo
+}
+// --- END: New Types for Color Resolution Event ---

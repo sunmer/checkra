@@ -1,13 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svgjs="http://svgjs.dev/svgjs" width="512" height="512"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 32 32">  
-  <circle cx="16" cy="16" r="14" fill="rgba(20, 120, 255, 0.85)" stroke="rgba(52, 63, 84, 1)" stroke-width="1"></circle>
-  <g transform="translate(4,4)" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M4 7V5a2 2 0 0 1 2-2h2"></path>
-    <path d="M16 3h2a2 2 0 0 1 2 2v2"></path>
-    <path d="M20 17v2a2 2 0 0 1-2 2h-2"></path>
-    <path d="M8 21H6a2 2 0 0 1-2-2v-2"></path>
-    <circle cx="12" cy="12" r="4"></circle>
-    <path d="M15.5 15.5 L17 17"></path>
-  </g>
-</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
-@media (prefers-color-scheme: dark) { :root { filter: none; } }
-</style></svg>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="1000" height="1000"><g clip-path="url(#SvgjsClipPath1124)"><rect width="1000" height="1000" fill="#3b66ff"></rect><g transform="matrix(29.166666666666668,0,0,29.166666666666668,150,150)"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="24" height="24"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-crosshair-icon lucide-crosshair"><circle cx="12" cy="12" r="10"></circle><line x1="22" x2="18" y1="12" y2="12"></line><line x1="6" x2="2" y1="12" y2="12"></line><line x1="12" x2="12" y1="6" y2="2"></line><line x1="12" x2="12" y1="22" y2="18"></line></svg></svg></g></g><defs><clipPath id="SvgjsClipPath1124"><rect width="1000" height="1000" x="0" y="0" rx="500" ry="500"></rect></clipPath></defs></svg>

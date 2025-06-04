@@ -1,16 +1,16 @@
 import Settings from '../settings';
 import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
-// import html2canvas from 'html2canvas'; // Eager import removed
-import { CSS_ATOMIC_MAP } from '../utils/css-map';
-import { detectCssFramework, DetectedFramework } from '../utils/framework-detector';
-import { detectUiKit, UiKitDetection } from '../utils/ui-kit-detector';
+import { detectCssFramework } from '../utils/framework-detector';
+import { detectUiKit } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
 import {
   GenerateSuggestionRequestbody,
   AddRatingRequestBody,
   PageMetadata,
-  BackendPayloadMetadata
+  BackendPayloadMetadata,
+  UiKitDetection,
+  DetectedFramework
 } from '../types';
 
 let serviceEventEmitter: any = null; // Local reference to the event emitter
@@ -45,52 +45,104 @@ async function getHtml2Canvas(): Promise<Html2CanvasStatic | null> {
   }
 }
 
-const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): Record<string,string> => {
-  const map: Record<string,string> = {};
+const BOOTSTRAP_CLASS_REGEXES = [
+  /^(container(-fluid|-sm|-md|-lg|-xl|-xxl))$/,
+  /^row$/, 
+  /^col(-(?:auto|[1-9]|1[0-2]))?$/,
+  /^col-(sm|md|lg|xl|xxl)- (?:auto|[1-9]|1[0-2])$/,
+  /^g-[0-5]$/, /^gx-[0-5]$/, /^gy-[0-5]$/, // Gutters
+  /^(m|p|ms|me|mt|mb|ps|pe|pt|pb)-[0-5]$/, // Margin/Padding spacing
+  /^(m|p|ms|me|mt|mb|ps|pe|pt|pb)-auto$/,
+  /^(m|p|ms|me|mt|mb|ps|pe|pt|pb)-(sm|md|lg|xl|xxl)-[0-5]$/,
+  /^(m|p|ms|me|mt|mb|ps|pe|pt|pb)-(sm|md|lg|xl|xxl)-auto$/,
+  /^text-(primary|secondary|success|danger|warning|info|light|dark|white|body|muted|black-50|white-50|reset|decoration-none)$/,
+  /^text-(start|center|end)$/,
+  /^text-(sm|md|lg|xl|xxl)-(start|center|end)$/,
+  /^text-(lowercase|uppercase|capitalize)$/,
+  /^fw-(light|lighter|normal|bold|semibold|bolder)$/, /^fst-(italic|normal)$/,
+  /^lh-(1|sm|base|lg)$/,
+  /^bg-(primary|secondary|success|danger|warning|info|light|dark|black|white|transparent|body)$/,
+  /^border(?:-(primary|secondary|success|danger|warning|info|light|dark|white|black|transparent))?$/,
+  /^border-[0-5]$/, /^border-(top|bottom|start|end)(?:-[0-5])?$/,
+  /^rounded(?:-(0|1|2|3|4|5|circle|pill|top|bottom|start|end|top-left|top-right|bottom-left|bottom-right))?$/,
+  /^d-(none|inline|inline-block|block|grid|table|table-row|table-cell|flex|inline-flex)$/,
+  /^d-(sm|md|lg|xl|xxl)-(none|inline|inline-block|block|grid|table|table-row|table-cell|flex|inline-flex)$/,
+  /^(justify-content|align-items|align-content|align-self)-(start|end|center|between|around|stretch)$/,
+  /^(justify-content|align-items|align-content|align-self)-(sm|md|lg|xl|xxl)-(start|end|center|between|around|stretch)$/,
+  /^(flex-row|flex-column|flex-fill|flex-grow-0|flex-grow-1|flex-shrink-0|flex-shrink-1|flex-wrap|flex-nowrap|order-[0-5]|order-first|order-last)$/,
+  /^(flex)-(sm|md|lg|xl|xxl)-(row|column|row-reverse|column-reverse|fill|grow-0|grow-1|shrink-0|shrink-1|wrap|nowrap|wrap-reverse)$/,
+  /^(float-start|float-end|float-none)$/,
+  /^(float)-(sm|md|lg|xl|xxl)-(start|end|none)$/,
+  /^(shadow|shadow-sm|shadow-lg|shadow-none)$/,
+  /^(position-static|position-relative|position-absolute|position-fixed|position-sticky)$/,
+  /^(top-0|top-50|top-100|bottom-0|bottom-50|bottom-100|start-0|start-50|start-100|end-0|end-50|end-100)$/,
+  /^(translate-middle|translate-middle-x|translate-middle-y)$/,
+  /^(btn|btn-sm|btn-lg)$/,
+  /^btn-(primary|secondary|success|danger|warning|info|light|dark|link|outline-primary|outline-secondary|outline-success|outline-danger|outline-warning|outline-info|outline-light|outline-dark)$/,
+  /^(alert|alert-primary|alert-secondary|alert-success|alert-danger|alert-warning|alert-info|alert-light|alert-dark)$/,
+  /^(nav|nav-tabs|nav-pills|nav-fill|nav-justified)$/, /^(nav-item|nav-link)$/,
+  /^(navbar|navbar-expand-(sm|md|lg|xl|xxl))$/, /^(navbar-brand|navbar-toggler|navbar-toggler-icon|navbar-nav|navbar-text|navbar-collapse)$/,
+  /^(card|card-body|card-title|card-subtitle|card-text|card-link|card-header|card-footer|card-img|card-img-top|card-img-bottom|card-img-overlay)$/,
+  /^(modal|modal-dialog|modal-content|modal-header|modal-title|modal-body|modal-footer)$/, /^(modal-dialog-scrollable|modal-dialog-centered|modal-fullscreen(?:-(sm|md|lg|xl|xxl)-down)?)$/,
+  /^(badge|rounded-pill)$/,
+  /^(table|table-striped|table-bordered|table-hover|table-sm|table-responsive(?:-(sm|md|lg|xl|xxl))?)$/,
+  /^(form-label|form-control|form-select|form-check|form-check-input|form-check-label|form-text|input-group|input-group-text)$/,
+  /^(is-valid|is-invalid|valid-feedback|invalid-feedback|valid-tooltip|invalid-tooltip)$/,
+  /^(visible|invisible)$/
+];
+
+const buildTokensMap = (classesUsed: Set<string>, frameworkName: string): string[] => {
+  const tokensArray: string[] = [];
   if (frameworkName === 'tailwind') {
     classesUsed.forEach(cls => {
-      const decl = CSS_ATOMIC_MAP[cls];
-      if (decl) map[cls] = decl;
+      tokensArray.push(cls); // Send all found classes for Tailwind
+    });
+  } else if (frameworkName === 'bootstrap') {
+    classesUsed.forEach(cls => {
+      if (BOOTSTRAP_CLASS_REGEXES.some(regex => regex.test(cls))) {
+        tokensArray.push(cls); // Only send recognized Bootstrap classes
+      }
     });
   } else {
-    // Fallback: compute styles directly.
-    const probe = document.createElement('div');
-    document.body.appendChild(probe);
-    classesUsed.forEach(cls => {
-      probe.className = cls;
-      const style = getComputedStyle(probe);
-      const fs = style.fontSize ? `font-size:${style.fontSize};` : '';
-      const lh = style.lineHeight ? `line-height:${style.lineHeight};` : '';
-      const color = style.color && style.color !== 'rgba(0, 0, 0, 0)' ? `color:${style.color};` : '';
-      const bg = style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' ? `background-color:${style.backgroundColor};` : '';
-      const bs = style.boxShadow && style.boxShadow !== 'none' ? `box-shadow:${style.boxShadow};` : '';
-      const decl = `${fs}${lh}${color}${bg}${bs}`.replace(/;;+/g, ';');
-      if (decl) map[cls] = decl;
-    });
-    document.body.removeChild(probe);
+    // For other frameworks or custom, we are currently sending computed style key-value pairs.
+    // To make the return type consistent (string[]), this path would need to change.
+    // Option 1: Send only class names: classesUsed.forEach(cls => tokensArray.push(cls));
+    // Option 2: Keep sending computed styles but change cssDigests structure (more complex)
+    // For now, let's prioritize Option 1 for consistency if this path is hit, though it loses computed style info.
+    // A better long-term solution would be a more robust cssDigests type.
+    classesUsed.forEach(cls => tokensArray.push(cls)); 
+    customWarn(`[buildTokensMap] Fallback for framework '${frameworkName}': sending only class names, not computed styles.`);
   }
-  return map;
+  return tokensArray;
 };
 
 interface CssContext {
   comment: string;
-  cssDigests: any;
-  frameworkDetection: import('../utils/framework-detector').DetectedFramework;
+  cssDigests: {
+    [frameworkName: string]: {
+      version: string;
+      tokens: string[]; // Ensure tokens is an array of strings
+    };
+  };
+  frameworkDetection: DetectedFramework;
 }
 
 const produceCssContext = (htmlString: string): CssContext => {
+  // Detect framework based on the provided htmlString (snippet) or globally if htmlString is empty
+  const framework = detectCssFramework(htmlString || undefined); 
+  
   if (!htmlString) {
-    const fd = detectCssFramework();
-    const emptyDigest = {
-      [fd.name]: {
-        version: fd.version,
-        tokens: {}
+    // If htmlString is empty, framework detection was global. Tokens should be empty.
+    const emptyDigest: CssContext['cssDigests'] = {
+      [framework.name]: {
+        version: framework.version,
+        tokens: [] 
       }
     };
     return {
-      comment: '<!-- cssDigests: {} -->',
+      comment: '<!-- cssDigests: {} -->', 
       cssDigests: emptyDigest,
-      frameworkDetection: fd
+      frameworkDetection: framework
     };
   }
    
@@ -107,20 +159,20 @@ const produceCssContext = (htmlString: string): CssContext => {
     });
   }
 
-  const framework = detectCssFramework();
+  // Framework was already detected using htmlString (or globally if empty) at the beginning
   const digestTokens = buildTokensMap(classesUsed, framework.name);
 
-  const cssDigests: any = {
+  const cssDigests: CssContext['cssDigests'] = {
     [framework.name]: {
       version: framework.version,
-      tokens: digestTokens
+      tokens: digestTokens 
     }
   };
 
   return {
     comment: `<!-- cssDigests: ${JSON.stringify(cssDigests)} -->`,
     cssDigests,
-    frameworkDetection: framework
+    frameworkDetection: framework // This is now context-aware (snippet or global)
   };
 };
 
@@ -190,33 +242,6 @@ const extractColorsFromElement = async (element: HTMLElement): Promise<{ primary
   }
 };
 
-// ---------- NEW HELPER: mapHexToUtilityToken -----------------------------
-/**
- * Try to translate a hex colour (e.g. "#2563eb") to a utility class token
- * understood by the detected CSS framework (e.g. "bg-blue-600" for Tailwind).
- * Currently supports Tailwind by scanning CSS_ATOMIC_MAP.  Returns null if no
- * mapping is found.
- */
-function mapHexToUtilityToken(hex: string | undefined | null, frameworkName: string): string | null {
-  if (!hex) return null;
-  const normalised = hex.trim().toLowerCase();
-  if (!normalised.startsWith('#')) return null;
-
-  if (frameworkName === 'tailwind') {
-    for (const [token, decl] of Object.entries(CSS_ATOMIC_MAP)) {
-      if (decl && decl.toLowerCase().includes(normalised)) {
-        // Only keep colour-related utility classes
-        if (token.startsWith('bg-') || token.startsWith('text-') || token.startsWith('border-')) {
-          return token;
-        }
-      }
-    }
-  }
-  // TODO: Add Bootstrap / MUI palette lookup here if desired
-  return null;
-}
-// ------------------------------------------------------------------------
-
 /**
  * Gathers metadata from the current page.
  */
@@ -254,16 +279,12 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
       extractColorsFromElement
     );
     if (colours) {
-      const primaryToken = mapHexToUtilityToken(colours.primary, frameworkInfo.name);
-      const accentToken  = mapHexToUtilityToken(colours.accent, frameworkInfo.name);
-
       metadata.brand = {
         inferred: colours,
-        primary: primaryToken ? primaryToken : colours.primary,
-        accent: accentToken ? accentToken : colours.accent,
-        // Pass through tokens as separate fields for backend debugging
-        primaryUtilityToken: primaryToken || null,
-        accentUtilityToken : accentToken  || null,
+        primary: colours.primary,
+        accent: colours.accent,
+        primaryUtilityToken: null,
+        accentUtilityToken : null,
       } as any;
     }
     if (lever) {
@@ -274,9 +295,9 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
     // @ts-ignore
     (metadata as any).perfHints = perf;
     // generate palette if not already done
-    if (colours?.primary && colours?.accent) {
-      const palette = generateColorScheme(colours.primary, colours.accent);
-      if (palette.length === 5) (metadata.brand as any).palette = palette;
+    if (metadata.brand && colours?.primary) {
+        const palette = generateColorScheme(colours.primary, colours.accent);
+        if (palette.length === 5) (metadata.brand as any).palette = palette;
     }
   } catch (err) {
     customWarn('[Checkra Service] Brand extraction failed:', err);
@@ -293,7 +314,8 @@ const fetchFeedbackBase = async (
   promptText: string,
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
-  imageDataUrl?: string | null
+  imageDataUrl?: string | null,
+  computedBackgroundColor?: string | null
 ): Promise<void> => {
   try {
     const pageMeta = await getPageMetadata(); // Renamed to pageMeta for clarity
@@ -302,21 +324,19 @@ const fetchFeedbackBase = async (
     let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
     let processedHtml = sanitizedHtml;
     let originalSentHtmlForPatch: string | null = null;
-    let jsonPatchAccumulator: string = '';
-    let patchStartSeen: boolean = false;
-    let analysisAccumulator: string = '';
+    let analysisBuffer = ''; // Renamed from analysisAccumulator for clarity with new event
     
     // These will now be part of BackendPayloadMetadata
-    let cssDigestsForPayload: any = null;
+    let cssDigestsForPayload: CssContext['cssDigests'] | null = null;
     let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
     let uiKitDetectionForPayload: UiKitDetection | undefined = undefined;
 
     if (sanitizedHtml) {
-      const cssCtx = produceCssContext(sanitizedHtml || '');
+      const cssCtx = produceCssContext(sanitizedHtml);
       processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
       cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
-      uiKitDetectionForPayload = sanitizedHtml ? detectUiKit(sanitizedHtml) : undefined; // Moved here
+      uiKitDetectionForPayload = detectUiKit(sanitizedHtml);
 
       if (insertionMode === 'replace' && sanitizedHtml && sanitizedHtml.length >= 500) {
         originalSentHtmlForPatch = sanitizedHtml;
@@ -325,14 +345,11 @@ const fetchFeedbackBase = async (
         customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
       }
     } else {
-      // Even if no HTML is selected, we might want to send framework/UI kit info if detected globally
-      // For now, only produceCssContext is called if selectedHtml exists.
-      // If global detection is desired, detectCssFramework() and detectUiKit() could be called here.
-      // For simplicity, keeping existing logic: these are only populated if selectedHtml exists.
-      const globalFramework = detectCssFramework(); // Detect framework globally
-      frameworkDetectionForPayload = globalFramework;
-      // uiKitDetectionForPayload can be based on document.body.outerHTML if needed, but might be too broad.
-      // For now, uiKitDetectionForPayload will only be set if selectedHtml is present.
+      // No element selected, perform global detections
+      frameworkDetectionForPayload = detectCssFramework(); // Global detection
+      uiKitDetectionForPayload = detectUiKit(); // Global detection (checks document.body)
+      const cssCtx = produceCssContext(''); // Produces empty tokens for the globally detected framework
+      cssDigestsForPayload = cssCtx.cssDigests;
     }
     
     // Construct BackendPayloadMetadata
@@ -340,7 +357,8 @@ const fetchFeedbackBase = async (
       ...pageMeta, // Spread PageMetadata
       cssDigests: cssDigestsForPayload,
       frameworkDetection: frameworkDetectionForPayload,
-      uiKitDetection: uiKitDetectionForPayload
+      uiKitDetection: uiKitDetectionForPayload,
+      computedBackgroundColor: computedBackgroundColor || undefined
     };
 
     const requestBody: GenerateSuggestionRequestbody = {
@@ -353,10 +371,8 @@ const fetchFeedbackBase = async (
     if (sanitizedHtml) {
       requestBody.html = processedHtml;
       requestBody.htmlCharCount = sanitizedHtml.length;
-      // cssDigests, frameworkDetection, uiKitDetection are now part of requestBody.metadata
     }
 
-    // Emit the request body so checkra-impl can store it with the full metadata
     if (serviceEventEmitter) {
       serviceEventEmitter.emit('requestBodyPrepared', requestBody);
     }
@@ -403,129 +419,123 @@ const fetchFeedbackBase = async (
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
-        if (buffer.trim()) {
-          if (buffer.startsWith('data:')) {
-            try {
-              const jsonString = buffer.substring(5).trim();
-              if (jsonString) {
-                const data = JSON.parse(jsonString);
-                if (originalSentHtmlForPatch) {
-                  if (typeof data.content === 'string') {
-                    jsonPatchAccumulator += data.content;
-                  }
-                } else if (data.type === 'json-patch') {
-                  let parsedPayload: any = jsonPatchAccumulator;
-                  try { parsedPayload = JSON.parse(jsonPatchAccumulator || jsonString); } catch (e) { /* ... */ }
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: data.payload || parsedPayload, originalHtml: originalSentHtmlForPatch });
-                } else if (data.content) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', data.content);
-                } else { /* ... */ }
-              }
-            } catch (e) { /* ... */ }
-          }
-        }
-        if (originalSentHtmlForPatch && jsonPatchAccumulator.length > 0) {
-          let parsedPayload: any = jsonPatchAccumulator;
-          try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-          if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
-        }
+        // Process any remaining buffer content if necessary (though SSE usually ends with \n\n)
+        // The main aiFinalized event should handle the end of all data.
         if (serviceEventEmitter) serviceEventEmitter.emit('aiFinalized');
         break;
       }
 
       buffer += decoder.decode(value, { stream: true });
       let lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      buffer = lines.pop() || ''; // Keep the last partial line in buffer
 
       for (const line of lines) {
         if (line.startsWith('event:')) {
           currentEventType = line.substring(6).trim();
         } else if (line.startsWith('data:')) {
-          try {
-            const jsonString = line.substring(5).trim();
-            if (jsonString) {
+          const jsonString = line.substring(5).trim();
+          if (jsonString) {
+            try {
               const parsedData = JSON.parse(jsonString);
-              if (currentEventType) {
-                if (currentEventType === 'domUpdateHtml') {
-                  if (parsedData.html && parsedData.insertionMode) {
+              if (!currentEventType) {
+                // This case is for old-style messages without an event type, or if an event type was missed.
+                // Based on new spec, all data should be under an event type.
+                // We can log this as unexpected or try to infer based on payload.
+                customWarn('[AI Service] SSE data received without a preceding event type:', parsedData);
+                // For now, we will not process data without an explicit event type under the new model.
+                continue;
+              }
+
+              switch (currentEventType) {
+                case 'colors':
+                  if (serviceEventEmitter) {
+                    serviceEventEmitter.emit('internalResolvedColorsUpdate', parsedData);
+                  }
+                  break;
+                case 'analysis':
+                  if (parsedData.chunk && typeof parsedData.chunk === 'string') {
+                    analysisBuffer += parsedData.chunk;
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiResponseChunk', parsedData.chunk);
+                    }
+                  } else {
+                    customWarn('[AI Service] analysis event received without a valid string chunk:', parsedData);
+                  }
+                  break;
+                case 'analysisDone':
+                  if (serviceEventEmitter) {
+                    // Emit a new event for clarity, carrying the full analysis
+                    serviceEventEmitter.emit('aiAnalysisFinalized', analysisBuffer);
+                  }
+                  analysisBuffer = ''; // Reset for next potential message cycle
+                  break;
+                case 'htmlReplace':
+                case 'htmlForPatch': // Simplest option: treat htmlForPatch as htmlReplace
+                  if (parsedData.html && typeof parsedData.html === 'string') {
                     if (serviceEventEmitter) {
                       serviceEventEmitter.emit('aiDomUpdateReceived', {
                         html: parsedData.html,
-                        insertionMode: parsedData.insertionMode,
+                        insertionMode: 'replace' 
                       });
                     }
                   } else {
-                    customWarn('[AI Service] Received domUpdateHtml event with missing html or insertionMode:', parsedData);
+                    customWarn('[AI Service] Event ', currentEventType, ' received without valid HTML string:', parsedData);
                   }
-                } else {
+                  break;
+                case 'htmlInsertBefore':
+                  if (parsedData.html && typeof parsedData.html === 'string') {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: parsedData.html,
+                        insertionMode: 'insertBefore'
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] htmlInsertBefore event received without valid HTML string:', parsedData);
+                  }
+                  break;
+                case 'htmlInsertAfter':
+                  if (parsedData.html && typeof parsedData.html === 'string') {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: parsedData.html,
+                        insertionMode: 'insertAfter'
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] htmlInsertAfter event received without valid HTML string:', parsedData);
+                  }
+                  break;
+                default:
+                  // Handle any other custom events if the backend might send them,
+                  // or log as unrecognized.
+                  customWarn(`[AI Service] Received unrecognized SSE event type '${currentEventType}':`, parsedData);
                   if (serviceEventEmitter) {
-                    serviceEventEmitter.emit(currentEventType, parsedData);
+                      // Forward other events if a generic handler exists or if specific conditions met
+                      // For instance, if there was a generic 'aiCustomEvent' or similar.
+                      // serviceEventEmitter.emit(currentEventType, parsedData);
                   }
-                }
-                currentEventType = null;
-              } else {
-                if (parsedData.type === 'json-patch') {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
-                } else if (originalSentHtmlForPatch) {
-                  const raw = parsedData.content;
-                  const cleaned = typeof raw === 'string' ? raw.replace(/\u001b/g, '') : '';
-
-                  if (patchStartSeen) { 
-                      jsonPatchAccumulator += cleaned;
-                  } else { // Still in analysis phase for this patch mode request
-                      analysisAccumulator += cleaned; // Accumulate for the complete record, potentially used by end-of-stream handler
-
-                      const markerIndexInCleaned = cleaned.indexOf('[PATCH_START]');
-
-                      if (markerIndexInCleaned !== -1) { // Marker is in the current chunk
-                          const preMarkerTextInChunk = cleaned.substring(0, markerIndexInCleaned);
-                          if (preMarkerTextInChunk.trim().length > 0 && serviceEventEmitter) {
-                              serviceEventEmitter.emit('aiResponseChunk', preMarkerTextInChunk); // Stream this part of analysis
-                          }
-                          patchStartSeen = true;
-                          const postMarkerTextInChunk = cleaned.substring(markerIndexInCleaned + '[PATCH_START]'.length);
-                          if (postMarkerTextInChunk.length > 0) {
-                              jsonPatchAccumulator += postMarkerTextInChunk;
-                          }
-                          // analysisAccumulator has served its purpose for streaming leading up to the marker found in *this chunk*.
-                          // The full analysisAccumulator (if stream ends before marker) is handled by end-of-stream logic.
-                      } else { // No marker in this specific 'cleaned' chunk, so it's purely analysis to be streamed
-                          if (cleaned.trim().length > 0 && serviceEventEmitter) {
-                              serviceEventEmitter.emit('aiResponseChunk', cleaned); // Stream this analysis chunk
-                          }
-                      }
-                  }
-                } else if (parsedData.userMessage) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiUserMessage', parsedData.userMessage);
-                } else if (parsedData.content) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', parsedData.content);
-                } else if (parsedData.error) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
-                } else { 
-                  // customWarn('[AI Service] Received unhandled data structure in SSE stream:', parsedData);
-                }
+                  break;
               }
+              currentEventType = null; // Reset after processing data for an event
+            } catch (e) {
+              customError('[AI Service] Error parsing SSE data JSON:', jsonString, e);
+              if (serviceEventEmitter) {
+                serviceEventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
+              }
+              currentEventType = null; // Reset event type on error too
             }
-          } catch (e) {
-            if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Error parsing stream data: ${e instanceof Error ? e.message : String(e)}`);
-            currentEventType = null;
           }
+        } else if (line.trim() === '') {
+          // Empty line often signifies end of an event block in SSE, reset currentEventType if needed
+          // Though our logic resets it after processing 'data:'
+          currentEventType = null;
         }
       }
     }
-
-    if (originalSentHtmlForPatch && !patchStartSeen && analysisAccumulator.trim().length > 0 && serviceEventEmitter) {
-      serviceEventEmitter.emit('aiResponseChunk', analysisAccumulator);
-    }
-
-    if (originalSentHtmlForPatch && patchStartSeen && jsonPatchAccumulator.length > 0 && serviceEventEmitter) {
-      let parsedPayload: any = jsonPatchAccumulator;
-      try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-      serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
-    }
   } catch (error) {
     customError("Error in fetchFeedbackBase:", error);
-    if (serviceEventEmitter) { // Check if emitter is initialized
+    if (serviceEventEmitter) { 
       serviceEventEmitter.emit('aiError', error instanceof Error ? error.message : String(error));
     }
   }
@@ -538,10 +548,11 @@ export const fetchFeedback = async (
   imageDataUrl: string | null,
   promptText: string,
   selectedHtml: string | null,
-  insertionMode: 'replace' | 'insertBefore' | 'insertAfter'
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
+  computedBackgroundColor?: string | null
 ): Promise<void> => {
   const apiUrl = `${Settings.API_URL}/checkraCompletions/generate`;
-  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl);
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, computedBackgroundColor);
 };
 
 /**
@@ -581,7 +592,7 @@ export const sendFixRating = async (feedbackPayload: AddRatingRequestBody): Prom
 
   } catch (error) {
     customError("Error in sendFixRating:", error);
-    if (serviceEventEmitter) { // Check if emitter is initialized
+    if (serviceEventEmitter) { 
       serviceEventEmitter.emit('aiError', error instanceof Error ? `Rating Submission Error: ${error.message}` : String(error));
     }
   }
@@ -592,7 +603,7 @@ export const sendFixRating = async (feedbackPayload: AddRatingRequestBody): Prom
  * @param emitter The event emitter instance from core.
  */
 export function initializeAiServiceListeners(emitter: any): void {
-  serviceEventEmitter = emitter; // Store the passed emitter instance
+  serviceEventEmitter = emitter; 
   serviceEventEmitter.on('fixRated', (payload: AddRatingRequestBody) => {
     sendFixRating(payload);
   });
