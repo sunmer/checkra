@@ -9,6 +9,7 @@ export interface AppliedFixInfo {
   markerStartNode: Comment | null;
   markerEndNode: Comment | null;
   actualAppliedElement: HTMLElement | null;
+  appliedFixWrapperElement: HTMLElement;
   isCurrentlyFixed: boolean;
   stableTargetSelector: string;
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter';

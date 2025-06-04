@@ -42,19 +42,30 @@ export class FixApplier {
       getControlCallbacks
     } = params;
 
-    try {
-      const originalSelectedElement = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
-      let parent: Node | null = null;
-      let effectiveOriginalElement: Element | null = originalSelectedElement;
+    // Early validation
+    if (!stableSelector) {
+      customError(`[FixApplier] Critical error: Stable selector is missing for fix ID ${fixId}.`);
+      return null;
+    }
 
-      if (!originalSelectedElement && stableSelector === 'body' && insertionMode === 'replace') {
+    try {
+      const originalSelectedElementMarker = document.querySelector(`[data-checkra-fix-id="${fixId}"]`);
+      let parent: Node | null = null;
+      let effectiveOriginalElementForRemoval: Element | null = originalSelectedElementMarker;
+      let insertionAnchor: Node | null = originalSelectedElementMarker;
+
+      if (!originalSelectedElementMarker && stableSelector === 'body' && insertionMode === 'replace') {
         parent = document.body.parentNode;
-        effectiveOriginalElement = document.body;
+        effectiveOriginalElementForRemoval = document.body;
+        insertionAnchor = document.body;
         customWarn('[FixApplier] Body replacement scenario.');
-      } else if (originalSelectedElement) {
-        parent = originalSelectedElement.parentNode;
+      } else if (originalSelectedElementMarker) {
+        parent = originalSelectedElementMarker.parentNode;
+        if (insertionMode === 'insertAfter') {
+          insertionAnchor = originalSelectedElementMarker.nextSibling;
+        }
       } else {
-        customError(`[FixApplier] Original element/context for fix ID ${fixId} (selector: ${stableSelector}) not found.`);
+        customError(`[FixApplier] Original element context for fix ID ${fixId} (selector: ${stableSelector}) not found.`);
         return null;
       }
       
@@ -63,81 +74,35 @@ export class FixApplier {
         return null;
       }
 
+      // Create elements for successful path
       const startComment = document.createComment(` checkra-fix-start:${fixId} `);
       const endComment = document.createComment(` checkra-fix-end:${fixId} `);
-      let actualAppliedElement: HTMLElement | null = null;
+      const appliedFixWrapper = document.createElement('div');
+      appliedFixWrapper.className = 'checkra-feedback-applied-fix';
+      appliedFixWrapper.setAttribute('data-checkra-applied-wrapper-for', fixId);
 
-      if (insertionMode === 'replace') {
-        if (!effectiveOriginalElement) {
-            customError(`[FixApplier] effectiveOriginalElement is null for replace.`);
-            return null;
-        }
-        if (!parent) {
-            customError(`[FixApplier] Parent became null unexpectedly before replace operation for fix ID ${fixId}.`);
-            return null;
-        }
-        parent.insertBefore(startComment, effectiveOriginalElement);
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = fixedHtml.trim();
-        const newNodes = Array.from(tempDiv.childNodes);
-        if (newNodes.length > 0) {
-          if (!parent) {
-            return null;
-          }
-          newNodes.forEach(node => parent!.insertBefore(node, effectiveOriginalElement!));
-          actualAppliedElement = newNodes.find(node => node.nodeType === Node.ELEMENT_NODE) as HTMLElement || null;
-        }
-        if (newNodes.length > 0) {
-          if (!parent) {
-            return null;
-          }
-          parent!.removeChild(effectiveOriginalElement!);
-          const lastNewNode = newNodes[newNodes.length - 1];
-          if (lastNewNode.nextSibling) {
-            parent!.insertBefore(endComment, lastNewNode.nextSibling);
-          } else {
-            parent!.appendChild(endComment);
-          }
-        } else {
-          customWarn(`[FixApplier] FixedHTML for ${fixId} (replace) resulted in no nodes. Original kept. Removing start marker.`);
-          if (startComment.parentNode) {
-            parent!.removeChild(startComment);
-          }
-        }
-      } else if (insertionMode === 'insertBefore') {
-        if (!effectiveOriginalElement) { customError('[FixApplier] No effective element for insertBefore'); return null; }
-        if (!parent) { customError('[FixApplier] Parent is null for insertBefore'); return null; }
-        parent.insertBefore(startComment, effectiveOriginalElement);
-        parent.insertBefore(endComment, effectiveOriginalElement);
-        const fragment = this.createFragmentFromHTML(fixedHtml);
-        if (fragment) parent.insertBefore(fragment, endComment);
-        let current = startComment.nextSibling;
-        while(current && current !== endComment) {
-            if (current.nodeType === Node.ELEMENT_NODE) { actualAppliedElement = current as HTMLElement; break; }
-            current = current.nextSibling;
-        }
-      } else if (insertionMode === 'insertAfter') {
-        if (!effectiveOriginalElement) { customError('[FixApplier] No effective element for insertAfter'); return null; }
-        if (!parent) { customError('[FixApplier] Parent is null for insertAfter'); return null; }
-        const anchorNode = effectiveOriginalElement.nextSibling;
-        parent.insertBefore(startComment, anchorNode);
-        parent.insertBefore(endComment, anchorNode);
-        const fragment = this.createFragmentFromHTML(fixedHtml);
-        if (fragment) parent.insertBefore(fragment, endComment);
-        let current = startComment.nextSibling;
-        while(current && current !== endComment) {
-            if (current.nodeType === Node.ELEMENT_NODE) { actualAppliedElement = current as HTMLElement; break; }
-            current = current.nextSibling;
-        }
-      }
+      // Insert elements into DOM
+      this.insertFixElements(parent, insertionAnchor, effectiveOriginalElementForRemoval, insertionMode, startComment, appliedFixWrapper, endComment);
+
+      // Populate wrapper with content
+      const fragment = this.createFragmentFromHTML(fixedHtml);
+      let actualAppliedElement: HTMLElement | null = null;
       
-      const finalStableSelector = stableSelector; // stableSelector is now mandatory from params if original element not found directly
-      if (!finalStableSelector) {
-        customError(`[FixApplier] Critical error: Stable selector is missing for fix ID ${fixId}.`);
-        startComment?.remove(); endComment?.remove();
-        return null;
+      if (fragment) {
+        appliedFixWrapper.appendChild(fragment);
+        actualAppliedElement = appliedFixWrapper.firstElementChild as HTMLElement || null;
+      } else {
+        customWarn(`[FixApplier] FixedHTML for ${fixId} resulted in an empty fragment. Wrapper is empty.`);
       }
-      
+
+      if (!actualAppliedElement && appliedFixWrapper.childNodes.length > 0 && appliedFixWrapper.firstChild?.nodeType === Node.TEXT_NODE) {
+        customWarn(`[FixApplier] Fix ${fixId} resulted in only text nodes directly in wrapper. actualAppliedElement is null.`);
+      }
+
+      // Use actualAppliedElement if available, otherwise use the wrapper
+      const controlTarget = actualAppliedElement || appliedFixWrapper;
+
+      // Create fix info and show controls
       const fixInfoData: AppliedFixInfo = {
         originalElementId: fixId,
         originalOuterHTML: originalHtml,
@@ -145,31 +110,55 @@ export class FixApplier {
         markerStartNode: startComment,
         markerEndNode: endComment,
         actualAppliedElement: actualAppliedElement,
+        appliedFixWrapperElement: appliedFixWrapper,
         isCurrentlyFixed: true,
-        stableTargetSelector: finalStableSelector,
+        stableTargetSelector: stableSelector,
         insertionMode: insertionMode, 
         requestBody: requestBody, 
         isRated: false,
         resolvedColors: currentResolvedColors ? { ...currentResolvedColors } : undefined
       };
+      
       this.appliedFixStore.add(fixId, fixInfoData);
-
-      if (!actualAppliedElement && insertionMode !== 'replace') {
-        customWarn(`[FixApplier] Fix ${fixId} (${insertionMode}) resulted in no applied element.`);
-        startComment?.remove(); endComment?.remove();
-        this.overlayManager.hideControlsForFix(fixId);
-        this.appliedFixStore.delete(fixId);
-      } else if (actualAppliedElement) {
-         const controlCallbacks = getControlCallbacks(fixId);
-        this.overlayManager.showControlsForFix(fixId, actualAppliedElement, controlCallbacks);
-      } else if (insertionMode === 'replace' && !actualAppliedElement) {
-        customWarn(`[FixApplier] Fix ${fixId} (replace) resulted in empty content. No controls shown.`);
-      }
+      
+      const controlCallbacks = getControlCallbacks(fixId);
+      this.overlayManager.showControlsForFix(fixId, controlTarget, appliedFixWrapper, controlCallbacks);
+      
       return fixInfoData;
     } catch (error) {
       customError('[FixApplier] Error applying fix:', error);
-      // Optionally, throw the error or return a specific error status
       return null;
+    }
+  }
+
+  private insertFixElements(
+    parent: Node,
+    insertionAnchor: Node | null,
+    effectiveOriginalElementForRemoval: Element | null,
+    insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
+    startComment: Comment,
+    appliedFixWrapper: HTMLDivElement,
+    endComment: Comment
+  ): void {
+    if (insertionMode === 'replace') {
+      if (!effectiveOriginalElementForRemoval) {
+        throw new Error('effectiveOriginalElementForRemoval is null for replace');
+      }
+      parent.insertBefore(startComment, effectiveOriginalElementForRemoval);
+      parent.insertBefore(appliedFixWrapper, effectiveOriginalElementForRemoval);
+      parent.insertBefore(endComment, effectiveOriginalElementForRemoval);
+      parent.removeChild(effectiveOriginalElementForRemoval);
+    } else if (insertionMode === 'insertBefore') {
+      if (!insertionAnchor) {
+        throw new Error('No insertionAnchor for insertBefore');
+      }
+      parent.insertBefore(startComment, insertionAnchor);
+      parent.insertBefore(appliedFixWrapper, insertionAnchor);
+      parent.insertBefore(endComment, insertionAnchor);
+    } else { // insertAfter
+      parent.insertBefore(startComment, insertionAnchor);
+      parent.insertBefore(appliedFixWrapper, insertionAnchor);
+      parent.insertBefore(endComment, insertionAnchor);
     }
   }
 } 

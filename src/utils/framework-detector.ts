@@ -138,7 +138,6 @@ function isBootstrapClass(className: string): boolean {
 // Enhanced MUI detection
 function detectMuiElements(element?: HTMLElement): number {
     let score = 0;
-    const baseElement = element || document.body; // Fallback to document.body for global checks
 
     // Check for MUI class patterns on the element or its descendants
     const muiClassSelector = '[class*="Mui"], [class*="css-"], [class*="makeStyles"]';
@@ -361,8 +360,7 @@ export function detectCssFramework(htmlSnippet?: string, selectedElement?: HTMLE
   // These are run regardless, but their influence is determined in the combination stage.
 
   const globalCssVarResult = detectFrameworkFromCssVariables(); // Global check
-  let globalCssVarConfidence = globalCssVarResult.confidence; // Already incorporates W_CSS_VARIABLES
-
+  
   let urlConfidence = 0;
   let urlDetectedName: DetectedFramework['name'] = 'custom';
   let urlVersion = 'unknown';

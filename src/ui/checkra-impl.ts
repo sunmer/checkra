@@ -19,6 +19,7 @@ import { SelectionManager, type SelectionDetails } from './selection-manager';
 import { FixApplier } from './fix-applier';
 import { AIResponsePipeline, type ExtractedFix } from './ai-response-pipeline';
 import { ViewerEvents, type ViewerEventCallbacks } from './viewer-events';
+import { renderLucideIcons } from '../utils/icon-renderer';
 
 export class CheckraImplementation implements AuthCallbackInterface, ViewerEventCallbacks {
   private domElements: CheckraViewerElements | null = null;
@@ -116,10 +117,10 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.getControlCallbacksForFix = this.getControlCallbacksForFix.bind(this);
   }
 
-  public initialize(
+  public async initialize(
     domManager: CheckraDOM,
     settingsModal: SettingsModal
-  ): void {
+  ): Promise<void> {
     try {
       this.conversationHistoryManager.clearHistory();
       localStorage.removeItem('checkra_onboarded');
@@ -181,6 +182,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.authPendingActionHelper.handleAuthErrorInUrl(this);
     this.authPendingActionHelper.handlePendingActionAfterLogin(this);
     eventEmitter.emit('feedbackViewerImplReady');
+    await renderLucideIcons();
   }
 
   public cleanup(): void {
@@ -517,56 +519,47 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     }
   }
 
-  private handleAppliedFixToggle(fixId: string): void {
+  private async handleAppliedFixToggle(fixId: string): Promise<void> {
     const fixInfo = this.appliedFixStore.get(fixId);
-    if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode) {
-      customWarn(`[FeedbackViewerLogic] Toggle: Could not find fix info or markers for Fix ID: ${fixId}.`);
+    if (!fixInfo || !fixInfo.markerStartNode || !fixInfo.markerEndNode || !fixInfo.appliedFixWrapperElement) {
+      customWarn(`[FeedbackViewerLogic] Toggle: Could not find fix info, markers, or wrapper for Fix ID: ${fixId}.`);
       return;
     }
-    const { markerStartNode, markerEndNode, originalOuterHTML, fixedOuterHTML } = fixInfo;
-    const parent = markerStartNode.parentNode;
-    if (!parent) {
-      customError(`[FeedbackViewerLogic] Toggle: Parent node of markers not found for fix ${fixId}.`);
-      return;
-    }
+    const { originalOuterHTML, fixedOuterHTML, appliedFixWrapperElement } = fixInfo;
+    
     try {
       const htmlToInsert = fixInfo.isCurrentlyFixed ? originalOuterHTML : fixedOuterHTML;
-      let currentNode = markerStartNode.nextSibling;
-      while (currentNode && currentNode !== markerEndNode) {
-        const nextNode = currentNode.nextSibling;
-        parent.removeChild(currentNode);
-        currentNode = nextNode;
+      
+      while (appliedFixWrapperElement.firstChild) {
+        appliedFixWrapperElement.removeChild(appliedFixWrapperElement.firstChild);
       }
+
       const newContentFragment = this.createFragmentFromHTML(htmlToInsert);
       let newActualAppliedElement: HTMLElement | null = null;
+
       if (newContentFragment && newContentFragment.childNodes.length > 0) {
-        parent.insertBefore(newContentFragment, markerEndNode);
-        let firstNewElement = markerStartNode.nextSibling;
-        while(firstNewElement && firstNewElement !== markerEndNode) {
-            if (firstNewElement.nodeType === Node.ELEMENT_NODE) {
-                newActualAppliedElement = firstNewElement as HTMLElement;
-                break;
-            }
-            firstNewElement = firstNewElement.nextSibling;
-        }
-        if (fixInfo.actualAppliedElement !== newActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)) {
-            const oldActualAppliedElement = fixInfo.actualAppliedElement;
-            fixInfo.actualAppliedElement = newActualAppliedElement;
-            if (newActualAppliedElement) {
-                if (newActualAppliedElement !== oldActualAppliedElement || !this.overlayManager.isControlsVisible(fixId)){
-                    this.overlayManager.showControlsForFix(fixId, newActualAppliedElement, this.getControlCallbacksForFix(fixId));
-                } else {
-                    this.overlayManager.updateControlsPositionForFix(fixId, newActualAppliedElement);
-                }
-            } else {
-                this.overlayManager.hideControlsForFix(fixId);
-            }
-        }
+        appliedFixWrapperElement.appendChild(newContentFragment);
+        newActualAppliedElement = appliedFixWrapperElement.firstElementChild as HTMLElement || null;
       } else {
-        customWarn(`[FeedbackViewerLogic] Toggle: HTML to insert was empty or invalid for fixId: ${fixId}. Hiding controls.`);
-        fixInfo.actualAppliedElement = null; 
-        this.overlayManager.hideControlsForFix(fixId); 
+        customWarn(`[FeedbackViewerLogic] Toggle: HTML to insert was empty or invalid for fixId: ${fixId}. Wrapper is now empty.`);
       }
+
+      fixInfo.actualAppliedElement = newActualAppliedElement;
+
+      if (newActualAppliedElement) {
+        this.overlayManager.showControlsForFix(
+          fixId, 
+          newActualAppliedElement,
+          appliedFixWrapperElement,
+          this.getControlCallbacksForFix(fixId)
+        );
+      } else {
+        customWarn(`[FeedbackViewerLogic] Toggle: No actual element to show controls for after toggle for fixId: ${fixId}. Hiding controls.`);
+        this.overlayManager.hideControlsForFix(fixId);
+      }
+      
+      await renderLucideIcons();
+      
       fixInfo.isCurrentlyFixed = !fixInfo.isCurrentlyFixed;
       this.overlayManager.updateToggleButtonVisuals(fixId, fixInfo.isCurrentlyFixed);
     } catch (error) {
@@ -828,11 +821,6 @@ Your job:
       }
       if (!updatedHtmlFromPatch) {
         customWarn('[CheckraImpl handleJsonPatch] No root replace op found in JSON patch. Using originalHtml from event as fallback for processing pipeline.');
-        // If the patch isn't a simple root replace, the originalHtml from the event might be what the AI intended to modify in a more complex way.
-        // However, our current pipeline expects a full HTML string to process for `fixedOuterHTMLForCurrentCycle`.
-        // This path might need more sophisticated patch application logic if complex patches are expected.
-        // For now, if there's no root replace, we are effectively saying the AI didn't provide a full new version via this patch.
-        // We will let processJsonPatchedHtml handle the originalHtml from the event.
         updatedHtmlFromPatch = originalHtml; 
       }
 
@@ -844,19 +832,17 @@ Your job:
       if (!testFrag || testFrag.childNodes.length === 0) {
         customError('[CheckraImpl handleJsonPatch] Processed HTML from JSON patch is empty/invalid after pipeline. fixedOuterHTMLForCurrentCycle will be null.');
         this.fixedOuterHTMLForCurrentCycle = null; 
-        // No return here, finalizeResponse will check fixedOuterHTMLForCurrentCycle
       } else {
         customWarn('[CheckraImpl handleJsonPatch] Processed HTML from JSON patch is VALID.');
       }
-      // finalizeResponse (triggered by aiFinalized event) will use this.fixedOuterHTMLForCurrentCycle
     } catch (err) {
       customError('[CheckraImpl handleJsonPatch] Error handling aiJsonPatch event:', err);
       this.showError('An error occurred while applying AI suggested changes.');
-      this.fixedOuterHTMLForCurrentCycle = null; // Ensure it's null on error
+      this.fixedOuterHTMLForCurrentCycle = null;
     }
   }
 
-  private handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): void {
+  private async handleDomUpdate(data: { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }): Promise<void> {
     customWarn('[CheckraImplementation] Received aiDomUpdateReceived', data);
     if (!this.targetElementForAI && this.stableSelectorForAI !== 'body') {
       customError('[CheckraImplementation] No targetElementForAI to apply DOM update to (and not a body update).');
@@ -921,6 +907,7 @@ Your job:
     });
     if (appliedFixInfo) {
         customWarn(`[CheckraImplementation] DOM update via FixApplier successful for mode: ${insertionMode}`);
+        await renderLucideIcons();
     } else {
         this.showError(`Failed to apply direct DOM update for fix: ${this.currentFixIdForAI}.`);
     }
@@ -964,29 +951,24 @@ Your job:
       customWarn('[FeedbackViewerLogic] Cannot rate: Fix info missing for Fix ID: ' + fixId);
       return;
     }
-    // Prevent re-rating if already rated
     if (fixInfo.isRated) {
       customWarn('[FeedbackViewerImpl] Fix ' + fixId + ' has already been rated. Re-rating is not allowed.');
-      // Ensure the button reflects its final state if somehow it lost it
       if (anchorElement && anchorElement instanceof HTMLButtonElement) {
         anchorElement.classList.remove('rated'); 
-        anchorElement.classList.add('rated-successfully'); // Assume if isRated is true, it was successful
+        anchorElement.classList.add('rated-successfully');
         anchorElement.disabled = true;
       }
       return;
     }
 
     const onRatingSubmitted = async (payload: AddRatingRequestBody) => {
-      // Assuming eventEmitter.emit('fixRated', payload) might involve an async operation 
-      // or trigger one. For simplicity, we'll assume success after this point for UI update.
-      // If 'fixRated' had a promise or callback for actual backend success, we'd use that.
       eventEmitter.emit('fixRated', payload);
-      fixInfo.isRated = true; // Mark as rated
+      fixInfo.isRated = true;
 
       if (anchorElement && anchorElement instanceof HTMLButtonElement) {
-        anchorElement.classList.remove('rated'); // Remove general 'rated' if it was there
-        anchorElement.classList.add('rated-successfully'); // Add specific success class for yellow star
-        anchorElement.disabled = true; // Disable button after successful rating
+        anchorElement.classList.remove('rated');
+        anchorElement.classList.add('rated-successfully');
+        anchorElement.disabled = true;
       }
       customWarn('[FeedbackViewerImpl] Rating submitted for ' + fixId + '. Button styled as rated-successfully and disabled.');
       this.ratingUI.hideRatingPopover();
@@ -1029,7 +1011,6 @@ Your job:
     this.targetElementForAI = details.targetElement;
 
     this.fixedOuterHTMLForCurrentCycle = null;
-    // originalSvgsMap and svgPlaceholderCounter are now in AIResponsePipeline
     this.requestBodyForCurrentCycle = null; 
 
     this.domManager.setPromptState(true, '');
@@ -1051,12 +1032,7 @@ Your job:
     }
   }
 
-  // Add public stubs to satisfy AuthCallbackInterface, delegating to CommandDispatcher
   public async handlePublishCommand(): Promise<void> {
-    // The actual logic is now in CommandDispatcher, which might call back to 
-    // checkraImpl.invokeAuthRedirect if it encounters an auth error during its own execution.
-    // However, AuthPendingActionHelper calls this method to *resume* an action.
-    // So, this method should effectively re-trigger the command via the dispatcher.
     customWarn('[CheckraImpl] Resuming handlePublishCommand via CommandDispatcher after auth.');
     await this.commandDispatcher.tryHandleCommand('/publish'); 
   }

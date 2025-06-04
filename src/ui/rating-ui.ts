@@ -26,7 +26,7 @@ export class RatingUI {
     }
 
     this.ratingOptionsContainer = document.createElement('div');
-    this.ratingOptionsContainer.className = 'feedback-fix-rating-options';
+    this.ratingOptionsContainer.className = 'checkra-feedback-fix-rating-options';
     // Unique attribute to find *this specific* popover if multiple RatingUI instances were ever used (not current design)
     // Or, more simply, to ensure we're only managing one popover at a time per RatingUI instance.
     // this.ratingOptionsContainer.setAttribute('data-rating-ui-instance-for-fix', fixId);
@@ -40,19 +40,19 @@ export class RatingUI {
 
     ratings.forEach(rating => {
       const optionElement = document.createElement('div');
-      optionElement.className = 'feedback-rating-option';
+      optionElement.className = 'checkra-feedback-rating-option';
       optionElement.textContent = rating.text;
       optionElement.setAttribute('data-rating-value', rating.value.toString());
 
       optionElement.addEventListener('click', (e) => {
-        const existingForm = optionElement.querySelector('.feedback-rating-feedback-form');
+        const existingForm = optionElement.querySelector('.checkra-feedback-rating-feedback-form');
         if (existingForm && existingForm.contains(e.target as Node)) {
           return;
         }
         e.stopPropagation();
 
         if (rating.value === 1 || rating.value === 2) {
-          const alreadyExistingForm = this.ratingOptionsContainer?.querySelector('.feedback-rating-feedback-form');
+          const alreadyExistingForm = this.ratingOptionsContainer?.querySelector('.checkra-feedback-rating-feedback-form');
           if (alreadyExistingForm) alreadyExistingForm.remove();
 
           const feedbackForm = this.createFeedbackForm(
@@ -63,7 +63,7 @@ export class RatingUI {
             () => this.hideRatingPopover() // Close popover after submission
           );
           optionElement.appendChild(feedbackForm);
-          const feedbackInput = feedbackForm.querySelector('.feedback-rating-feedback-input') as HTMLInputElement;
+          const feedbackInput = feedbackForm.querySelector('.checkra-feedback-rating-feedback-input') as HTMLInputElement;
           if (feedbackInput) {
             feedbackInput.focus();
           }
@@ -110,7 +110,7 @@ export class RatingUI {
     onFormSubmitOrCancel: () => void
   ): HTMLFormElement {
     const feedbackForm = document.createElement('form');
-    feedbackForm.className = 'feedback-rating-feedback-form';
+    feedbackForm.className = 'checkra-feedback-rating-feedback-form';
     // Basic styling, can be moved to CSS
     Object.assign(feedbackForm.style, {
         display: 'flex',
@@ -128,11 +128,11 @@ export class RatingUI {
     const feedbackInput = document.createElement('input');
     feedbackInput.type = 'text';
     feedbackInput.placeholder = 'Optional: What could be improved?';
-    feedbackInput.className = 'feedback-rating-feedback-input';
+    feedbackInput.className = 'checkra-feedback-rating-feedback-input';
 
-    const chipLabels = ['ugly', 'off brand', 'broken', 'copy', 'colors', 'layout', 'spacing', 'text', 'other'];
+    const chipLabels = ['ugly', 'off brand', 'broken', 'copy', 'icons', 'colors', 'layout', 'spacing', 'text', 'other'];
     const chipsContainer = document.createElement('div');
-    chipsContainer.className = 'feedback-rating-chips-container';
+    chipsContainer.className = 'checkra-feedback-rating-chips-container';
 
 
     let selectedChips: Set<string> = new Set();
@@ -141,7 +141,7 @@ export class RatingUI {
       const chip = document.createElement('button');
       chip.type = 'button'; // Important for forms
       chip.textContent = label;
-      chip.className = 'feedback-rating-chip'; // Add styling for this class
+      chip.className = 'checkra-feedback-rating-chip'; // Add styling for this class
       chip.addEventListener('click', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -160,7 +160,7 @@ export class RatingUI {
     const submitBtn = document.createElement('button');
     submitBtn.type = 'button'; // To prevent form submission via enter if not intended
     submitBtn.textContent = 'Submit Rating';
-    submitBtn.className = 'feedback-rating-feedback-submit';
+    submitBtn.className = 'checkra-feedback-rating-feedback-submit';
     submitBtn.disabled = true; // Initially disabled
 
     function updateSubmitState() {
@@ -180,8 +180,31 @@ export class RatingUI {
 
     feedbackInput.addEventListener('input', updateSubmitState);
 
-    submitBtn.addEventListener('click', () => {
+    submitBtn.addEventListener('click', async () => {
       const feedbackVal = feedbackInput.value.trim();
+
+      // Capture screenshot only for ratings 1 or 2
+      let imageData: AddRatingRequestBody['imageData'] | undefined = undefined;
+      try {
+        const { default: html2canvas } = await import('html2canvas');
+        const canvas = await html2canvas(document.documentElement as HTMLElement, {
+          useCORS: true,
+          backgroundColor: null,
+          scale: 1,
+          logging: false,
+        });
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+        imageData = {
+          mime: 'image/jpeg',
+          data: base64,
+          width: canvas.width,
+          height: canvas.height,
+        };
+      } catch (err) {
+        console.warn('[RatingUI] Unable to capture screenshot for rating payload:', err);
+      }
+
       const feedbackPayload: AddRatingRequestBody = {
         ...fixInfo.requestBody,
         rating: ratingValue,
@@ -191,9 +214,11 @@ export class RatingUI {
         generatedHtml: fixInfo.fixedOuterHTML,
         resolvedPrimaryColorInfo: fixInfo.resolvedColors?.primary,
         resolvedAccentColorInfo: fixInfo.resolvedColors?.accent,
+        ...(imageData ? { imageData } : {}),
       };
+
       onRateCallback(feedbackPayload);
-      onFormSubmitOrCancel(); // This will hide the popover
+      onFormSubmitOrCancel(); // Hide popover after submission
     });
 
     feedbackInput.addEventListener('keydown', (ev) => {
@@ -269,24 +294,24 @@ export class RatingUI {
     const styleSheet = document.createElement('style');
     styleSheet.id = styleId;
     styleSheet.textContent = `
-      .feedback-fix-rating-options {
+      .checkra-feedback-fix-rating-options {
         /* Styles for the main popover container are mostly applied inline via JS */
         /* but some defaults can go here */
       }
-      .feedback-rating-option {
+      .checkra-feedback-rating-option {
         padding: 8px 12px;
         cursor: pointer;
         border-radius: 4px;
         color: #e0e0e0;
         font-size: 13px;
       }
-      .feedback-rating-option:hover {
+      .checkra-feedback-rating-option:hover {
         background-color: #383838;
       }
-      .feedback-rating-feedback-form {
+      .checkra-feedback-rating-feedback-form {
         /* Styles applied inline */
       }
-      .feedback-rating-feedback-input {
+      .checkra-feedback-rating-feedback-input {
         padding: 8px 10px;
         border-radius: 6px;
         border: 1px solid #555;
@@ -295,16 +320,16 @@ export class RatingUI {
         color: #e0e0e0;
         margin-bottom: 8px;
       }
-      .feedback-rating-feedback-input::placeholder {
+      .checkra-feedback-rating-feedback-input::placeholder {
         color: #888;
       }
-      .feedback-rating-chips-container {
+      .checkra-feedback-rating-chips-container {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
         margin-bottom: 10px;
       }
-      .feedback-rating-chip {
+      .checkra-feedback-rating-chip {
         padding: 5px 10px;
         font-size: 11px;
         border-radius: 12px;
@@ -314,15 +339,15 @@ export class RatingUI {
         cursor: pointer;
         transition: background-color 0.2s, color 0.2s;
       }
-      .feedback-rating-chip.active {
+      .checkra-feedback-rating-chip.active {
         background-color: #2563eb; /* Tailwind blue-600 */
         color: #fff;
         border-color: #2563eb;
       }
-      .feedback-rating-chip:hover:not(.active) {
+      .checkra-feedback-rating-chip:hover:not(.active) {
         background-color: #5a5a5a;
       }
-      .feedback-rating-feedback-submit {
+      .checkra-feedback-rating-feedback-submit {
         padding: 8px 12px;
         border-radius: 6px;
         background-color: #2563eb; /* Tailwind blue-600 */
@@ -333,7 +358,7 @@ export class RatingUI {
         cursor: pointer;
         transition: opacity 0.2s;
       }
-      .feedback-rating-feedback-submit:disabled {
+      .checkra-feedback-rating-feedback-submit:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }

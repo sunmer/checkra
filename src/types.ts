@@ -94,6 +94,13 @@ export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
   tags?: string[];
   resolvedPrimaryColorInfo?: ColorResolutionDetails;
   resolvedAccentColorInfo?: ColorResolutionDetails;
+  /** Optional screenshot of rendered HTML in base64 (JPEG or PNG) */
+  imageData?: {
+    mime: string; // e.g., 'image/jpeg'
+    data: string; // base64 string WITHOUT the data URI prefix for compactness
+    width: number;
+    height: number;
+  };
 }
 
 // --- New Shared Interfaces ---

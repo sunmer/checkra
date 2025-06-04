@@ -14,7 +14,7 @@ export interface ControlButtonCallbacks {
   onClose: () => void;
   onToggle: () => void;
   onCopy: () => void;
-  onRate?: (anchorElement: HTMLElement) => void; // Anchor for positioning rating UI
+  onRate?: (anchorElement: HTMLElement) => void;
 }
 
 interface FixControlElements {
@@ -27,19 +27,15 @@ interface FixControlElements {
 interface OverlayManagerFixData {
   controlsContainer: HTMLDivElement;
   targetElement: HTMLElement;
+  appliedFixWrapperElement: HTMLElement;
   buttons: FixControlElements;
-  scrollUpdateHandler: () => void;
-  debouncedResizeUpdateHandler: () => void;
-  debounceTimer: number | null;
 }
 
 export class OverlayManager {
   private overlayElement: HTMLDivElement | null = null;
   private activeFixes: Map<string, OverlayManagerFixData> = new Map();
-  private debounceDelay: number;
 
-  constructor(debounceDelay: number = 50) {
-    this.debounceDelay = debounceDelay;
+  constructor() {
     this.initializeOverlay();
   }
 
@@ -55,10 +51,10 @@ export class OverlayManager {
       position: 'fixed',
       top: '0',
       left: '0',
-      width: '100vw',
-      height: '100vh',
+      width: '0',
+      height: '0',
       pointerEvents: 'none',
-      zIndex: '2147483646', // High z-index
+      zIndex: '2147483640',
       display: 'block',
     });
   }
@@ -67,19 +63,19 @@ export class OverlayManager {
     const closeButton = document.createElement('button');
     closeButton.innerHTML = CLOSE_SVG;
     closeButton.title = 'Discard Fix (Revert to Original)';
-    closeButton.className = 'feedback-fix-btn checkra-close-btn';
+    closeButton.className = 'checkra-feedback-fix-btn checkra-close-btn';
     closeButton.addEventListener('click', (e) => { e.stopPropagation(); callbacks.onClose(); });
 
     const toggleButton = document.createElement('button');
-    toggleButton.innerHTML = TOGGLE_SHOW_ORIGINAL_SVG; // Initial: Fix is shown, button toggles to original
+    toggleButton.innerHTML = TOGGLE_SHOW_ORIGINAL_SVG;
     toggleButton.title = 'Toggle Original Version';
-    toggleButton.className = 'feedback-fix-btn checkra-toggle-btn toggled-on';
+    toggleButton.className = 'checkra-feedback-fix-btn checkra-toggle-btn toggled-on';
     toggleButton.addEventListener('click', (e) => { e.stopPropagation(); callbacks.onToggle(); });
 
     const copyButton = document.createElement('button');
     copyButton.innerHTML = COPY_SVG;
     copyButton.title = 'Copy Prompt for This Fix';
-    copyButton.className = 'feedback-fix-btn checkra-copy-btn';
+    copyButton.className = 'checkra-feedback-fix-btn checkra-copy-btn';
     copyButton.addEventListener('click', (e) => { e.stopPropagation(); callbacks.onCopy(); });
 
     let rateButton: HTMLButtonElement | undefined;
@@ -87,8 +83,7 @@ export class OverlayManager {
       rateButton = document.createElement('button');
       rateButton.innerHTML = RATE_SVG;
       rateButton.title = 'Rate This Fix';
-      rateButton.className = 'feedback-fix-btn checkra-rate-btn';
-      // Store callback in a variable to ensure correct closure capture
+      rateButton.className = 'checkra-feedback-fix-btn checkra-rate-btn';
       const onRateCallback = callbacks.onRate;
       rateButton.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -98,60 +93,62 @@ export class OverlayManager {
     return { closeButton, toggleButton, copyButton, rateButton };
   }
 
-  private positionControls(fixId: string): void {
-    const fixData = this.activeFixes.get(fixId);
-    if (!fixData || !this.overlayElement) return;
-
-    const { targetElement, controlsContainer } = fixData;
-    const targetRect = targetElement.getBoundingClientRect();
-    
-    // Ensure controlsContainer is part of the overlay to get offsetHeight
-    if (!controlsContainer.parentNode) {
-        this.overlayElement.appendChild(controlsContainer); 
-    }
-    controlsContainer.style.display = 'flex'; // Make visible to measure
-
+  private positionControlsOnce(controlsContainer: HTMLDivElement, appliedFixWrapperElement: HTMLElement): void {
+    controlsContainer.style.display = 'flex'; 
     const controlsHeight = controlsContainer.offsetHeight;
-    const controlsWidth = controlsContainer.offsetWidth; // Get width for centering
 
-    // Position relative to viewport
-    let top = targetRect.top - controlsHeight - 8; // 8px margin above
-    let left = targetRect.left + (targetRect.width / 2) - (controlsWidth / 2); // Centered
+    const wrapperRect = appliedFixWrapperElement.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const spaceAbove = wrapperRect.top;
+    const spaceBelow = viewportHeight - wrapperRect.bottom;
+    const margin = 8;
 
-    // If too high (less than 5px from viewport top), position below target
-    if (targetRect.top - controlsHeight - 8 < 5) {
-      top = targetRect.bottom + 8; // 8px margin below
+    let topStyle: string;
+    let transformStyle = 'translateX(-50%)';
+
+    if (spaceAbove > controlsHeight + margin || (spaceAbove > spaceBelow && spaceBelow < controlsHeight + margin)) {
+      topStyle = `-${margin + controlsHeight}px`;
+    } else {
+      topStyle = `${wrapperRect.height + margin}px`;
     }
     
-    // Set fixed position
-    controlsContainer.style.top = `${top}px`;
-    controlsContainer.style.left = `${left}px`;
-
-    customWarn(`[OverlayManager] positionControls for ${fixId}: TargetRectTop=${targetRect.top}, CalcTop=${top}, CalcLeft=${left}`);
+    controlsContainer.style.left = '50%';
+    controlsContainer.style.top = topStyle;
+    controlsContainer.style.transform = transformStyle;
   }
 
-  public showControlsForFix(fixId: string, targetElement: HTMLElement, callbacks: ControlButtonCallbacks): void {
-    if (!this.overlayElement) {
-        customWarn('[OverlayManager] Overlay not initialized. Cannot show controls.');
+  public showControlsForFix(
+    fixId: string,
+    targetElement: HTMLElement,
+    appliedFixWrapperElement: HTMLElement,
+    callbacks: ControlButtonCallbacks
+  ): void {
+    if (!appliedFixWrapperElement) {
+        customWarn('[OverlayManager] Applied fix wrapper element not provided. Cannot show controls.');
         return;
+    }
+    if (getComputedStyle(appliedFixWrapperElement).position === 'static') {
+        appliedFixWrapperElement.style.position = 'relative';
     }
 
     let fixData = this.activeFixes.get(fixId);
 
     if (fixData) {
-      // Controls already exist, update target and reposition
       fixData.targetElement = targetElement;
-      this.positionControls(fixId); // Position immediately
+      fixData.appliedFixWrapperElement = appliedFixWrapperElement;
+      
+      if (fixData.controlsContainer.parentElement !== appliedFixWrapperElement) {
+          appliedFixWrapperElement.appendChild(fixData.controlsContainer);
+      }
+      this.positionControlsOnce(fixData.controlsContainer, appliedFixWrapperElement);
       fixData.controlsContainer.style.display = 'flex';
-      customWarn(`[OverlayManager] Controls for fixId ${fixId} already exist. Updated target and repositioned.`);
+      customWarn(`[OverlayManager] Controls for fixId ${fixId} re-targeted and repositioned.`);
     } else {
-      // Create new controls
       const controlsContainer = document.createElement('div');
       controlsContainer.className = CONTROLS_CONTAINER_CLASS;
       controlsContainer.setAttribute('data-checkra-fix-id', fixId);
       Object.assign(controlsContainer.style, {
-        position: 'fixed', 
-        display: 'none', 
+        position: 'absolute',
         pointerEvents: 'auto',
       });
 
@@ -162,48 +159,26 @@ export class OverlayManager {
       controlsContainer.appendChild(buttons.toggleButton);
       controlsContainer.appendChild(buttons.closeButton);
       
-      this.overlayElement.appendChild(controlsContainer);
+      appliedFixWrapperElement.appendChild(controlsContainer);
 
       const newFixData: OverlayManagerFixData = {
         controlsContainer,
         targetElement,
+        appliedFixWrapperElement,
         buttons,
-        debounceTimer: null,
-        scrollUpdateHandler: () => { // Direct call for scroll
-          this.positionControls(fixId);
-        },
-        debouncedResizeUpdateHandler: () => { // Debounced call for resize
-          if (newFixData.debounceTimer) {
-            window.clearTimeout(newFixData.debounceTimer);
-          }
-          newFixData.debounceTimer = window.setTimeout(() => {
-            this.positionControls(fixId);
-          }, this.debounceDelay);
-        },
       };
       this.activeFixes.set(fixId, newFixData);
-      fixData = newFixData; 
+      fixData = newFixData;
       
-      this.positionControls(fixId); 
+      this.positionControlsOnce(controlsContainer, appliedFixWrapperElement);
       controlsContainer.style.display = 'flex'; 
       customWarn(`[OverlayManager] New controls created and shown for fixId: ${fixId}`);
     }
-    
-    // Add/ensure event listeners are active
-    window.removeEventListener('scroll', fixData.scrollUpdateHandler, true); // Remove old one if any before adding
-    window.addEventListener('scroll', fixData.scrollUpdateHandler, true);
-    window.removeEventListener('resize', fixData.debouncedResizeUpdateHandler, true); // Remove old one if any before adding
-    window.addEventListener('resize', fixData.debouncedResizeUpdateHandler, true);
   }
 
   public hideControlsForFix(fixId: string): void {
     const fixData = this.activeFixes.get(fixId);
     if (fixData) {
-      window.removeEventListener('scroll', fixData.scrollUpdateHandler, true);
-      window.removeEventListener('resize', fixData.debouncedResizeUpdateHandler, true);
-      if (fixData.debounceTimer) {
-        window.clearTimeout(fixData.debounceTimer);
-      }
       fixData.controlsContainer.remove();
       this.activeFixes.delete(fixId);
       customWarn(`[OverlayManager] Controls hidden and cleaned up for fixId: ${fixId}`);
@@ -213,12 +188,7 @@ export class OverlayManager {
   }
 
   public removeAllControlsAndOverlay(): void {
-    this.activeFixes.forEach((fixData, fixId) => {
-      window.removeEventListener('scroll', fixData.scrollUpdateHandler, true);
-      window.removeEventListener('resize', fixData.debouncedResizeUpdateHandler, true);
-      if (fixData.debounceTimer) {
-        window.clearTimeout(fixData.debounceTimer);
-      }
+    this.activeFixes.forEach((fixData) => {
       fixData.controlsContainer.remove();
     });
     this.activeFixes.clear();
@@ -227,23 +197,12 @@ export class OverlayManager {
       this.overlayElement.remove();
       this.overlayElement = null;
     }
-    customWarn('[OverlayManager] All controls and overlay removed.');
-  }
-
-  public updateControlsPositionForFix(fixId: string, newTargetElement: HTMLElement): void {
-    const fixData = this.activeFixes.get(fixId);
-    if (fixData) {
-      fixData.targetElement = newTargetElement;
-      this.positionControls(fixId);
-      customWarn(`[OverlayManager] Position updated for fixId ${fixId}`);
-    } else {
-      customWarn(`[OverlayManager] updateControlsPositionForFix: No active controls for fixId ${fixId}`);
-    }
+    customWarn('[OverlayManager] All controls removed. Global overlay (if any) also removed.');
   }
 
   public isControlsVisible(fixId: string): boolean {
     const fixData = this.activeFixes.get(fixId);
-    return !!(fixData && fixData.controlsContainer && fixData.controlsContainer.style.display !== 'none');
+    return !!(fixData && fixData.controlsContainer && fixData.controlsContainer.offsetParent !== null);
   }
 
   public updateToggleButtonVisuals(fixId: string, isCurrentlyFixed: boolean): void {
@@ -265,7 +224,6 @@ export class OverlayManager {
     }
   }
 
-  // Getter for the main overlay element, e.g., for other UI components to avoid it
   public getOverlayElement(): HTMLDivElement | null {
     return this.overlayElement;
   }

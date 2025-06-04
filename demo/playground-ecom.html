@@ -42,6 +42,7 @@
   </script>
   <script>
     localStorage.clear(); // Keep this if it's for specific playground testing unrelated to Checkra init
+    window.CheckraConfig = { isVisible: false, enableRating: true };
   </script>
 
   <!-- Placeholder for Checkra library CSS (injected by Vite plugin) -->
@@ -52,826 +53,427 @@
 </head>
 
 <body>
-
-  <!-- ========== HEADER ========== -->
-  <header class="flex flex-wrap md:justify-start md:flex-nowrap z-50 w-full text-sm py-3 md:py-0">
-    <nav class="max-w-[85rem] w-full mx-auto px-4 md:px-6 lg:px-8" aria-label="Global">
-      <div class="relative md:flex md:items-center md:justify-between">
-        <div class="flex items-center justify-between">
-          <a class="flex-none text-2xl font-semibold text-teal-600" href="#" aria-label="DrinkLyte">
-            DrinkLyte
-          </a>
-          <div class="md:hidden">
-            <button type="button"
-              class="hs-collapse-toggle size-9 flex justify-center items-center text-sm font-semibold rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-100 focus:outline-hidden focus:bg-gray-100 disabled:opacity-50 disabled:pointer-events-none"
-              id="hs-navbar-page-demo-pricing-collapse" aria-expanded="false"
-              aria-controls="hs-navbar-page-demo-pricing" aria-label="Toggle navigation"
-              data-hs-collapse="#hs-navbar-page-demo-pricing">
-              <svg class="hs-collapse-open:hidden shrink-0 size-4" xmlns="http://www.w3.org/2000/svg" width="24"
-                height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <line x1="3" x2="21" y1="6" y2="6" />
-                <line x1="3" x2="21" y1="12" y2="12" />
-                <line x1="3" x2="21" y1="18" y2="18" />
-              </svg>
-              <svg class="hs-collapse-open:block hidden shrink-0 size-4" xmlns="http://www.w3.org/2000/svg"
-                width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
+  <div>
+    <div>
+      <p class="mb-2 py-4 text-center bg-yellowGreen-600 text-gray-900">Want to learn how to build templates like this one? Visit <a href="https://www.pixelrocket.store">www.pixelrocket.store</a></p>
+    </div>
+    <section class="relative pb-24">
+      <nav class="relative bg-white">
+        <div class="container mx-auto px-4">
+          <div class="relative flex h-24 items-center"><a class="inline-block" href="#"><img class="h-10" src="images/brand.svg" alt=""></a>
+            <button class="lg:hidden navbar-burger flex items-center justify-center h-10 w-10 ml-auto bg-gradient-to-b from-cyanGreen-800 to-cyan-800 rounded-lg">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 5H21" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M3 12H21" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M3 19H21" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
               </svg>
             </button>
+            <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 hidden lg:flex items-center"><a class="inline-block hover:text-yellowGreen-700 mr-10" href="about.html">About</a><a class="inline-block hover:text-yellowGreen-700 mr-10" href="pricing.html">Pricing</a><a class="inline-block hover:text-yellowGreen-700 mr-10" href="blog.html">Blog</a><a class="inline-block hover:text-yellowGreen-700" href="contact.html">Contact</a></div>
+            <div class="hidden lg:block ml-auto"><a class="inline-flex items-center justify-center h-10 mr-4 px-4 text-center leading-loose text-sm text-gray-700 hover:text-yellowGreen-700 font-semibold transition duration-200" href="login.html">Login</a><a class="inline-flex items-center justify-center h-10 px-4 text-center leading-loose text-sm text-gray-700 hover:text-yellowGreen-700 font-semibold border border-gray-200 hover:border-yellowGreen-600 shadow-sm hover:shadow-none rounded-lg transition duration-200" href="register.html">Get Started</a></div>
           </div>
         </div>
-
-        <div id="hs-navbar-page-demo-pricing"
-          class="hidden hs-collapse overflow-hidden transition-all duration-300 basis-full grow md:block"
-          aria-labelledby="hs-navbar-page-demo-pricing-collapse">
-          <div
-            class="overflow-hidden overflow-y-auto max-h-[75vh] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-thumb]:bg-gray-300">
-            <div
-              class="flex flex-col gap-x-0 mt-5 divide-y divide-dashed divide-gray-200 md:flex-row md:items-center md:justify-end md:gap-x-7 md:mt-0 md:ps-7 md:divide-y-0 md:divide-solid">
-              <a class="py-3 md:py-6 font-medium text-gray-700 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                href="#" aria-current="page">
-                Flavors
-              </a>
-
-              <a class="py-3 md:py-6 font-medium text-gray-700 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                href="#">
-                Our Story
-              </a>
-
-              <div
-                class="hs-dropdown [--strategy:static] md:[--strategy:absolute] [--adaptive:none] md:[--trigger:hover] py-3 md:py-4">
-                <button id="hs-mega-menu-pdp" type="button"
-                  class="flex items-center w-full text-gray-700 hover:text-teal-600 focus:outline-hidden focus:text-teal-600 font-medium"
-                  aria-haspopup="menu" aria-expanded="false" aria-label="Mega Menu">
-                  Resources
-                  <svg class="ms-2 size-2.5 text-gray-500" width="16" height="16" viewBox="0 0 16 16" fill="none"
-                    xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2 5L8.16086 10.6869C8.35239 10.8637 8.64761 10.8637 8.83914 10.6869L15 5"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
-                  </svg>
-                </button>
-
-                <div
-                  class="hs-dropdown-menu transition-[opacity,margin] duration-[0.1ms] md:duration-[150ms] hs-dropdown-open:opacity-100 opacity-0 w-full hidden z-10 top-full start-0 min-w-60 bg-white md:shadow-2xl rounded-lg py-2 md:p-4 before:absolute before:-top-5 before:start-0 before:w-full before:h-5"
-                  role="menu" aria-orientation="vertical" aria-labelledby="hs-mega-menu-pdp">
-                  <div class="md:grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="flex flex-col mx-1 md:mx-0">
-                      <a class="group flex gap-x-5 text-gray-800 hover:bg-gray-100 focus:outline-hidden focus:bg-gray-100 rounded-lg p-4"
-                        href="#">
-                        <svg class="shrink-0 size-5 mt-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round">
-                          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-                          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                        </svg>
-                        <div class="grow">
-                          <p class="font-medium text-gray-800">Serving Suggestions</p>
-                          <p class="text-sm text-gray-500 group-hover:text-gray-800 group-focus:text-gray-800">
-                            Discover new ways to enjoy DrinkLyte.
-                          </p>
+      </nav>
+      <div class="container px-4 mx-auto">
+        <div class="relative py-16 pb-40 md:pb-72 px-2 xs:px-8 rounded-3xl overflow-hidden"><img class="absolute top-0 left-0 w-full h-full object-cover" src="frequencii-assets/headers/bg-gray-plate.png" alt="">
+          <div class="relative max-w-lg lg:max-w-3xl mb-14 mx-auto text-center">
+            <div class="max-w-lg md:max-w-2xl px-4 mx-auto">
+              <h1 class="font-heading tracking-tight text-4xl sm:text-5xl lg:text-6xl font-bold mb-6">Your marketing assets, at your fingertips.</h1>
+              <p class="max-w-lg mx-auto text-lg text-gray-700 mb-10">Empowers marketing team to easily store, organize, and access valuable assets from anywhere.</p><a class="group relative flex xs:inline-flex items-center justify-center px-5 h-12 font-bold text-white bg-gradient-to-br from-cyanGreen-800 to-cyan-800 rounded-lg transition-all duration-300" href="#">
+                <div class="absolute top-0 left-0 w-full h-full rounded-lg ring-4 ring-green-300 animate-pulse group-hover:ring-0 transition duration-300"></div><span>Get Started</span></a>
+            </div>
+          </div>
+        </div><img class="relative block mx-auto px-12 lg:px-8 -mt-40 md:-mt-64" src="frequencii-assets/headers/header-2-center.png" alt="">
+      </div>
+      <div class="hidden navbar-menu fixed top-0 left-0 bottom-0 w-5/6 max-w-md z-50">
+        <div class="navbar-backdrop fixed inset-0 bg-teal-800 opacity-70"></div>
+        <nav class="relative flex flex-col py-6 px-10 w-full h-full bg-white overflow-y-auto">
+          <div class="flex mb-auto items-center"><a class="inline-block mr-auto" href="#"><img class="h-10" src="images/brand.svg" alt=""></a>              <a class="navbar-close" href="#">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 18L18 6M6 6L18 18" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg></a></div>
+          <div class="py-12 mb-auto">
+            <ul class="flex-col">
+              <li class="mb-6"><a class="inline-block text-black" href="about.html">About</a></li>
+              <li class="mb-6"><a class="inline-block text-black" href="pricing.html">Pricing</a></li>
+              <li class="mb-6"><a class="inline-block text-black" href="blog.html">Blog</a></li>
+              <li><a class="inline-block text-black" href="contact.html">Contact</a></li>
+            </ul>
+          </div>
+          <div><a class="flex items-center justify-center h-10 mb-4 px-4 text-center text-sm text-gray-700 font-semibold border border-gray-200 hover:bg-gray-100 shadow-sm rounded-lg transition duration-200" href="login.html">Login</a><a class="flex items-center justify-center h-10 px-4 text-center text-sm text-white font-semibold border border-yellowGreen-600 bg-yellowGreen-500 hover:bg-yellowGreen-600 rounded-lg transition duration-200" href="register.html">Get Started</a></div>
+        </nav>
                         </div>
-                      </a>
-
-                      <a class="group flex gap-x-5 text-gray-800 hover:bg-gray-100 focus:outline-hidden focus:bg-gray-100 rounded-lg p-4"
-                        href="#">
-                        <svg class="shrink-0 size-5 mt-1" xmlns="http://www.w3.org/2000/svg" width="24"
-                          height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                          stroke-linecap="round" stroke-linejoin="round">
-                          <rect width="7" height="7" x="14" y="3" rx="1" />
-                          <path
-                            d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3" />
+    </section>
+    <section class="relative py-12 md:py-24">
+      <div class="container px-4 mx-auto">
+        <div class="flex flex-wrap -mx-4">
+          <div class="w-full md:w-1/2 lg:w-5/12 px-4 mb-20 lg:mb-0">
+            <div class="max-w-xs mb-10"><span class="inline-flex items-center h-6 mb-4 px-2 text-sm uppercase font-medium text-yellowGreen-700 bg-yellowGreen-200 rounded-full">Feature</span>
+              <h1 class="font-heading tracking-tight text-4xl sm:text-5xl font-bold mb-4">Easily organize your files</h1>
+              <p class="text-gray-700 mb-10">Increase your marketing team efficiency with a quick search and ease of use features.</p>
+              <ul>
+                <li class="flex mb-5 items-center">
+                  <div class="flex items-center justify-center w-8 h-8 mr-3 p-px rounded-full bg-gradient-to-br from-cyanGreen-800 to-cyan-800">
+                    <div class="flex items-center justify-center bg-white h-full w-full rounded-full">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 11.6V4.4C2 4.29391 2.04214 4.19217 2.11716 4.11716C2.19217 4.04214 2.29391 4 2.4 4H11.1193C11.2527 4 11.378 4.06667 11.4527 4.178L13.8527 7.778C13.8965 7.84373 13.9199 7.92098 13.9199 8C13.9199 8.07902 13.8965 8.15627 13.8527 8.222L11.4527 11.822C11.4161 11.8768 11.3665 11.9218 11.3083 11.9528C11.2502 11.9839 11.1853 12.0001 11.1193 12H2.4C2.34747 12 2.29546 11.9897 2.24693 11.9696C2.1984 11.9495 2.1543 11.92 2.11716 11.8828C2.08001 11.8457 2.05055 11.8016 2.03045 11.7531C2.01035 11.7045 2 11.6525 2 11.6Z" stroke="url(#paint0_linear_3018_20784)" stroke-width="1.5"></path>
+                        <defs>
+                          <linearGradient id="paint0_linear_3018_20784" x1="1.81375" y1="1.5" x2="4.80178" y2="12.8327" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#ACE348">
+                              <stop offset="1" stop-color="#25ACA0"></stop>
+                            </stop>
+                          </linearGradient>
+                        </defs>
                         </svg>
-                        <div class="grow">
-                          <p class="font-medium text-gray-800">Summer Drink Recipes</p>
-                          <p class="text-sm text-gray-500 group-hover:text-gray-800 group-focus:text-gray-800">
-                            Mix up your summer with DrinkLyte cocktails & mocktails.
-                          </p>
-                        </div>
-                      </a>
                     </div>
-
-                    <div class="flex flex-col mx-1 md:mx-0">
-                      <a class="group flex gap-x-5 text-gray-800 hover:bg-gray-100 focus:outline-hidden focus:bg-gray-100 rounded-lg p-4"
-                        href="#">
-                        <svg class="shrink-0 size-5 mt-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                          <path d="M12 17h.01" />
+                  </div><span class="font-semibold">Auto-tagging</span>
+                </li>
+                <li class="flex mb-5 items-center">
+                  <div class="flex items-center justify-center w-8 h-8 mr-3 p-px rounded-full bg-gradient-to-br from-gray-200 to-gray-200">
+                    <div class="flex items-center justify-center bg-white h-full w-full rounded-full">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <g clip-path="url(#clip0_3018_20789)">
+                          <path d="M3.33333 2.66667H6L8 4.66667H12.6667C13.0203 4.66667 13.3594 4.80715 13.6095 5.0572C13.8595 5.30724 14 5.64638 14 6.00001V11.3333C14 11.687 13.8595 12.0261 13.6095 12.2761C13.3594 12.5262 13.0203 12.6667 12.6667 12.6667H3.33333C2.97971 12.6667 2.64057 12.5262 2.39052 12.2761C2.14048 12.0261 2 11.687 2 11.3333V4.00001C2 3.64638 2.14048 3.30724 2.39052 3.0572C2.64057 2.80715 2.97971 2.66667 3.33333 2.66667Z" stroke="#6C7F73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </g>
+                        <defs>
+                          <clipPath id="clip0_3018_20789">
+                            <rect width="16" height="16" fill="white"></rect>
+                          </clipPath>
+                        </defs>
                         </svg>
-                        <div class="grow">
-                          <p class="font-medium text-gray-800">FAQ & Support</p>
-                          <p class="text-sm text-gray-500 group-hover:text-gray-800 group-focus:text-gray-800">
-                            Find answers to common questions and get help.
-                          </p>
-                        </div>
-                      </a>
-
-                      <a class="group flex gap-x-5 text-gray-800 hover:bg-gray-100 focus:outline-hidden focus:bg-gray-100 rounded-lg p-4"
-                        href="#">
-                        <svg class="shrink-0 size-5 mt-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                          stroke-linejoin="round">
-                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                          <circle cx="9" cy="7" r="4" />
-                          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                        </svg>
-                        <div class="grow">
-                          <p class="font-medium text-gray-800">Join the #DrinkLyteLife</p>
-                          <p class="text-sm text-gray-500 group-hover:text-gray-800 group-focus:text-gray-800">
-                            Connect with other DrinkLyte fans.
-                          </p>
-                        </div>
-                      </a>
                     </div>
-
-                    <div class="flex flex-col pt-4 md:pt-0 mx-1 md:mx-0">
-                      <span class="text-sm font-semibold uppercase text-gray-800">Summer Moments</span>
-                      <a class="mt-4 group flex gap-x-5 items-center focus:outline-hidden" href="#">
-                        <img class="size-32 rounded-lg object-cover"
-                          src="https://images.unsplash.com/photo-1551024709-8f23eda2c5a5?q=80&w=320&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-                          alt="Refreshing DrinkLyte Moment">
-                        <div class="grow">
-                          <p class="text-gray-800">"DrinkLyte made our beach picnic perfect! So refreshing and delicious."</p>
-                          <p class="mt-3 inline-flex items-center gap-x-2 text-sm font-semibold text-gray-800">
-                            Share Your Story
-                            <svg
-                              class="shrink-0 size-4 transition ease-in-out group-hover:translate-x-1 group-focus:translate-x-1"
-                              xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                              stroke-linejoin="round">
-                              <path d="m9 18 6-6-6-6" />
+                  </div><span class="text-gray-500">Categorized by collections</span>
+                </li>
+                <li class="flex items-center">
+                  <div class="flex items-center justify-center w-8 h-8 mr-3 p-px rounded-full bg-gradient-to-br from-gray-200 to-gray-200">
+                    <div class="flex items-center justify-center bg-white h-full w-full rounded-full">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 14.6667C13.1046 14.6667 14 13.7712 14 12.6667C14 11.5621 13.1046 10.6667 12 10.6667C10.8954 10.6667 10 11.5621 10 12.6667C10 13.7712 10.8954 14.6667 12 14.6667Z" stroke="#6C7F73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                        <path d="M12 5.33334C13.1046 5.33334 14 4.43791 14 3.33334C14 2.22877 13.1046 1.33334 12 1.33334C10.8954 1.33334 10 2.22877 10 3.33334C10 4.43791 10.8954 5.33334 12 5.33334Z" stroke="#6C7F73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                        <path d="M4 10C5.10457 10 6 9.10457 6 8C6 6.89543 5.10457 6 4 6C2.89543 6 2 6.89543 2 8C2 9.10457 2.89543 10 4 10Z" stroke="#6C7F73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                        <path d="M10.3337 4.33334L5.66699 7" stroke="#6C7F73" stroke-width="1.5"></path>
+                        <path d="M5.66699 9L10.3337 11.6667" stroke="#6C7F73" stroke-width="1.5"></path>
                             </svg>
-                          </p>
-                        </div>
-                      </a>
                     </div>
+                  </div><span class="text-gray-500">Share to others with links</span>
+                </li>
+              </ul>
+            </div><a class="xs:flex-shrink-0 group relative w-full xs:w-auto h-12 flex xs:inline-flex items-center justify-center px-5 font-bold text-gray-700 bg-white border border-gray-200 hover:border-yellowGreen-600 shadow-md hover:shadow-none rounded-lg transition-all duration-300 focus:outline-none" href="#">
+              <div class="absolute top-0 left-0 w-full h-full rounded-lg ring ring-gray-100 animate-pulse group-hover:ring-0 transition duration-300"></div><span class="mr-2">Learn more</span>                <span class="transform group-hover:translate-x-1 transition duration-300">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7.5 5L12.5 10L7.5 15" stroke="#3B5444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg></span></a>
+          </div>
+          <div class="w-full md:w-1/2 lg:w-7/12 px-4">
+            <div>
+              <div class="flex items-start max-w-xl mb-12">
+                <div class="flex-shrink-0 flex items-center justify-center w-8 h-8 mr-6 p-px rounded-full bg-gradient-to-br from-cyanGreen-800 to-cyan-800">
+                  <div class="flex items-center justify-center bg-white h-full w-full rounded-full">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 11.6V4.4C2 4.29391 2.04214 4.19217 2.11716 4.11716C2.19217 4.04214 2.29391 4 2.4 4H11.1193C11.2527 4 11.378 4.06667 11.4527 4.178L13.8527 7.778C13.8965 7.84373 13.9199 7.92098 13.9199 8C13.9199 8.07902 13.8965 8.15627 13.8527 8.222L11.4527 11.822C11.4161 11.8768 11.3665 11.9218 11.3083 11.9528C11.2502 11.9839 11.1853 12.0001 11.1193 12H2.4C2.34747 12 2.29546 11.9897 2.24693 11.9696C2.1984 11.9495 2.1543 11.92 2.11716 11.8828C2.08001 11.8457 2.05055 11.8016 2.03045 11.7531C2.01035 11.7045 2 11.6525 2 11.6Z" stroke="url(#paint0_linear_3018_20784)" stroke-width="1.5"></path>
+                      <defs>
+                        <linearGradient id="paint0_linear_3018_20784" x1="1.81375" y1="1.5" x2="4.80178" y2="12.8327" gradientUnits="userSpaceOnUse">
+                          <stop stop-color="#ACE348">
+                            <stop offset="1" stop-color="#25ACA0"></stop>
+                          </stop>
+                        </linearGradient>
+                      </defs>
+                    </svg>
                   </div>
                 </div>
+                <div>
+                  <h5 class="text-lg font-semibold mb-1">Auto-tagging</h5>
+                  <p class="text-gray-500">Useful for large collections of files, such as photo or video, where manually tagging each file would be impractical.</p>
               </div>
-
-              <a class="py-3 md:py-6 font-medium text-gray-700 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                href="#">
-                My Account
-              </a>
-
-              <div class="pt-3 md:pt-0">
-                <a class="py-2.5 px-3 inline-flex items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-teal-600 text-white hover:bg-teal-700 focus:outline-hidden focus:bg-teal-700 disabled:opacity-50 disabled:pointer-events-none"
-                  href="#">
-                  Order Online
-                </a>
               </div>
+              <div><img class="block" src="frequencii-assets/features/feature-image-right.png" alt=""></div>
             </div>
           </div>
         </div>
       </div>
-    </nav>
-  </header>
-  <!-- ========== END HEADER ========== -->
-
-  <!-- ========== MAIN CONTENT ========== -->
-  <main id="page-content">
-    <!-- Hero -->
-    <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <!-- Grid -->
-      <div class="grid md:grid-cols-2 gap-4 md:gap-8 xl:gap-20 md:items-center">
+    </section>
+    <section class="py-12 md:py-24">
+      <div class="container px-4 mx-auto">
         <div>
-          <h1 class="block text-3xl font-bold text-gray-800 sm:text-4xl lg:text-6xl">Quench Your
-            Thirst with <span class="text-teal-600">DrinkLyte</span></h1>
-          <p class="mt-3 text-lg text-gray-700">Stay refreshed all summer long with DrinkLyte, the ultimate non-alcoholic beverage. Perfect for sunny days and cool evenings.</p>
-
-          <!-- Buttons -->
-          <div class="mt-7 grid gap-3 w-full sm:inline-flex">
-            <a class="py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-teal-600 text-white hover:bg-teal-700 focus:outline-hidden focus:bg-teal-700 disabled:opacity-50 disabled:pointer-events-none"
-              href="#">
-              Explore Flavors
-              <svg class="shrink-0 size-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </a>
-            <a class="py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-teal-600 bg-white text-teal-600 hover:bg-teal-50 focus:outline-hidden focus:bg-teal-50 disabled:opacity-50 disabled:pointer-events-none"
-              href="#">
-              Find a Store
-            </a>
+          <div class="max-w-2xl mx-auto mb-24 text-center">
+            <h1 class="font-heading tracking-tight text-4xl sm:text-5xl font-bold mb-4">Easily organize your files</h1>
+            <p class="text-gray-500">Organizing files can be a daunting task, especially if you have a lot of them.</p>
+            <p class="text-gray-500">However, with the right tools and strategies, it can be an easy and stress-free process.</p>
           </div>
-          <!-- End Buttons -->
-
-          <!-- Review -->
-          <div class="mt-6 lg:mt-10 grid grid-cols-2 gap-x-5">
-            <!-- Review -->
-            <div class="py-5">
-              <div class="flex gap-x-1">
-                <!-- 5 Stars -->
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
+          <div class="flex flex-wrap -mx-4 -mb-16">
+            <div class="w-full sm:w-1/2 lg:w-1/3 px-4 mb-16">
+              <div class="max-w-xs lg:px-4 mx-auto text-center">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-gray-50">
+                  <svg width="33" height="32" viewBox="0 0 33 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4.33301 23.4V8.6C4.33301 8.26863 4.60164 8 4.93301 8H22.6786C22.8792 8 23.0665 8.10026 23.1778 8.26718L28.1111 15.6672C28.2455 15.8687 28.2455 16.1313 28.1111 16.3328L23.1778 23.7328C23.0665 23.8997 22.8792 24 22.6786 24H4.93301C4.60164 24 4.33301 23.7314 4.33301 23.4Z" stroke="#041109" stroke-width="1.5"></path>
+                  </svg>
+                </div>
+                <div class="mt-3">
+                  <h5 class="text-xl font-bold mb-1">Auto-tagging</h5>
+                  <p class="text-lg text-gray-500">We care for your well-being with dental and vision benefits.</p>
               </div>
-              <p class="mt-3 text-sm text-gray-700">
-                <span class="font-bold">4.9</span> /5 - from 10k+ refreshed customers
-              </p>
-              <div class="mt-5">
-                <span class="text-sm text-gray-600">Available at fine retailers.</span>
               </div>
             </div>
-            <!-- End Review -->
-
-            <!-- Review -->
-            <div class="py-5">
-              <div class="flex gap-x-1">
-                 <!-- 5 Stars -->
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-yellow-400" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg>
-                <svg class="size-4 text-gray-300" width="51" height="51" viewBox="0 0 51 51" fill="currentColor"
-                  xmlns="http://www.w3.org/2000/svg"><path d="M27.0352 1.6307L33.9181 16.3633C34.2173 16.6768 34.5166 16.9903 34.8158 16.9903L50.0779 19.1845C50.9757 19.1845 51.275 20.4383 50.6764 21.0652L39.604 32.3498C39.3047 32.6632 39.3047 32.9767 39.3047 33.2901L41.998 49.2766C42.2973 50.217 41.1002 50.8439 40.5017 50.5304L26.4367 43.3208C26.1375 43.3208 25.8382 43.3208 25.539 43.3208L11.7732 50.8439C10.8754 51.1573 9.97763 50.5304 10.2769 49.59L12.9702 33.6036C12.9702 33.2901 12.9702 32.9767 12.671 32.6632L1.29923 21.0652C0.700724 20.4383 0.999979 19.4979 1.89775 19.4979L17.1598 17.3037C17.459 17.3037 17.7583 16.9903 18.0575 16.6768L24.9404 1.6307C25.539 0.69032 26.736 0.69032 27.0352 1.6307Z"/></svg> <!-- Example of 4.x stars -->
+            <div class="w-full sm:w-1/2 lg:w-1/3 px-4 mb-16">
+              <div class="max-w-xs lg:px-4 mx-auto text-center">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-gray-50">
+                  <svg width="33" height="32" viewBox="0 0 33 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 14.6667V5.93334C3 5.60197 3.26863 5.33334 3.6 5.33334H12.1114C12.2546 5.33334 12.3931 5.38458 12.5019 5.47779L16.8315 9.1889C16.9402 9.28211 17.0787 9.33334 17.222 9.33334H29.0667C29.398 9.33334 29.6667 9.60197 29.6667 9.93334V14.6667M3 14.6667V26.0667C3 26.398 3.26863 26.6667 3.6 26.6667H29.0667C29.398 26.6667 29.6667 26.398 29.6667 26.0667V14.6667M3 14.6667H29.6667" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </div>
+                <div class="mt-3">
+                  <h5 class="text-xl font-bold mb-1">Categorized by collections</h5>
+                  <p class="text-lg text-gray-500">We care for your well-being with dental and vision benefits.</p>
               </div>
-
-              <p class="mt-3 text-sm text-gray-700">
-                <span class="font-bold">As seen in</span> Summer Living Magazine
-              </p>
-
-              <div class="mt-5">
-                 <svg class="h-auto w-24 text-teal-500" viewBox="0 0 130 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <text x="0" y="20" font-family="Arial, sans-serif" font-size="10" fill="currentColor">SUMMER LIVING</text>
-                 </svg>
               </div>
             </div>
-            <!-- End Review -->
-          </div>
-          <!-- End Review -->
-        </div>
-        <!-- End Col -->
-
-        <div class="relative ms-4">
-          <img class="w-full rounded-md"
-            src="https://images.unsplash.com/photo-1609951651556-5334e2706168?q=80&w=2787&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-            alt="DrinkLyte Hero Image - Refreshing Summer Beverage">
-          <div
-            class="absolute inset-0 -z-1 bg-gradient-to-tr from-gray-200 via-white/0 to-white/0 size-full rounded-md mt-4 -mb-4 me-4 -ms-4 lg:mt-6 lg:-mb-6 lg:me-6 lg:-ms-6">
-          </div>
-
-          <!-- SVG-->
-          <div class="absolute bottom-0 start-0">
-            <svg class="w-2/3 ms-auto h-auto text-white" width="630" height="451" viewBox="0 0 630 451" fill="none"
-              xmlns="http://www.w3.org/2000/svg">
-              <rect x="531" y="352" width="99" height="99" fill="currentColor" />
-              <rect x="140" y="352" width="106" height="99" fill="currentColor" />
-              <rect x="482" y="402" width="64" height="49" fill="currentColor" />
-              <rect x="433" y="402" width="63" height="49" fill="currentColor" />
-              <rect x="384" y="352" width="49" height="50" fill="currentColor" />
-              <rect x="531" y="328" width="50" height="50" fill="currentColor" />
-              <rect x="99" y="303" width="49" height="58" fill="currentColor" />
-              <rect x="99" y="352" width="49" height="50" fill="currentColor" />
-              <rect x="99" y="392" width="49" height="59" fill="currentColor" />
-              <rect x="44" y="402" width="66" height="49" fill="currentColor" />
-              <rect x="234" y="402" width="62" height="49" fill="currentColor" />
-              <rect x="334" y="303" width="50" height="49" fill="currentColor" />
-              <rect x="581" width="49" height="49" fill="currentColor" />
-              <rect x="581" width="49" height="64" fill="currentColor" />
-              <rect x="482" y="123" width="49" height="49" fill="currentColor" />
-              <rect x="507" y="124" width="49" height="24" fill="currentColor" />
-              <rect x="531" y="49" width="99" height="99" fill="currentColor" />
+            <div class="w-full sm:w-1/2 lg:w-1/3 px-4 mb-16">
+              <div class="max-w-xs lg:px-4 mx-auto text-center">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-gray-50">
+                  <svg width="33" height="32" viewBox="0 0 33 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 15.9968C19 12.6745 15.9107 9.33334 12.1429 9.33334C11.6965 9.33334 10.2254 9.33335 9.85714 9.33335C6.07005 9.33335 3 12.3167 3 15.9968C3 19.1681 5.27964 21.8219 8.33333 22.4952C8.82341 22.6033 9.33342 22.6603 9.85714 22.6603" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M13.666 15.9968C13.666 19.3191 16.7553 22.6603 20.5232 22.6603C20.9695 22.6603 22.4406 22.6603 22.8089 22.6603C26.596 22.6603 29.666 19.677 29.666 15.9968C29.666 12.8256 27.3864 10.1718 24.3327 9.49843C23.8426 9.39037 23.3326 9.33331 22.8089 9.33331" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
             </svg>
           </div>
-          <!-- End SVG-->
+                <div class="mt-3">
+                  <h5 class="text-xl font-bold mb-1">Share links</h5>
+                  <p class="text-lg text-gray-500">We care for your well-being with dental and vision benefits.</p>
         </div>
-        <!-- End Col -->
       </div>
-      <!-- End Grid -->
     </div>
-    <!-- End Hero -->
-
-
-    <div class="overflow-hidden">
-      <!-- Pricing Section -->
-      <div class="relative">
-        <!-- Gradients -->
-        
-        <!-- End Gradients -->
-
-        <div class="max-w-[85rem] px-4 pt-10 sm:px-6 lg:px-8 lg:pt-14 mx-auto">
-          <!-- Title -->
-          <div class="max-w-2xl mx-auto text-center mb-10">
-            <h2
-              class="text-3xl leading-tight font-bold md:text-4xl md:leading-tight lg:text-5xl lg:leading-tight bg-clip-text bg-gradient-to-r from-teal-500 to-green-500 text-transparent">
-              Choose Your Refreshment Pack</h2>
-            <p class="mt-2 lg:text-lg text-gray-700">Find the perfect DrinkLyte pack for your summer.</p>
-          </div>
-          <!-- End Title -->
-
-          <!-- Grid -->
-          <div
-            class="mt-6 md:mt-12 grid sm:grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 max-w-4xl mx-auto lg:items-center">
-            <!-- Card -->
-            <div class="flex flex-col bg-white border-2 border-teal-200 hover:shadow-lg transition-shadow duration-300 text-center rounded-2xl p-4 md:p-8">
-              <h4 class="font-medium text-lg text-teal-700">Starter Pack</h4>
-              <span class="mt-7 font-bold text-3xl md:text-4xl xl:text-5xl text-teal-600">$4.99</span>
-              <p class="mt-2 text-sm text-gray-500">Perfect for trying out DrinkLyte</p>
-
-              <ul class="mt-7 space-y-2.5 text-sm">
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
+            <div class="w-full sm:w-1/2 lg:w-1/3 px-4 mb-16">
+              <div class="max-w-xs lg:px-4 mx-auto text-center">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-gray-50">
+                  <svg width="33" height="32" viewBox="0 0 33 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <g clip-path="url(#clip0_3018_21098)">
+                      <path d="M1.66602 26.6667V23C1.66602 19.134 4.80002 16 8.66601 16H13.3327C17.1987 16 20.3327 19.134 20.3327 23V26.6667" stroke="#041109" stroke-width="1.5" stroke-linecap="round"></path>
+                      <path d="M17.666 18.6667V18.6667C17.666 14.9848 20.6508 12 24.3327 12V12C28.0146 12 30.9993 14.9848 30.9993 18.6667V19.3333" stroke="#041109" stroke-width="1.5" stroke-linecap="round"></path>
+                      <path d="M10.9993 16C13.9449 16 16.3327 13.6122 16.3327 10.6667C16.3327 7.72115 13.9449 5.33334 10.9993 5.33334C8.05383 5.33334 5.66602 7.72115 5.66602 10.6667C5.66602 13.6122 8.05383 16 10.9993 16Z" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="M24.333 12C26.5421 12 28.333 10.2091 28.333 8C28.333 5.79086 26.5421 4 24.333 4C22.1239 4 20.333 5.79086 20.333 8C20.333 10.2091 22.1239 12 24.333 12Z" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </g>
                   </svg>
-                  <span class="text-gray-700">
-                    2 Cans - Your choice of flavor
-                  </span>
-                </li>
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    Natural fruit extracts
-                  </span>
-                </li>
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    Lightly sparkling
-                  </span>
-                </li>
-              </ul>
-
-              <a class="mt-5 py-3 px-4 w-full inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg bg-teal-500 text-white hover:bg-teal-600 focus:outline-hidden focus:ring-2 focus:ring-teal-300 disabled:opacity-50 disabled:pointer-events-none"
-                href="#">
-                Get Started
-              </a>
-            </div>
-            <!-- End Card -->
-
-            <!-- Card -->
-            <div
-              class="flex flex-col bg-white border-2 border-teal-600 text-center shadow-xl rounded-2xl p-4 md:p-8">
-              <p class="mb-3"><span
-                  class="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs uppercase font-semibold bg-teal-100 text-teal-800">Most
-                  Popular</span></p>
-              <h4 class="font-medium text-lg text-teal-800">Summer Variety Pack</h4>
-              <span class="mt-5 font-bold text-3xl md:text-4xl xl:text-5xl text-teal-700">
-                $19.99<span class="text-lg font-normal text-gray-500">/12-pack</span>
-              </span>
-              <p class="mt-2 text-sm text-gray-500">All our flavors to keep your summer cool.</p>
-
-              <ul class="mt-7 space-y-2.5 text-sm">
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    12 Cans - Mix of all flavors
-                  </span>
-                </li>
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    Perfect for sharing or stocking up
-                  </span>
-                </li>
-                <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    Unique cooling sensation
-                  </span>
-                </li>
-                 <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    Low sugar, no artificial sweeteners
-                  </span>
-                </li>
-                 <li class="flex gap-x-2">
-                  <svg class="shrink-0 mt-0.5 size-4 text-teal-600" xmlns="http://www.w3.org/2000/svg" width="24"
-                    height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span class="text-gray-700">
-                    Free delivery on this pack
-                  </span>
-                </li>
-              </ul>
-
-              <a class="mt-5 py-3 px-4 w-full inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-teal-600 text-white hover:bg-teal-700 focus:outline-hidden focus:bg-teal-700 disabled:opacity-50 disabled:pointer-events-none"
-                href="#">
-                Order Now
-              </a>
-            </div>
-            <!-- End Card -->
-          </div>
-          <!-- End Grid -->
-
-          <!-- Title -->
-          <div class="w-2/3 sm:w-1/2 lg:w-1/2 mx-auto text-center mt-10 md:mt-14 mb-6 lg:mt-24">
-            <h2 class="text-gray-600">Join thousands enjoying the refreshing taste of DrinkLyte.</h2>
-          </div>
-          <!-- End Title -->
-
-        </div>
-
-      </div>
-      <!-- End Pricing Section -->
-    </div>
-
-    <!-- Testimonials -->
-    <div class="relative overflow-hidden">
-      <div class="max-w-[85rem] px-4 py-12 sm:px-6 lg:px-8 lg:py-16 mx-auto">
-        <!-- Gradients -->
-        <div aria-hidden="true" class="flex -z-1 absolute start-0">
-          <div class="bg-teal-200 opacity-20 blur-3xl w-[1036px] h-[250px]"></div>
-        </div>
-        <!-- End Gradients -->
-
-        <!-- Grid -->
-        <div class="lg:grid lg:grid-cols-6 lg:gap-8 lg:items-center">
-          <div class="hidden lg:block lg:col-span-2">
-            <img class="rounded-xl"
-              src="https://images.unsplash.com/photo-1543006091-de441f694d10?q=80&w=560&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-              alt="Happy DrinkLyte Customer">
-          </div>
-          <!-- End Col -->
-
-          <div class="lg:col-span-4">
-            <!-- Blockquote -->
-            <blockquote>
-              <svg class="w-10 h-10 text-teal-500 mb-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
-                fill="currentColor" viewBox="0 0 18 14">
-                <path
-                  d="M6 0H2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3H2a1 1 0 0 0 0 2h1a5 5 0 0 0 5-5V2a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3h-1a1 1 0 0 0 0 2h1a5 5 0 0 0 5-5V2a2 2 0 0 0-2-2Z" />
-              </svg>
-
-              <p class="text-xl font-medium text-gray-700 lg:text-2xl lg:leading-normal">
-                DrinkLyte is a game-changer for summer! It's so refreshing and the flavors are amazing. I finally found my go-to non-alcoholic drink for parties and relaxing afternoons.
-              </p>
-
-              <footer class="mt-6">
-                <div class="flex items-center">
-                  <div class="lg:hidden shrink-0">
-                    <img class="size-12 rounded-full"
-                      src="https://images.unsplash.com/photo-1543006091-de441f694d10?q=80&w=320&h=320&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-                      alt="Avatar">
-                  </div>
-                  <div class="ms-4 lg:ms-0">
-                    <p class="font-medium text-gray-700">
-                      Alex P.
-                    </p>
-                    <p class="text-sm text-gray-600">
-                      DrinkLyte Enthusiast
-                    </p>
-                  </div>
                 </div>
-              </footer>
-            </blockquote>
-            <!-- End Blockquote -->
-          </div>
-          <!-- End Col -->
-        </div>
-        <!-- End Grid -->
-      </div>
-    </div>
-    <!-- End Testimonials -->
-
-    <!-- FAQ -->
-    <div class="max-w-[85rem] px-4 py-10 sm:px-6 lg:px-8 lg:py-14 mx-auto">
-      <!-- Grid -->
-      <div class="grid md:grid-cols-5 gap-10">
-        <div class="md:col-span-2">
-          <div class="max-w-xs">
-            <h2 class="text-2xl font-bold md:text-4xl md:leading-tight">Frequently<br>asked questions</h2>
-            <p class="mt-1 hidden md:block text-gray-600">Answers to common questions about DrinkLyte.</p>
-          </div>
-        </div>
-        <!-- End Col -->
-
-        <div class="md:col-span-3">
-          <!-- Accordion -->
-          <div class="hs-accordion-group divide-y divide-teal-100">
-            <div class="hs-accordion pb-3 active" id="hs-basic-with-title-and-arrow-stretched-heading-one">
-              <button
-                class="hs-accordion-toggle group pb-3 inline-flex items-center justify-between gap-x-3 w-full md:text-lg font-semibold text-start text-gray-700 rounded-lg transition hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                aria-expanded="true" aria-controls="hs-basic-with-title-and-arrow-stretched-collapse-one">
-                Is DrinkLyte available in different flavors?
-                <svg class="hs-accordion-active:hidden block shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-                <svg class="hs-accordion-active:block hidden shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m18 15-6-6-6 6" />
-                </svg>
-              </button>
-              <div id="hs-basic-with-title-and-arrow-stretched-collapse-one"
-                class="hs-accordion-content w-full overflow-hidden transition-[height] duration-300" role="region"
-                aria-labelledby="hs-basic-with-title-and-arrow-stretched-heading-one">
-                <p class="text-gray-600">
-                  Yes! DrinkLyte currently comes in three delicious summer flavors: Citrus Burst, Berry Bliss, and Tropical Twist. We're always experimenting with new refreshing combinations, so stay tuned for more!
-                </p>
+                <div class="mt-3">
+                  <h5 class="text-xl font-bold mb-1">Invite team members</h5>
+                  <p class="text-lg text-gray-500">We care for your well-being with dental and vision benefits.</p>
+                </div>
               </div>
             </div>
-
-            <div class="hs-accordion pt-6 pb-3" id="hs-basic-with-title-and-arrow-stretched-heading-two">
-              <button
-                class="hs-accordion-toggle group pb-3 inline-flex items-center justify-between gap-x-3 w-full md:text-lg font-semibold text-start text-gray-700 rounded-lg transition hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                aria-expanded="false" aria-controls="hs-basic-with-title-and-arrow-stretched-collapse-two">
-                What makes DrinkLyte so refreshing?
-                <svg class="hs-accordion-active:hidden block shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-                <svg class="hs-accordion-active:block hidden shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m18 15-6-6-6 6" />
-                </svg>
-              </button>
-              <div id="hs-basic-with-title-and-arrow-stretched-collapse-two"
-                class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300"
-                role="region" aria-labelledby="hs-basic-with-title-and-arrow-stretched-heading-two">
-                <p class="text-gray-600">
-                  DrinkLyte is crafted with natural fruit extracts, a hint of invigorating sparkle, and a unique cooling sensation that's perfect for hot days. It's low in sugar and contains no artificial sweeteners, offering a purely refreshing and guilt-free experience.
-                </p>
+            <div class="w-full sm:w-1/2 lg:w-1/3 px-4 mb-16">
+              <div class="max-w-xs lg:px-4 mx-auto text-center">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-gray-50">
+                  <svg width="33" height="32" viewBox="0 0 33 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M28.333 4.6V27.4C28.333 27.7314 28.0644 28 27.733 28H4.93301C4.60164 28 4.33301 27.7314 4.33301 27.4V4.6C4.33301 4.26863 4.60164 4 4.93301 4H27.733C28.0644 4 28.333 4.26863 28.333 4.6Z" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M13.2307 11.1796C12.8307 10.9511 12.333 11.2399 12.333 11.7006V20.2994C12.333 20.7601 12.8307 21.0489 13.2307 20.8204L20.7547 16.5209C21.1578 16.2906 21.1578 15.7094 20.7547 15.4791L13.2307 11.1796Z" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </div>
+                <div class="mt-3">
+                  <h5 class="text-xl font-bold mb-1">Video live preview</h5>
+                  <p class="text-lg text-gray-500">We care for your well-being with dental and vision benefits.</p>
+                </div>
               </div>
             </div>
-
-            <div class="hs-accordion pt-6 pb-3" id="hs-basic-with-title-and-arrow-stretched-heading-three">
-              <button
-                class="hs-accordion-toggle group pb-3 inline-flex items-center justify-between gap-x-3 w-full md:text-lg font-semibold text-start text-gray-700 rounded-lg transition hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                aria-expanded="false" aria-controls="hs-basic-with-title-and-arrow-stretched-collapse-three">
-                Is DrinkLyte suitable for all ages?
-                <svg class="hs-accordion-active:hidden block shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-                <svg class="hs-accordion-active:block hidden shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m18 15-6-6-6 6" />
-                </svg>
-              </button>
-              <div id="hs-basic-with-title-and-arrow-stretched-collapse-three"
-                class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300"
-                role="region" aria-labelledby="hs-basic-with-title-and-arrow-stretched-heading-three">
-                <p class="text-gray-600">
-                  Absolutely! DrinkLyte is a non-alcoholic beverage, making it a fantastic and refreshing choice for everyone, from kids to adults. It's perfect for family gatherings, picnics, or just enjoying a sunny afternoon.
-                </p>
-              </div>
-            </div>
-
-            <div class="hs-accordion pt-6 pb-3" id="hs-basic-with-title-and-arrow-stretched-heading-four">
-              <button
-                class="hs-accordion-toggle group pb-3 inline-flex items-center justify-between gap-x-3 w-full md:text-lg font-semibold text-start text-gray-700 rounded-lg transition hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                aria-expanded="false" aria-controls="hs-basic-with-title-and-arrow-stretched-collapse-four">
-                Where can I buy DrinkLyte?
-                <svg class="hs-accordion-active:hidden block shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-                <svg class="hs-accordion-active:block hidden shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m18 15-6-6-6 6" />
-                </svg>
-              </button>
-              <div id="hs-basic-with-title-and-arrow-stretched-collapse-four"
-                class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300"
-                role="region" aria-labelledby="hs-basic-with-title-and-arrow-stretched-heading-four">
-                <p class="text-gray-600">
-                  DrinkLyte is available at major supermarkets, local convenience stores, and directly through our online store. Use our "Find a Store" locator on the website to find a retailer nearest to you or to order for home delivery!
-                </p>
-              </div>
-            </div>
-
-            <div class="hs-accordion pt-6 pb-3" id="hs-basic-with-title-and-arrow-stretched-heading-five">
-              <button
-                class="hs-accordion-toggle group pb-3 inline-flex items-center justify-between gap-x-3 w-full md:text-lg font-semibold text-start text-gray-700 rounded-lg transition hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                aria-expanded="false" aria-controls="hs-basic-with-title-and-arrow-stretched-collapse-five">
-                Does DrinkLyte contain any common allergens?
-                <svg class="hs-accordion-active:hidden block shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-                <svg class="hs-accordion-active:block hidden shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m18 15-6-6-6 6" />
-                </svg>
-              </button>
-              <div id="hs-basic-with-title-and-arrow-stretched-collapse-five"
-                class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300"
-                role="region" aria-labelledby="hs-basic-with-title-and-arrow-stretched-heading-five">
-                <p class="text-gray-600">
-                  We're happy to say DrinkLyte is gluten-free, dairy-free, and nut-free. For a complete list of ingredients and nutritional information for each flavor, please check the product label or visit the "Ingredients & Nutrition" section on our website.
-                </p>
-              </div>
-            </div>
-
-            <div class="hs-accordion pt-6 pb-3" id="hs-basic-with-title-and-arrow-stretched-heading-six">
-              <button
-                class="hs-accordion-toggle group pb-3 inline-flex items-center justify-between gap-x-3 w-full md:text-lg font-semibold text-start text-gray-700 rounded-lg transition hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-                aria-expanded="false" aria-controls="hs-basic-with-title-and-arrow-stretched-collapse-six">
-                Do you offer DrinkLyte in multipacks?
-                <svg class="hs-accordion-active:hidden block shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-                <svg class="hs-accordion-active:block hidden shrink-0 size-5 text-gray-500 group-hover:text-teal-600"
-                  xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m18 15-6-6-6 6" />
-                </svg>
-              </button>
-              <div id="hs-basic-with-title-and-arrow-stretched-collapse-six"
-                class="hs-accordion-content hidden w-full overflow-hidden transition-[height] duration-300"
-                role="region" aria-labelledby="hs-basic-with-title-and-arrow-stretched-heading-six">
-                <p class="text-gray-600">
-                  Yes, we do! DrinkLyte is available in convenient single cans, 6-packs, and larger 12-packs. Our Summer Variety Pack is a customer favorite as it includes all our current flavors. Check out the "Our Packs" section on the website for all available options and pricing.
-                </p>
+            <div class="w-full sm:w-1/2 lg:w-1/3 px-4 mb-16">
+              <div class="max-w-xs lg:px-4 mx-auto text-center">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-gray-50">
+                  <svg width="33" height="32" viewBox="0 0 33 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <g clip-path="url(#clip0_3018_21112)">
+                      <path d="M11 24L15 28L21.6667 21.3333" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="M26.9993 23.4763C28.991 22.6962 30.9993 20.9185 30.9993 17.3333C30.9993 12 26.5549 10.6667 24.3327 10.6667C24.3327 8 24.3327 2.66666 16.3327 2.66666C8.33268 2.66666 8.33268 8 8.33268 10.6667C6.11046 10.6667 1.66602 12 1.66602 17.3333C1.66602 20.9185 3.67438 22.6962 5.66602 23.4763" stroke="#041109" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </g>
+                  </svg>
+                </div>
+                <div class="mt-3">
+                  <h5 class="text-xl font-bold mb-1">100GB cloud storage</h5>
+                  <p class="text-lg text-gray-500">We care for your well-being with dental and vision benefits.</p>
+                </div>
               </div>
             </div>
           </div>
-          <!-- End Accordion -->
         </div>
-        <!-- End Col -->
       </div>
-      <!-- End Grid -->
-    </div>
-    <!-- End FAQ -->
-
-    <!-- Contact -->
-    <div class="max-w-7xl px-4 sm:px-6 lg:px-8 py-12 lg:py-24 mx-auto">
-      <div class="mb-6 sm:mb-10 max-w-2xl text-center mx-auto">
-        <h2 class="font-medium text-black text-2xl sm:text-4xl dark:text-white">
-          Get in Touch
-        </h2>
-        <p class="mt-2 text-gray-600">Have questions, feedback, or want to stock DrinkLyte? We'd love to hear from you.</p>
-         <a class="mt-4 py-3 px-4 inline-flex justify-center items-center gap-x-2 text-sm font-medium rounded-lg border border-transparent bg-teal-600 text-white hover:bg-teal-700 focus:outline-hidden focus:bg-teal-700 disabled:opacity-50 disabled:pointer-events-none"
-              href="mailto:hello@drinklyte.com">
-              Contact Us
-            </a>
+    </section>
+    <section class="py-12 md:py-24">
+      <div class="container px-4 mx-auto">
+        <div class="max-w-6xl mx-auto">
+          <div class="max-w-4xl mb-24"><span class="inline-flex items-center h-6 mb-4 px-2 text-xs uppercase font-medium text-yellowGreen-700 bg-yellowGreen-200 rounded-full">HOW IT WORKS</span>
+            <h1 class="font-heading tracking-tight text-4xl sm:text-5xl font-bold mb-4">We revolutionized the way we manage digital content</h1>
+            <p class="text-lg text-gray-500">Using our platform is easy and straightforward. Here's how it works:</p>
+          </div>
+          <div class="flex flex-wrap items-center">
+            <div class="w-full md:w-1/3 md:pr-4 mb-4 md:mb-0">
+              <div class="md:flex items-center">
+                <div class="w-full max-w-xs mx-auto md:max-w-none md:mr-4 p-px rounded-xl bg-gradient-to-br from-cyanGreen-800 to-cyan-800">
+                  <div class="p-4 rounded-xl bg-white">
+                    <div class="flex-shrink-0 inline-flex w-10 h-10 mb-4 items-center justify-center font-bold bg-gray-100 border border-gray-200 rounded-full transition duration-200">1</div>
+                    <p class="max-w-xs font-medium">Create an account by setting up your email and password.</p>
+                  </div>
+                </div><span class="hidden md:inline-block">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 4L10 8L6 12" stroke="#9CABA2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg></span>
+                <div class="flex items justify-center transform rotate-90 mt-4 md:hidden">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 4L10 8L6 12" stroke="#9CABA2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div class="w-full md:w-1/3 md:pr-4 mb-4 md:mb-0">
+              <div class="md:flex items-center">
+                <div class="w-full max-w-xs mx-auto md:max-w-none md:mr-4 p-px rounded-xl border border-gray-200">
+                  <div class="p-4 rounded-xl bg-white">
+                    <div class="flex-shrink-0 inline-flex w-10 h-10 mb-4 items-center justify-center font-bold bg-gray-100 border border-gray-200 rounded-full transition duration-200">2</div>
+                    <p class="max-w-xs font-medium text-gray-500">Browse through our intuitive interface to discover the features.</p>
+                  </div>
+                </div><span class="hidden md:inline-block">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 4L10 8L6 12" stroke="#9CABA2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg></span>
+                <div class="flex items justify-center transform rotate-90 mt-4 md:hidden">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 4L10 8L6 12" stroke="#9CABA2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div class="w-full md:w-1/3 xl:pr-8">
+              <div class="w-full max-w-xs mx-auto md:max-w-none p-px rounded-xl border border-gray-200">
+                <div class="p-4 rounded-xl bg-white">
+                  <div class="flex-shrink-0 inline-flex w-10 h-10 mb-4 items-center justify-center font-bold bg-gray-100 border border-gray-200 rounded-full transition duration-200">3</div>
+                  <p class="max-w-xs font-medium text-gray-500">Drag &amp; drop your assets, organize it into collections to keep it neat.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-    <!-- End Contact -->
-  </main>
-  <!-- ========== END MAIN CONTENT ========== -->
-
-  <!-- ========== FOOTER ========== -->
-  <footer class="mt-auto w-full max-w-[85rem] py-10 px-4 sm:px-6 lg:px-8 mx-auto">
-    <!-- Grid -->
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 mb-10">
-      <div class="col-span-full hidden lg:col-span-1 lg:block">
-        <a class="flex-none font-semibold text-xl text-teal-600 focus:outline-hidden focus:opacity-80" href="#"
-          aria-label="DrinkLyte">DrinkLyte</a>
-        <p class="mt-3 text-xs sm:text-sm text-gray-600">
-          © 2025 DrinkLyte. All rights reserved.
-        </p>
+    </section>
+    <section class="py-12 md:py-24">
+      <div class="container px-4 mx-auto">
+        <div class="max-w-7xl mx-auto">
+          <div class="max-w-2xl mx-auto mb-20 text-center"><span class="inline-flex items-center h-6 mb-6 px-2 text-xs uppercase font-medium text-yellowGreen-700 bg-yellowGreen-200 rounded-full">TESTIMONIALS</span>
+            <h1 class="font-heading tracking-tight text-4xl sm:text-5xl font-bold">Used by hundreds of companies and happy users</h1>
+          </div>
+          <div class="flex flex-wrap -mx-4">
+            <div class="w-full lg:w-1/3 px-4 mb-10 lg:mb-0">
+              <div class="flex flex-col max-w-sm mx-auto lg:max-w-none items-start h-full p-8 border border-gray-100 rounded-xl shadow-4xl"><img class="block h-8 mb-8" src="frequencii-assets/logo-clouds/logo-ipsum-6.svg" alt="">
+                <div class="pr-4">
+                  <p class="text-lg font-medium mb-20">“We use the app daily and we’re very happy that they are created this amazing bookmarking platform.”</p>
+                  <div class="flex items-center mt-auto"><img class="block h-12 w-12 rounded-full" src="frequencii-assets/blog/avatar-medium.png" alt="">
+                    <div class="pl-4"><span class="block font-semibold">Ethan Rauf</span>                        <span class="text-sm text-gray-500">Founder of AIME Inc.</span></div>
+              </div>
+            </div>
+              </div>
+            </div>
+            <div class="w-full lg:w-1/3 px-4 mb-10 lg:mb-0">
+              <div class="flex flex-col max-w-sm mx-auto lg:max-w-none items-start h-full p-8 border border-gray-100 rounded-xl shadow-4xl"><img class="block h-8 mb-8" src="frequencii-assets/logo-clouds/logo-ipsum-1.svg" alt="">
+                <div class="pr-4">
+                  <p class="text-lg font-medium mb-20">“We use the app daily and we’re very happy that they are created this amazing bookmarking platform.”</p>
+                  <div class="flex items-center mt-auto"><img class="block h-12 w-12 rounded-full" src="frequencii-assets/blog/avatar-medium.png" alt="">
+                    <div class="pl-4"><span class="block font-semibold">Hanna Stanton</span>                        <span class="text-sm text-gray-500">Founder of AIME Inc.</span></div>
+              </div>
+            </div>
+              </div>
+            </div>
+            <div class="w-full lg:w-1/3 px-4">
+              <div class="flex flex-col max-w-sm mx-auto lg:max-w-none items-start h-full p-8 border border-gray-100 rounded-xl shadow-4xl"><img class="block h-8 mb-8" src="frequencii-assets/logo-clouds/logo-ipsum-2.svg" alt="">
+                <div class="pr-4">
+                  <p class="text-lg font-medium mb-20">“We use the app daily and we’re very happy that they are created this amazing bookmarking platform.”</p>
+                  <div class="flex items-center mt-auto"><img class="block h-12 w-12 rounded-full" src="frequencii-assets/blog/avatar-medium.png" alt="">
+                    <div class="pl-4"><span class="block font-semibold">Cooper Levin</span>                        <span class="text-sm text-gray-500">Founder of AIME Inc.</span></div>
+              </div>
+            </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <!-- End Col -->
-
+    </section>
+    <section class="py-12 md:py-24">
+      <div class="container px-4 mx-auto">
+        <div class="relative pb-16 border-b border-yellowGreen-400 overflow-hidden"><img class="absolute bottom-0 left-1/2 md:-mb-2 lg:-mb-20 transform -translate-x-1/2" src="frequencii-assets/cta/line-green-bottom.png" alt=""><img class="absolute bottom-0 left-1/2 -mb-5 sm:-mb-10 md:-mb-16 lg:-mb-28 transform -translate-x-1/2" src="frequencii-assets/cta/light-green-bottom.png" alt="">
+          <div class="relative max-w-sm md:max-w-xl mx-auto text-center"><span class="inline-flex items-center h-6 mb-4 px-2 text-sm font-medium text-yellowGreen-700 bg-yellowGreen-200 rounded-full">Become A Frontend Developer</span>
+            <h1 class="font-heading tracking-tight text-4xl sm:text-5xl font-bold mb-10">Want to learn how to build templates like this one?</h1><a class="group relative flex xs:inline-flex items-center justify-center px-5 h-12 font-bold text-sm text-white bg-gradient-to-br from-cyanGreen-800 to-cyan-800 rounded-lg transition-all duration-300" href="https://www.pixelrocket.store">
+              <div class="absolute top-0 left-0 w-full h-full rounded-lg ring-4 ring-green-300 animate-pulse group-hover:ring-0 transition duration-300"></div><span class="mr-2">Visit www.pixelrocket.store</span>                <span class="transform group-hover:translate-x-1 transition duration-200">
+                <svg width="17" height="16" viewBox="0 0 17 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4.5 8H12.8333M12.8333 8L8.83334 4M12.8333 8L8.83334 12" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg></span></a>
+      </div>
+        </div>
+      </div>
+    </section>
+    <div>
       <div>
-        <h4 class="text-xs font-semibold text-teal-700 uppercase">Product</h4>
-        <div class="mt-3 grid space-y-3 text-sm">
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Flavors</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Our Packs</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Order Now</a></p>
+        <section class="py-12 md:pt-24">
+          <div class="container px-4 mx-auto">
+            <div class="max-w-5xl mx-auto">
+              <div class="flex flex-wrap -mx-4 -mb-8">
+                <div class="w-full xs:w-1/2 md:w-1/4 px-4 mb-8">
+                  <h5 class="text-xl font-semibold mb-6">Product</h5>
+                  <ul>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Features</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Solutions</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Pricing</a></li>
+                    <li><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Tutorials</a></li>
+                  </ul>
+                </div>
+                <div class="w-full xs:w-1/2 md:w-1/4 px-4 mb-8">
+                  <h5 class="text-xl font-semibold mb-6">Company</h5>
+                  <ul>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">About</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Our Mission</a></li>
+                    <li class="flex items-center mb-6"><a class="inline-block mr-2 text-lg text-gray-500 hover:text-gray-900" href="#"><span>Careers</span></a>                        <span class="inline-flex h-6 px-2 items-center text-white bg-teal-600 rounded-full">
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="4" cy="4" r="3" fill="white"></circle>
+                        </svg><span class="ml-1 text-xs text-gray-50">Hiring</span></span></li>
+                    <li><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Contact</a></li>
+                  </ul>
+        </div>
+                <div class="w-full xs:w-1/2 md:w-1/4 px-4 mb-8">
+                  <h5 class="text-xl font-semibold mb-6">Resources</h5>
+                  <ul>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Press</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Blog</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Help Center</a></li>
+                    <li><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Support</a></li>
+                  </ul>
+      </div>
+                <div class="w-full xs:w-1/2 md:w-1/4 px-4 mb-8">
+                  <h5 class="text-xl font-semibold mb-6">Legal</h5>
+                  <ul>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Terms of Use</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Privacy Policy</a></li>
+                    <li class="mb-6"><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Legal Notice</a></li>
+                    <li><a class="inline-block text-lg text-gray-500 hover:text-gray-900" href="#">Cookie Settings</a></li>
+                  </ul>
         </div>
       </div>
-      <!-- End Col -->
-
-      <div>
-        <h4 class="text-xs font-semibold text-teal-700 uppercase">Company</h4>
-        <div class="mt-3 grid space-y-3 text-sm">
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Our Story</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Blog</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Contact Us</a></p>
         </div>
+            <div class="mt-32 pt-12 border-t border-gray-200">
+              <div class="flex flex-wrap items-center -mx-4">
+                <div class="w-full lg:w-1/3 px-4"><img src="images/brand.svg" alt=""></div>
+                <div class="w-full lg:w-1/3 px-4">
+                  <p class="text-gray-500">Made by <a href="https//www.pixelrocket.store">Pixel Rocket</a>. All rights reserved.</p>
       </div>
-      <!-- End Col -->
-
-      <div>
-        <h4 class="text-xs font-semibold text-teal-700 uppercase">Resources</h4>
-        <div class="mt-3 grid space-y-3 text-sm">
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">FAQ</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Help Center</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Ingredients & Nutrition</a></p>
-        </div>
-      </div>
-      <!-- End Col -->
-
-      <div>
-        <h4 class="text-xs font-semibold text-teal-700 uppercase">Legal</h4>
-        <div class="mt-3 grid space-y-3 text-sm">
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Terms of Service</a></p>
-          <p><a class="inline-flex gap-x-2 text-gray-600 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">Privacy Policy</a></p>
-        </div>
-      </div>
-      <!-- End Col -->
+                <div class="w-full lg:w-1/3 px-4">
+                  <div class="flex items-center justify-end"><a class="inline-flex mr-6 text-gray-400 hover:text-yellowGreen-700 items-center justify-center transition duration-200" href="#">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22.46 6C21.69 6.35 20.86 6.58 20 6.69C20.88 6.16 21.56 5.32 21.88 4.31C21.05 4.81 20.13 5.16 19.16 5.36C18.37 4.5 17.26 4 16 4C13.65 4 11.73 5.92 11.73 8.29C11.73 8.63 11.77 8.96 11.84 9.27C8.28004 9.09 5.11004 7.38 3.00004 4.79C2.63004 5.42 2.42004 6.16 2.42004 6.94C2.42004 8.43 3.17004 9.75 4.33004 10.5C3.62004 10.5 2.96004 10.3 2.38004 10V10.03C2.38004 12.11 3.86004 13.85 5.82004 14.24C5.19077 14.4122 4.53013 14.4362 3.89004 14.31C4.16165 15.1625 4.69358 15.9084 5.41106 16.4429C6.12854 16.9775 6.99549 17.2737 7.89004 17.29C6.37367 18.4904 4.49404 19.1393 2.56004 19.13C2.22004 19.13 1.88004 19.11 1.54004 19.07C3.44004 20.29 5.70004 21 8.12004 21C16 21 20.33 14.46 20.33 8.79C20.33 8.6 20.33 8.42 20.32 8.23C21.16 7.63 21.88 6.87 22.46 6Z" fill="currentColor"></path>
+                      </svg></a>                      <a class="inline-flex mr-6 text-gray-400 hover:text-yellowGreen-700 items-center justify-center transition duration-200" href="#">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 3C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19ZM18.5 18.5V13.2C18.5 12.3354 18.1565 11.5062 17.5452 10.8948C16.9338 10.2835 16.1046 9.94 15.24 9.94C14.39 9.94 13.4 10.46 12.92 11.24V10.13H10.13V18.5H12.92V13.57C12.92 12.8 13.54 12.17 14.31 12.17C14.6813 12.17 15.0374 12.3175 15.2999 12.5801C15.5625 12.8426 15.71 13.1987 15.71 13.57V18.5H18.5ZM6.88 8.56C7.32556 8.56 7.75288 8.383 8.06794 8.06794C8.383 7.75288 8.56 7.32556 8.56 6.88C8.56 5.95 7.81 5.19 6.88 5.19C6.43178 5.19 6.00193 5.36805 5.68499 5.68499C5.36805 6.00193 5.19 6.43178 5.19 6.88C5.19 7.81 5.95 8.56 6.88 8.56ZM8.27 18.5V10.13H5.5V18.5H8.27Z" fill="currentColor"></path>
+                      </svg></a>                      <a class="inline-flex text-gray-400 hover:text-yellowGreen-700 items-center justify-center transition duration-200" href="#">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M7.8 2H16.2C19.4 2 22 4.6 22 7.8V16.2C22 17.7383 21.3889 19.2135 20.3012 20.3012C19.2135 21.3889 17.7383 22 16.2 22H7.8C4.6 22 2 19.4 2 16.2V7.8C2 6.26174 2.61107 4.78649 3.69878 3.69878C4.78649 2.61107 6.26174 2 7.8 2ZM7.6 4C6.64522 4 5.72955 4.37928 5.05442 5.05442C4.37928 5.72955 4 6.64522 4 7.6V16.4C4 18.39 5.61 20 7.6 20H16.4C17.3548 20 18.2705 19.6207 18.9456 18.9456C19.6207 18.2705 20 17.3548 20 16.4V7.6C20 5.61 18.39 4 16.4 4H7.6ZM17.25 5.5C17.5815 5.5 17.8995 5.6317 18.1339 5.86612C18.3683 6.10054 18.5 6.41848 18.5 6.75C18.5 7.08152 18.3683 7.39946 18.1339 7.63388C17.8995 7.8683 17.5815 8 17.25 8C16.9185 8 16.6005 7.8683 16.3661 7.63388C16.1317 7.39946 16 7.08152 16 6.75C16 6.41848 16.1317 6.10054 16.3661 5.86612C16.6005 5.6317 16.9185 5.5 17.25 5.5ZM12 7C13.3261 7 14.5979 7.52678 15.5355 8.46447C16.4732 9.40215 17 10.6739 17 12C17 13.3261 16.4732 14.5979 15.5355 15.5355C14.5979 16.4732 13.3261 17 12 17C10.6739 17 9.40215 16.4732 8.46447 15.5355C7.52678 14.5979 7 13.3261 7 12C7 10.6739 7.52678 9.40215 8.46447 8.46447C9.40215 7.52678 10.6739 7 12 7ZM12 9C11.2044 9 10.4413 9.31607 9.87868 9.87868C9.31607 10.4413 9 11.2044 9 12C9 12.7956 9.31607 13.5587 9.87868 14.1213C10.4413 14.6839 11.2044 15 12 15C12.7956 15 13.5587 14.6839 14.1213 14.1213C14.6839 13.5587 15 12.7956 15 12C15 11.2044 14.6839 10.4413 14.1213 9.87868C13.5587 9.31607 12.7956 9 12 9Z" fill="currentColor"></path>
+                      </svg></a></div>
     </div>
-    <!-- End Grid -->
-
-    <div class="pt-5 mt-5 border-t border-gray-200">
-      <div class="sm:flex sm:justify-between sm:items-center">
-        <div class="flex items-center gap-x-3">
-          <p class="text-sm text-gray-500">DrinkLyte - The perfect non-alcoholic summer beverage.</p>
         </div>
-
-        <div class="flex justify-between items-center">
-          <div class="mt-3 sm:hidden">
-            <a class="flex-none font-semibold text-xl text-teal-600 focus:outline-hidden focus:opacity-80" href="#"
-              aria-label="DrinkLyte">DrinkLyte</a>
-            <p class="mt-1 text-xs sm:text-sm text-gray-600">
-              © 2025 DrinkLyte.
-            </p>
           </div>
-
-          <!-- Social Brands -->
-          <div class="space-x-4">
-            <a class="inline-block text-gray-500 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">
-              <svg class="shrink-0 size-4" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                fill="currentColor" viewBox="0 0 16 16">
-                <path
-                  d="M5.026 15c6.038 0 9.341-5.003 9.341-9.334 0-.14 0-.282-.006-.422A6.685 6.685 0 0 0 16 3.542a6.658 6.658 0 0 1-1.889.518 3.301 3.301 0 0 0 1.447-1.817 6.533 6.533 0 0 1-2.087.793A3.286 3.286 0 0 0 7.875 6.03a9.325 9.325 0 0 1-6.767-3.429 3.289 3.289 0 0 0 1.018 4.382A3.323 3.323 0 0 1 .64 6.575v.045a3.288 3.288 0 0 0 2.632 3.218 3.203 3.203 0 0 1-.865.115 3.23 3.23 0 0 1-.614-.057 3.283 3.283 0 0 0 3.067 2.277A6.588 6.588 0 0 1 .78 13.58a6.32 6.32 0 0 1-.78-.045A9.344 9.344 0 0 0 5.026 15z" />
-              </svg>
-            </a>
-            <a class="inline-block text-gray-500 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">
-              <svg class="shrink-0 size-4" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                fill="currentColor" viewBox="0 0 16 16">
-                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.21-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-              </svg>
-            </a>
-            <a class="inline-block text-gray-500 hover:text-teal-600 focus:outline-hidden focus:text-teal-600"
-              href="#">
-              <svg class="shrink-0 size-4" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                fill="currentColor" viewBox="0 0 16 16">
-                 <path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.597-.002 8.049c0 4.142 3.056 7.622 7.07 8.01.43.078.582-.134.582-.304 0-.186-.007-.647-.01-1.266-2.335.485-2.848-1.015-2.848-1.015-.378-.97-.925-1.228-.925-1.228-.752-.52.057-.508.057-.508.838.062 1.28.866 1.28.866.744 1.283 1.95 1.023 2.428.778.075-.598.293-1.023.534-1.258-1.854-.21-3.805-.925-3.805-4.132 0-.914.328-1.666.868-2.254-.088-.21-.378-1.066.082-2.22 0 0 .693-.22 2.278.86.658-.183 1.36-.275 2.064-.278.703.003 1.405.095 2.064.278 1.585-1.08 2.278-.86 2.278-.86.46 1.154.17 2.01.082 2.22.54.588.868 1.34.868 2.254 0 3.217-1.953 3.92-3.815 4.122.3.258.572.762.572 1.532 0 1.11-.01 2.003-.01 2.273 0 .17.152.38.584.303C13.055 15.573 16 12.18 16 8.049z"/>
-              </svg>
-            </a>
           </div>
-          <!-- End Social Brands -->
-        </div>
-        <!-- End Col -->
+        </section>
       </div>
     </div>
-  </footer>
-  <!-- ========== END FOOTER ========== -->
+  </div>
 
 </body>
 
