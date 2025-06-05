@@ -543,7 +543,7 @@ export const fetchFeedback = async (
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
   computedBackgroundColor?: string | null
 ): Promise<void> => {
-  const apiUrl = `${Settings.API_URL}/checkraCompletions/generate`;
+  const apiUrl = `${Settings.API_URL}/checkraCompletions/generateFull`;
   return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, computedBackgroundColor);
 };
 

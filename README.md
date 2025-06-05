@@ -23,7 +23,7 @@ Add the following lines inside the `<head>` section of your HTML file:
 ```html
 <!-- Inside the <head> section -->
 <link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css">
-<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer></script>
+<script src="https://unpkg.com/checkra@latest/dist/checkra.umd.js" defer></script>
 
 ```
 
@@ -127,16 +127,4 @@ interface CheckraOptions {
 
 ## Panel Docking Behavior
 
-By default, the Checkra sidepanel will "dock" to the right side of your page by applying a `margin-right` to the `<html>` element. This pushes your page content to the left, making the panel sit alongside your website content rather than overlaying it.
-
-- A class `checkra-panel-open` is added to the `<html>` element when the panel is visible.
-- The width of the panel (and thus the margin applied) is controlled by the CSS custom property `--checkra-panel-width` (defaults to `360px`). You can override this in your own CSS if needed:
-  ```css
-  :root {
-    --checkra-panel-width: 400px; /* Example: make panel wider */
-  }
-  ```
-- On smaller screens (typically <= 768px wide), this docking behavior is disabled, and the panel will revert to an overlay, taking up the full width of the viewport. This is to ensure a better experience on mobile devices.
-
-If this docking behavior interferes with your site's layout (e.g., sites with complex horizontal scrolling or full-width fixed elements), you can customize the behavior of `.checkra-panel-open` or `#checkra-feedback-viewer` in your own stylesheets.
-
+By default, the Checkra sidepanel will "dock" to the right side of your page by applying a `margin-right` to the `<html>`
