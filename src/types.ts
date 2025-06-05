@@ -126,12 +126,13 @@ export interface LeverValues {
 // --- End Updated and New Interfaces ---
 
 export interface UiKitDetection {
-  name: string | null;
+  name: 'material-ui' | 'flowbite' | 'preline' | 'ant-design' | 'chakra-ui' | 'mantine' | 'headless-ui' | 'react-bootstrap' | null;
   confidence: number | null;
+  version?: string;
 }
 
 export interface DetectedFramework {
-  name: 'tailwind' | 'bootstrap' | 'material-ui' | 'custom';
+  name: 'tailwind' | 'bootstrap' | 'custom';
   version: string | 'unknown';
   confidence: number; // 0 (no confidence) -> 1 (high confidence)
   utilityDensity: number;

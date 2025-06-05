@@ -20,7 +20,6 @@ function detectFrameworkFromCssVariables(element?: HTMLElement): { name: Detecte
     const rootStyles = getComputedStyle(targetElement);
     let tailwindScore = 0;
     let bootstrapScore = 0;
-    let muiScore = 0;
 
     // Tailwind CSS variables (v3+)
     const tailwindVars = [
@@ -37,13 +36,6 @@ function detectFrameworkFromCssVariables(element?: HTMLElement): { name: Detecte
         '--bs-danger', '--bs-light', '--bs-dark', '--bs-font-sans-serif'
     ];
 
-    // MUI CSS variables (emotion-based)
-    const muiVars = [
-        '--mui-palette-primary-main', '--mui-palette-secondary-main',
-        '--mui-palette-error-main', '--mui-palette-warning-main',
-        '--mui-palette-info-main', '--mui-palette-success-main'
-    ];
-
     tailwindVars.forEach(varName => {
         if (rootStyles.getPropertyValue(varName)) tailwindScore++;
     });
@@ -52,11 +44,7 @@ function detectFrameworkFromCssVariables(element?: HTMLElement): { name: Detecte
         if (rootStyles.getPropertyValue(varName)) bootstrapScore++;
     });
 
-    muiVars.forEach(varName => {
-        if (rootStyles.getPropertyValue(varName)) muiScore++;
-    });
-
-    const maxScore = Math.max(tailwindScore, bootstrapScore, muiScore);
+    const maxScore = Math.max(tailwindScore, bootstrapScore);
     if (maxScore === 0) return { name: 'custom', confidence: 0 };
 
     let confidenceBoost = element ? W_LOCAL_CSS_VARIABLES : W_CSS_VARIABLES;
@@ -66,9 +54,6 @@ function detectFrameworkFromCssVariables(element?: HTMLElement): { name: Detecte
     }
     if (bootstrapScore === maxScore && bootstrapScore >= 3) { // Lowered threshold for local checks
         return { name: 'bootstrap', confidence: Math.min(0.85, (bootstrapScore / Math.max(1,bootstrapVars.length)) * confidenceBoost) };
-    }
-    if (muiScore === maxScore && muiScore >= 1) { // Lowered threshold for local checks
-        return { name: 'material-ui', confidence: Math.min(0.85, (muiScore / Math.max(1,muiVars.length)) * confidenceBoost) };
     }
 
     return { name: 'custom', confidence: 0 };
@@ -135,38 +120,6 @@ function isBootstrapClass(className: string): boolean {
     return bootstrapPatterns.some(pattern => pattern.test(className));
 }
 
-// Enhanced MUI detection
-function detectMuiElements(element?: HTMLElement): number {
-    let score = 0;
-
-    // Check for MUI class patterns on the element or its descendants
-    const muiClassSelector = '[class*="Mui"], [class*="css-"], [class*="makeStyles"]';
-    const elements = element ? (element.matches(muiClassSelector) ? [element] : Array.from(element.querySelectorAll(muiClassSelector))) : Array.from(document.querySelectorAll(muiClassSelector));
-    score += Math.min(elements.length / (element ? 2 : 10), 5); // Cap at 5 points, higher sensitivity for local element
-
-    // Check for emotion-based styles (MUI v5+) on the element or its descendants
-    const emotionSelector = '[class*="css-"][class*="-"]'; // More specific to avoid general 'css-' classes if possible
-    const emotionElements = element ? (element.matches(emotionSelector) ? [element] : Array.from(element.querySelectorAll(emotionSelector))) : Array.from(document.querySelectorAll(emotionSelector));
-    score += Math.min(emotionElements.length / (element ? 5 : 20), 3); // Cap at 3 points, higher sensitivity for local
-
-    // Check for common MUI component signatures on the element itself (if provided)
-    if (element) {
-        if (element.matches('div[role="button"], div[role="tab"], div[role="tabpanel"]')) {
-            score += 1.5; // Direct match on selected element is a good sign
-        }
-        // Check for data-mui-internal or data-emotion attributes if they exist
-        if (element.matches('[data-mui-internal], [data-emotion*="Mui"]')) {
-            score += 2 * W_ELEMENT_ATTRIBUTE_MATCH;
-        }
-    } else {
-        // Global check for component signatures (less targeted)
-        const muiComponents = document.querySelectorAll('div[role="button"], div[role="tab"], div[role="tabpanel"]');
-        score += Math.min(muiComponents.length / 5, 2);
-    }
-    
-    return score;
-}
-
 function extractClassesFromHtml(htmlString: string, maxClasses: number): Set<string> {
     const classes = new Set<string>();
     if (!htmlString) return classes;
@@ -212,7 +165,6 @@ const BOOTSTRAP_DISTINCTIVE_CLASSES_REGEXES: RegExp[] = [
     /^g-[0-5]$/, /^gx-[0-5]$/, /^gy-[0-5]$/,
     /^p[xytrblse]?-[0-5]$/, /^m[xytrblse]?-[0-5]$/,
 ];
-const MUI_DISTINCTIVE_REGEXES = [/^Mui[A-Z]/, /^css-[a-z0-9]+(?:-[a-zA-Z0-9]+)*$/]; // More specific MUI class pattern
 
 function analyzeClassesForFramework(
     classesToAnalyze: Set<string>,
@@ -234,7 +186,6 @@ function analyzeClassesForFramework(
 
     let tailwindPoints = 0;
     let bootstrapPoints = 0;
-    let muiPoints = 0;
 
     // Pre-compute utility density using more accurate detection
     let tailwindUtilityMatches = 0;
@@ -244,7 +195,6 @@ function analyzeClassesForFramework(
         // Framework-specific pattern matching
         if (TAILWIND_DISTINCTIVE_REGEXES.some(regex => regex.test(cls))) tailwindPoints += 2;
         if (BOOTSTRAP_DISTINCTIVE_CLASSES_REGEXES.some(regex => regex.test(cls))) bootstrapPoints += 1;
-        if (MUI_DISTINCTIVE_REGEXES.some(regex => regex.test(cls))) muiPoints += 2;
 
         // More accurate utility detection
         if (isTailwindUtility(cls)) {
@@ -259,32 +209,24 @@ function analyzeClassesForFramework(
     utilityDensity = totalClassesSampled > 0 ? totalUtilityMatches / totalClassesSampled : 0;
     const tailwindUtilityDensity = totalClassesSampled > 0 ? tailwindUtilityMatches / totalClassesSampled : 0;
 
-    // Add runtime MUI detection, localized if selectedElement is provided
-    muiPoints += detectMuiElements(selectedElement);
-
     // Normalize points by number of regex categories to avoid bias if one framework has more regexes
     const normTailwind = tailwindPoints / (TAILWIND_DISTINCTIVE_REGEXES.length || 1);
     const normBootstrap = bootstrapPoints / (BOOTSTRAP_DISTINCTIVE_CLASSES_REGEXES.length || 1);
-    const normMui = muiPoints / (MUI_DISTINCTIVE_REGEXES.length || 1);
     
     // Enhanced decision logic with utility density consideration
-    if (tailwindUtilityDensity > 0.2 || (normTailwind > 0.05 && normTailwind > normBootstrap && normTailwind > normMui)) {
+    if (tailwindUtilityDensity > 0.2 || (normTailwind > 0.05 && normTailwind > normBootstrap)) {
         detectedName = 'tailwind';
         frameworkType = 'utility-first';
         confidence = W_CLASS_PATTERN_STRONG * Math.min(1, (tailwindPoints / 5) + (tailwindUtilityDensity * 2));
-    } else if (normBootstrap > 0.05 && normBootstrap > normTailwind && normBootstrap > normMui) {
+    } else if (normBootstrap > 0.05 && normBootstrap > normTailwind) {
         detectedName = 'bootstrap';
         frameworkType = 'component-based';
         confidence = W_CLASS_PATTERN_STRONG * Math.min(1, bootstrapPoints / 10);
-    } else if (normMui > 0.05 && normMui > normTailwind && normMui > normBootstrap) {
-        detectedName = 'material-ui';
-        frameworkType = 'component-based';
-        confidence = W_CLASS_PATTERN_STRONG * Math.min(1, muiPoints / 3);
-    } else if (tailwindPoints > 0 && tailwindPoints >= bootstrapPoints && tailwindPoints >= muiPoints) {
+    } else if (tailwindPoints > 0 && tailwindPoints >= bootstrapPoints) {
         detectedName = 'tailwind';
         frameworkType = 'utility-first';
         confidence = W_CLASS_PATTERN_MODERATE * Math.min(1, tailwindPoints / 3);
-    } else if (bootstrapPoints > 0 && bootstrapPoints >= tailwindPoints && bootstrapPoints >= muiPoints) {
+    } else if (bootstrapPoints > 0 && bootstrapPoints >= tailwindPoints) {
         detectedName = 'bootstrap';
         frameworkType = 'component-based';
         confidence = W_CLASS_PATTERN_MODERATE * Math.min(1, bootstrapPoints / 5);
@@ -395,19 +337,6 @@ export function detectCssFramework(htmlSnippet?: string, selectedElement?: HTMLE
         urlVersion = bsVersionMatch[1];
         if(identifiedInUrl && urlDetectedName === 'bootstrap') urlConfidence = Math.min(1.0, urlConfidence + W_VERSION_PARSED);
       }
-    } else if (/mui|material-ui/i.test(url)) {
-        if (urlDetectedName === 'custom' || urlConfidence < W_LINK_SCRIPT_URL) {
-            urlDetectedName = 'material-ui';
-            urlFrameworkType = 'component-based';
-            urlConfidence = W_LINK_SCRIPT_URL;
-            urlVersion = 'unknown';
-            identifiedInUrl = true;
-        }
-        const muiVersionMatch = url.match(/@([0-9]+\.[0-9]+(?:\.[0-9]+)?)/);
-        if (muiVersionMatch?.[1]) {
-            urlVersion = muiVersionMatch[1];
-            if(identifiedInUrl && urlDetectedName === 'material-ui') urlConfidence = Math.min(1.0, urlConfidence + W_VERSION_PARSED);
-        }
     }
     if (urlConfidence > 0.7 && (urlDetectedName === 'tailwind' || urlDetectedName === 'bootstrap')) break; // Break if high confidence from URL for major frameworks
   }
