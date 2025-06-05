@@ -11,7 +11,6 @@ const W_CLASS_PATTERN_MODERATE = 0.4;
 const W_VERSION_PARSED = 0.1;
 const W_CSS_VARIABLES = 0.6; // Strong signal from CSS custom properties
 const W_LOCAL_CSS_VARIABLES = 0.75; // Even stronger for element-local CSS vars
-const W_ELEMENT_ATTRIBUTE_MATCH = 0.6; // For direct attribute checks on an element
 
 
 // Enhanced runtime detection using CSS custom properties
