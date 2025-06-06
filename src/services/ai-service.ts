@@ -10,7 +10,8 @@ import {
   PageMetadata,
   BackendPayloadMetadata,
   UiKitDetection,
-  DetectedFramework
+  DetectedFramework,
+  GradientDescriptor
 } from '../types';
 
 let serviceEventEmitter: any = null; // Local reference to the event emitter
@@ -325,6 +326,9 @@ const fetchFeedbackBase = async (
     let processedHtml = sanitizedHtml;
     let analysisBuffer = ''; // Renamed from analysisAccumulator for clarity with new event
     
+    // --- Gradient descriptor for this request ---
+    let activeGradientDescriptor: GradientDescriptor | null = null;
+
     // These will now be part of BackendPayloadMetadata
     let cssDigestsForPayload: CssContext['cssDigests'] | null = null;
     let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
@@ -461,12 +465,19 @@ const fetchFeedbackBase = async (
                   }
                   analysisBuffer = ''; // Reset for next potential message cycle
                   break;
-                case 'htmlReplace':
+                case 'gradientDescriptor':
+                  try {
+                    activeGradientDescriptor = parsedData as GradientDescriptor;
+                  } catch (e) {
+                    customWarn('[AI Service] Failed to process gradientDescriptor payload:', e, parsedData);
+                  }
+                  break;
                 case 'htmlForPatch': // Simplest option: treat htmlForPatch as htmlReplace
                   if (parsedData.html && typeof parsedData.html === 'string') {
+                    const processedHtml = applyGradientToHtml(parsedData.html, activeGradientDescriptor);
                     if (serviceEventEmitter) {
                       serviceEventEmitter.emit('aiDomUpdateReceived', {
-                        html: parsedData.html,
+                        html: processedHtml,
                         insertionMode: 'replace' 
                       });
                     }
@@ -476,9 +487,10 @@ const fetchFeedbackBase = async (
                   break;
                 case 'htmlInsertBefore':
                   if (parsedData.html && typeof parsedData.html === 'string') {
+                    const processedHtml = applyGradientToHtml(parsedData.html, activeGradientDescriptor);
                     if (serviceEventEmitter) {
                       serviceEventEmitter.emit('aiDomUpdateReceived', {
-                        html: parsedData.html,
+                        html: processedHtml,
                         insertionMode: 'insertBefore'
                       });
                     }
@@ -488,14 +500,28 @@ const fetchFeedbackBase = async (
                   break;
                 case 'htmlInsertAfter':
                   if (parsedData.html && typeof parsedData.html === 'string') {
+                    const processedHtml = applyGradientToHtml(parsedData.html, activeGradientDescriptor);
                     if (serviceEventEmitter) {
                       serviceEventEmitter.emit('aiDomUpdateReceived', {
-                        html: parsedData.html,
+                        html: processedHtml,
                         insertionMode: 'insertAfter'
                       });
                     }
                   } else {
                     customWarn('[AI Service] htmlInsertAfter event received without valid HTML string:', parsedData);
+                  }
+                  break;
+                case 'htmlReplace':
+                  if (parsedData.html && typeof parsedData.html === 'string') {
+                    const processedHtml = applyGradientToHtml(parsedData.html, activeGradientDescriptor);
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiDomUpdateReceived', {
+                        html: processedHtml,
+                        insertionMode: 'replace'
+                      });
+                    }
+                  } else {
+                    customWarn('[AI Service] htmlReplace event received without valid HTML string:', parsedData);
                   }
                   break;
                 default:
@@ -599,4 +625,23 @@ export function initializeAiServiceListeners(emitter: any): void {
   serviceEventEmitter.on('fixRated', (payload: AddRatingRequestBody) => {
     sendFixRating(payload);
   });
+}
+
+// Helper: applies gradient descriptor to HTML string
+function applyGradientToHtml(htmlString: string, gradientSpec: GradientDescriptor | null): string {
+  if (!gradientSpec) return htmlString;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = htmlString;
+  const targets = wrapper.querySelectorAll('[data-checkra-gradient="true"]');
+  if (targets && targets.length > 0) {
+    const gradientCss = `linear-gradient(${gradientSpec.angle}deg, in ${gradientSpec.kind}, ${gradientSpec.from}, ${gradientSpec.to})`;
+    targets.forEach(el => {
+      const htmlEl = el as HTMLElement;
+      const existingStyle = htmlEl.getAttribute('style') || '';
+      const separator = existingStyle.trim().endsWith(';') || existingStyle.trim() === '' ? '' : '; ';
+      htmlEl.setAttribute('style', `${existingStyle}${separator}background-image: ${gradientCss}`);
+      htmlEl.removeAttribute('data-checkra-gradient');
+    });
+  }
+  return wrapper.innerHTML;
 }

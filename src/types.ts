@@ -165,3 +165,11 @@ export interface ResolvedColorInfo {
   // Potentially other color types if backend expands, e.g., resolvedTextColorInfo
 }
 // --- END: New Types for Color Resolution Event ---
+
+// --- Gradient Descriptor for new gradient SSE event ---
+export interface GradientDescriptor {
+  kind: 'oklab' | 'lab' | 'hsl';
+  from: string; // e.g. '#2563eb'
+  to: string;   // e.g. '#ef4444'
+  angle: number; // degrees, e.g. 45
+}
