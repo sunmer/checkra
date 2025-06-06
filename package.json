@@ -22,7 +22,7 @@
     "README.md"
   ],
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build:lib": "vite build --mode production",
     "build:demo": "npm run build:lib && vite build --mode preprod && cp dist/*.js demo-dist/ && cp dist/index.css demo-dist/style.css",
     "preview:demo": "vite preview --mode preprod --open",

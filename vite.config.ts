@@ -58,6 +58,7 @@ export default defineConfig(({ command, mode }) => {
       base: './', // Ensure assets load correctly in dev
       server: {
         open: true, // Open browser automatically
+        cors: true, // Allow all origins for local development
         watch: {
           ignored: ['!**/node_modules/**','!**/dist/**']
         }

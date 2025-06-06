@@ -1,15 +1,5 @@
 /* Settings Modal Styles */
 
-/* --- Visibility Helpers --- */
-.hidden {
-  display: none !important;
-}
-.visible-block {
-  display: block !important;
-}
-.visible-flex {
-  display: flex !important;
-}
 
 /* --- Modal Container --- */
 #checkra-settings-modal-container {
@@ -60,10 +50,6 @@
     opacity: 1;
 }
 
-/* --- Modal Content --- */
-#checkra-settings-modal-container > div:last-of-type { /* Targeting the content div */
-  /* Add specific styles if needed */
-}
 
 #checkra-settings-modal-container label {
   display: block;

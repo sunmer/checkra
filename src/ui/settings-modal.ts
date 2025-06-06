@@ -161,22 +161,6 @@ export class SettingsModal {
   }
 
   /**
-   * Helper to find the closest valid step for the slider.
-   */
-  private _findClosestStep(value: number, min: number, max: number, step: number): number {
-      if (value <= min) return min;
-      if (value >= max) return max;
-      // Calculate the nearest step index
-      const steps = Math.round((value - min) / step);
-      let closest = min + steps * step;
-      // Clamp to max/min just in case
-      closest = Math.min(max, Math.max(min, closest));
-      // Round to handle potential floating point inaccuracies with step
-      const precision = (step.toString().split('.')[1] || '').length;
-      return parseFloat(closest.toFixed(precision));
-  }
-
-  /**
    * Helper to get the description for a given temperature value.
    * Reverted to original logic.
    */
@@ -260,8 +244,8 @@ export class SettingsModal {
     this.destroyDOM();
     this.create();
     if (this.modalContainer) {
-      this.modalContainer.classList.remove('hidden');
-      this.modalContainer.classList.add('visible-block');
+      this.modalContainer.classList.remove('checkra-hidden');
+      this.modalContainer.classList.add('checkra-visible-block');
     }
   }
 
@@ -271,8 +255,8 @@ export class SettingsModal {
   public hideModal(): void {
     if (this.modalContainer) {
       // this.modalContainer.style.display = 'none';
-      this.modalContainer.classList.add('hidden');
-      this.modalContainer.classList.remove('visible-block');
+      this.modalContainer.classList.add('checkra-hidden');
+      this.modalContainer.classList.remove('checkra-visible-block');
     }
   }
 
