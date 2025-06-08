@@ -325,6 +325,9 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
       this.stableSelectorForAI
     ) {
       customWarn('[CheckraImpl finalizeResponse] All conditions MET. Calling fixApplier.apply.');
+      if (!this.currentGenerationIdForAI) {
+        customWarn('[CheckraImpl finalizeResponse] WARNING: generationId is null at fix application time! This should not happen if backend sends generationId as first event.');
+      }
       const appliedFixInfo = this.fixApplier.apply({
         fixId: this.currentFixIdForAI,
         originalHtml: this.originalOuterHTMLForAI,
@@ -365,6 +368,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     // Otherwise (e.g., text-only response), keep the selection context for potential re-prompt.
     if (hadHtmlFixContent) { 
         customWarn('[CheckraImpl finalizeResponse] Resetting selection context as HTML fix content was processed.');
+        // Only reset after fix is applied and any rating is submitted
         this.resetStateForNewSelection(); // This clears currentFixIdForAI, originalOuterHTMLForAI etc.
         this.selectionManager?.removeSelectionHighlight();
     } else {
@@ -410,6 +414,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   }
 
   private resetStateForNewSelection(): void {
+    customWarn('[CheckraImpl] resetStateForNewSelection called. GenerationId before reset:', this.currentGenerationIdForAI);
     this.currentImageDataUrlForAI = null;
     this.originalOuterHTMLForAI = null;
     this.fixedOuterHTMLForCurrentCycle = null;

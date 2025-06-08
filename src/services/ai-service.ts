@@ -316,7 +316,8 @@ const fetchFeedbackBase = async (
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
   imageDataUrl?: string | null,
-  computedBackgroundColor?: string | null
+  computedBackgroundColor?: string | null,
+  generationId?: string | null
 ): Promise<void> => {
   try {
     const pageMeta = await getPageMetadata(); // Renamed to pageMeta for clarity
@@ -363,6 +364,10 @@ const fetchFeedbackBase = async (
       aiSettings: currentAiSettings,
       insertionMode: insertionMode
     };
+
+    if (generationId) {
+      (requestBody as any).generationId = generationId;
+    }
 
     if (sanitizedHtml) {
       requestBody.html = processedHtml;
@@ -466,8 +471,8 @@ const fetchFeedbackBase = async (
                   analysisBuffer = ''; // Reset for next potential message cycle
                   break;
                 case 'generationId':
-                  if (parsedData.id && serviceEventEmitter) {
-                    serviceEventEmitter.emit('generationIdReceived', parsedData.id);
+                  if (parsedData.generationId && serviceEventEmitter) {
+                    serviceEventEmitter.emit('generationIdReceived', parsedData.generationId);
                   }
                   break;
                 case 'gradientDescriptor':
@@ -572,10 +577,11 @@ export const fetchFeedback = async (
   promptText: string,
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
-  computedBackgroundColor?: string | null
+  computedBackgroundColor?: string | null,
+  generationId?: string | null
 ): Promise<void> => {
   const apiUrl = `${Settings.API_URL}/checkraCompletions/generateFull`;
-  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, computedBackgroundColor);
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, computedBackgroundColor, generationId);
 };
 
 /**
@@ -612,7 +618,6 @@ export const sendFixRating = async (feedbackPayload: AddRatingRequestBody): Prom
       throw new Error(specificErrorMessage);
     }
     console.log('[AI Service] Fix rating submitted successfully.');
-
   } catch (error) {
     customError("Error in sendFixRating:", error);
     if (serviceEventEmitter) { 

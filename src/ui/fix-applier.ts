@@ -119,6 +119,9 @@ export class FixApplier {
         isRated: false,
         resolvedColors: currentResolvedColors ? { ...currentResolvedColors } : undefined
       };
+
+      if(params.generationId)
+        fixInfoData.generationId = params.generationId;
       
       this.appliedFixStore.add(fixId, fixInfoData);
       
