@@ -87,8 +87,11 @@ export interface GenerateSuggestionRequestbody {
 }
 
 export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
-  rating: 1 | 2 | 3 | 4;
+  rating: number; // e.g., 1-5
   fixId: string;
+  generationId?: string;
+  reason?: string; // Optional textual feedback
+  originalHtml?: string;
   feedback?: string;
   generatedHtml?: string;
   tags?: string[];

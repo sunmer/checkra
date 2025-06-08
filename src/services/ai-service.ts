@@ -465,6 +465,11 @@ const fetchFeedbackBase = async (
                   }
                   analysisBuffer = ''; // Reset for next potential message cycle
                   break;
+                case 'generationId':
+                  if (parsedData.id && serviceEventEmitter) {
+                    serviceEventEmitter.emit('generationIdReceived', parsedData.id);
+                  }
+                  break;
                 case 'gradientDescriptor':
                   try {
                     activeGradientDescriptor = parsedData as GradientDescriptor;
@@ -634,12 +639,14 @@ function applyGradientToHtml(htmlString: string, gradientSpec: GradientDescripto
   wrapper.innerHTML = htmlString;
   const targets = wrapper.querySelectorAll('[data-checkra-gradient="true"]');
   if (targets && targets.length > 0) {
-    const gradientCss = `linear-gradient(${gradientSpec.angle}deg, in ${gradientSpec.kind}, ${gradientSpec.from}, ${gradientSpec.to})`;
+    // CSS syntax: linear-gradient(in <color-space> <angle>deg, <from>, <to>)
+    const gradientCss = `linear-gradient(in ${gradientSpec.kind} ${gradientSpec.angle}deg, ${gradientSpec.from}, ${gradientSpec.to})`;
     targets.forEach(el => {
       const htmlEl = el as HTMLElement;
       const existingStyle = htmlEl.getAttribute('style') || '';
-      const separator = existingStyle.trim().endsWith(';') || existingStyle.trim() === '' ? '' : '; ';
-      htmlEl.setAttribute('style', `${existingStyle}${separator}background-image: ${gradientCss}`);
+      const needSeparator = existingStyle.trim() !== '' && !existingStyle.trim().endsWith(';');
+      const separator = needSeparator ? '; ' : '';
+      htmlEl.setAttribute('style', `${existingStyle}${separator}background-image: ${gradientCss};`);
       htmlEl.removeAttribute('data-checkra-gradient');
     });
   }

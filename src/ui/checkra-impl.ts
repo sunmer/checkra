@@ -47,6 +47,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   private currentImageDataUrlForAI: string | null = null;
   private originalOuterHTMLForAI: string | null = null;
   private currentFixIdForAI: string | null = null;
+  private currentGenerationIdForAI: string | null = null;
   private stableSelectorForAI: string | null = null;
   private currentElementInsertionModeForAI: 'replace' | 'insertBefore' | 'insertAfter' = 'replace';
   private currentComputedBackgroundColorForAI: string | null = null;
@@ -76,6 +77,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   public boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this);
   public boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
   public boundHandleAiAnalysisFinalized = this.handleAiAnalysisFinalized.bind(this);
+  public boundHandleGenerationIdReceived = this.handleGenerationIdReceived.bind(this);
   private boundPrepareForInputFromSelection = this.prepareForInputFromSelection.bind(this);
 
   constructor(
@@ -116,6 +118,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.boundHandleRequestBodyPrepared = this.handleRequestBodyPrepared.bind(this);
     this.boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
     this.boundHandleAiAnalysisFinalized = this.handleAiAnalysisFinalized.bind(this);
+    this.boundHandleGenerationIdReceived = this.handleGenerationIdReceived.bind(this);
     this.getControlCallbacksForFix = this.getControlCallbacksForFix.bind(this);
   }
 
@@ -158,6 +161,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
     eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
     eventEmitter.on('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
+    eventEmitter.on('generationIdReceived', this.boundHandleGenerationIdReceived);
 
     this.domElements.responseContent.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
@@ -206,6 +210,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.off('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
     eventEmitter.off('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
     eventEmitter.off('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
+    eventEmitter.off('generationIdReceived', this.boundHandleGenerationIdReceived);
     this.viewerEvents.unsubscribe();
     this.domElements = null;
     this.domManager = null;
@@ -327,6 +332,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
         insertionMode: this.currentElementInsertionModeForAI,
         requestBody: this.requestBodyForCurrentCycle,
         stableSelector: this.stableSelectorForAI,
+        generationId: this.currentGenerationIdForAI,
         currentResolvedColors: this.currentResolvedColors,
         getControlCallbacks: this.getControlCallbacksForFix
       });
@@ -409,6 +415,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.fixedOuterHTMLForCurrentCycle = null;
     this.stableSelectorForAI = null;
     this.currentFixIdForAI = null;
+    this.currentGenerationIdForAI = null;
     this.currentComputedBackgroundColorForAI = null;
     this.targetElementForAI = null;
     this.selectionManager?.resetSelectionState();
@@ -491,19 +498,26 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     const newAiPlaceholder: ConversationItem = { type: 'ai', content: '', isStreaming: true };
     this.conversationHistoryManager.saveHistory(newAiPlaceholder);
 
-    let processedHtmlForAI = this.originalOuterHTMLForAI;
+    let rawHtmlForContext: string | null = null;
+    if (this.currentElementInsertionModeForAI === 'insertBefore' || this.currentElementInsertionModeForAI === 'insertAfter') {
+      rawHtmlForContext = this._buildContextHtmlSlice(this.targetElementForAI, 4);
+    } else { // replace or fallback
+      rawHtmlForContext = this.originalOuterHTMLForAI;
+    }
+
+    let processedHtmlForAI = rawHtmlForContext;
     if (processedHtmlForAI) {
-        try {
-          processedHtmlForAI = this.aiResponsePipeline.preprocessHtmlForAI(processedHtmlForAI);
-        } catch (e) {
-          customError('[FeedbackViewerLogic] Error preprocessing HTML for AI:', e);
-          this.showError('Failed to process HTML before sending.');
-          return;
-        }
-    } else {
-        customError('[FeedbackViewerLogic] Original HTML for AI is null. Cannot preprocess.');
-        this.showError('Cannot process page content.');
+      try {
+        processedHtmlForAI = this.aiResponsePipeline.preprocessHtmlForAI(processedHtmlForAI);
+      } catch (e) {
+        customError('[FeedbackViewerLogic] Error preprocessing HTML for AI:', e);
+        this.showError('Failed to process HTML before sending.');
         return;
+      }
+    } else {
+      customError('[FeedbackViewerLogic] No HTML available to preprocess for AI.');
+      this.showError('Cannot process page content.');
+      return;
     }
 
     customWarn(`[CheckraImpl handleSubmit] Sending to backend with insertionMode: ${this.currentElementInsertionModeForAI}`);
@@ -995,6 +1009,7 @@ Your job:
     }
 
     const onRatingSubmitted = async (payload: AddRatingRequestBody) => {
+      payload.generationId = fixInfo.generationId;
       eventEmitter.emit('fixRated', payload);
       fixInfo.isRated = true;
 
@@ -1028,6 +1043,45 @@ Your job:
       customError("[CheckraImplementation] Error creating fragment from HTML string:", e, htmlString);
       return null;
     }
+  }
+
+  /**
+   * Builds an HTML slice around the target element including up to `N` sibling elements
+   * before and after, as well as a shallow clone of the common ancestor container's
+   * opening/closing tag (for its class names).
+   * This wider context helps the backend see additional available utility classes.
+   */
+  private _buildContextHtmlSlice(target: Element | null, siblingRadius: number = 4): string {
+    if (!target || !target.parentElement) {
+      return target ? target.outerHTML : '';
+    }
+
+    const parent = target.parentElement;
+    const siblings = Array.from(parent.children);
+    const index = siblings.indexOf(target as HTMLElement);
+
+    const sliceParts: string[] = [];
+
+    // Include a shallow clone of the parent to expose its classes/attributes without duplicating children
+    const shallowParentClone = parent.cloneNode(false) as HTMLElement; // no children
+    sliceParts.push(shallowParentClone.outerHTML);
+
+    // Collect preceding siblings
+    for (let i = Math.max(0, index - siblingRadius); i < index; i++) {
+      const sib = siblings[i] as HTMLElement;
+      sliceParts.push(sib.outerHTML);
+    }
+
+    // Include the target element itself
+    sliceParts.push((target as HTMLElement).outerHTML);
+
+    // Collect following siblings
+    for (let i = index + 1; i <= Math.min(siblings.length - 1, index + siblingRadius); i++) {
+      const sib = siblings[i] as HTMLElement;
+      sliceParts.push(sib.outerHTML);
+    }
+
+    return sliceParts.join('\n');
   }
 
   private prepareForInputFromSelection(details: SelectionDetails): void {
@@ -1103,5 +1157,10 @@ Your job:
     
     // Note: We do NOT finalize the overall response here (loaders, etc.).
     // That is the job of finalizeResponse() which is triggered by the 'aiFinalized' event (end of entire SSE stream).
+  }
+
+  private handleGenerationIdReceived(id: string): void {
+    this.currentGenerationIdForAI = id;
+    customWarn(`[CheckraImpl] Received and cached generation ID: ${id}`);
   }
 }
