@@ -87,8 +87,11 @@ export interface GenerateSuggestionRequestbody {
 }
 
 export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
-  rating: 1 | 2 | 3 | 4;
+  rating: number; // e.g., 1-5
   fixId: string;
+  generationId?: string;
+  reason?: string; // Optional textual feedback
+  originalHtml?: string;
   feedback?: string;
   generatedHtml?: string;
   tags?: string[];
@@ -165,3 +168,11 @@ export interface ResolvedColorInfo {
   // Potentially other color types if backend expands, e.g., resolvedTextColorInfo
 }
 // --- END: New Types for Color Resolution Event ---
+
+// --- Gradient Descriptor for new gradient SSE event ---
+export interface GradientDescriptor {
+  kind: 'oklab' | 'lab' | 'hsl';
+  from: string; // e.g. '#2563eb'
+  to: string;   // e.g. '#ef4444'
+  angle: number; // degrees, e.g. 45
+}

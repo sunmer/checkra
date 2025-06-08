@@ -16,6 +16,7 @@ export interface AppliedFixInfo {
   requestBody: GenerateSuggestionRequestbody;
   isRated?: boolean;
   resolvedColors?: ResolvedColorInfo;
+  generationId?: string;
 }
 
 export class AppliedFixStore {

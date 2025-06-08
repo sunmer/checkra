@@ -11,6 +11,7 @@ export interface FixApplicationParams {
   requestBody: GenerateSuggestionRequestbody;
   stableSelector?: string;
   currentResolvedColors: ResolvedColorInfo | null;
+  generationId: string | null;
   // Callback to get control button handlers from CheckraImplementation
   getControlCallbacks: (fixId: string) => ControlButtonCallbacks; 
 }
@@ -118,6 +119,9 @@ export class FixApplier {
         isRated: false,
         resolvedColors: currentResolvedColors ? { ...currentResolvedColors } : undefined
       };
+
+      if(params.generationId)
+        fixInfoData.generationId = params.generationId;
       
       this.appliedFixStore.add(fixId, fixInfoData);
       

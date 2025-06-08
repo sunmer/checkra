@@ -14,18 +14,14 @@ export class SettingsModal {
 
   private currentSettings: AiSettings = {
     model: 'gpt-4.1',
-    temperature: 0.7,
+    temperature: 0.5,
   };
 
-  // Map temperature values to descriptions - Updated for 0.0-1.2 range, step 0.2
-  private tempValueToDescription: { [key: number]: string } = {
-    0.0: "Deterministic",
-    0.2: "Focused",
-    0.4: "Creative",
-    0.6: "Imaginative",
-    0.8: "More Creative",
-    1.0: "Wild",
-    1.2: "Chaotic"
+  // Map temperature values to descriptions
+  private tempValueToDescription: { [key: number]: { description: string; step: number } } = {
+    0.2: { description: "Clear & Reliable", step: 0.3 },       // For precise, conversion-focused copy
+    0.5: { description: "Balanced & Engaging", step: 0.5 },    // A good mix of creativity and clarity
+    1.0: { description: "Creative & Bold", step: 0.2 },        // For more experimental, eye-catching outputs
   };
 
   // Store bound event handlers
@@ -108,27 +104,25 @@ export class SettingsModal {
     this.temperatureSlider = document.createElement('input');
     this.temperatureSlider.type = 'range';
     this.temperatureSlider.id = 'checkra-ai-temperature-slider';
-    this.temperatureSlider.min = '0.0'; // Updated min
-    this.temperatureSlider.max = '1.2'; // Updated max
-    this.temperatureSlider.step = '0.2'; // Updated step
 
-    // Find the closest step to the current setting using updated range/step
-    const closestTempValue = this._findClosestStep(
-        this.currentSettings.temperature,
-        0.0,
-        1.2,
-        0.2
-    );
-    this.temperatureSlider.value = String(closestTempValue);
-    // Update the setting itself to the snapped value
-    this.currentSettings.temperature = closestTempValue;
+    const tempValues = Object.keys(this.tempValueToDescription).map(parseFloat).sort((a, b) => a - b);
+    this.temperatureSlider.min = String(tempValues[0]);
+    this.temperatureSlider.max = String(tempValues[tempValues.length - 1]);
+    
+    // Dynamically find the initial value and step
+    const initialTemp = this._getClosestValue(this.currentSettings.temperature, tempValues);
+    this.temperatureSlider.value = String(initialTemp);
+    this.currentSettings.temperature = initialTemp;
+    
+    // Find the step corresponding to the next value, or use the last step
+    const currentIndex = tempValues.indexOf(initialTemp);
+    const nextIndex = Math.min(currentIndex + 1, tempValues.length - 1);
+    const step = this.tempValueToDescription[tempValues[nextIndex]].step || 0.1;
+    this.temperatureSlider.step = String(step);
 
     this.temperatureDescriptionDisplay = document.createElement('p');
     this.temperatureDescriptionDisplay.id = 'checkra-ai-temperature-description';
-
-    // Initial description uses updated range/step via helper
-    this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(closestTempValue);
-
+    this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(initialTemp);
 
     content.appendChild(tempLabel);
     content.appendChild(this.temperatureSlider); // Add slider
@@ -167,31 +161,13 @@ export class SettingsModal {
   }
 
   /**
-   * Helper to find the closest valid step for the slider.
-   */
-  private _findClosestStep(value: number, min: number, max: number, step: number): number {
-      if (value <= min) return min;
-      if (value >= max) return max;
-      // Calculate the nearest step index
-      const steps = Math.round((value - min) / step);
-      let closest = min + steps * step;
-      // Clamp to max/min just in case
-      closest = Math.min(max, Math.max(min, closest));
-      // Round to handle potential floating point inaccuracies with step
-      const precision = (step.toString().split('.')[1] || '').length;
-      return parseFloat(closest.toFixed(precision));
-  }
-
-  /**
    * Helper to get the description for a given temperature value.
    * Reverted to original logic.
    */
   private _getTemperatureDescription(value: number): string {
-      // Use the closest step value to look up in the map, using updated range/step
-      const closestStep = this._findClosestStep(value, 0.0, 1.2, 0.2); // Updated args
-      const description = this.tempValueToDescription[closestStep] || "Unknown Setting"; // Use updated map
-      // Format the output string to include the value
-      return `${description} (${closestStep.toFixed(1)})`;
+    const tempValue = this._getClosestValue(value, Object.keys(this.tempValueToDescription).map(parseFloat));
+    const entry = this.tempValueToDescription[tempValue];
+    return entry ? `${entry.description} (${tempValue.toFixed(1)})` : "Unknown Setting";
   }
 
   /**
@@ -220,6 +196,15 @@ export class SettingsModal {
               this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(selectedTemp);
           }
           eventEmitter.emit('settingsChanged', { ...this.currentSettings });
+
+          // Dynamically update the slider's step for non-linear behavior
+          const tempValues = Object.keys(this.tempValueToDescription).map(parseFloat).sort((a, b) => a - b);
+          const currentIndex = tempValues.indexOf(this._getClosestValue(selectedTemp, tempValues));
+          const nextIndex = Math.min(currentIndex + 1, tempValues.length - 1);
+          const nextStep = this.tempValueToDescription[tempValues[nextIndex]].step;
+          if (nextStep) {
+            slider.step = String(nextStep);
+          }
       } else {
           console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
       }
@@ -241,20 +226,14 @@ export class SettingsModal {
    * Removes event listeners from the DOM elements.
    */
   private removeListeners(): void {
-    // NOTE: Need to properly remove the overlay click listener if we store its bound reference
-    // For now, it's added inline and will be removed when the DOM is destroyed.
-
-    if (this.closeButton && this.boundHideModalHandler) {
-      this.closeButton.removeEventListener('click', this.boundHideModalHandler);
-      this.boundHideModalHandler = null;
+    if (this.boundHideModalHandler) {
+      this.closeButton?.removeEventListener('click', this.boundHideModalHandler);
     }
-    if (this.modelSelect && this.boundModelChangeHandler) {
-      this.modelSelect.removeEventListener('change', this.boundModelChangeHandler);
-      this.boundModelChangeHandler = null;
+    if (this.boundModelChangeHandler) {
+      this.modelSelect?.removeEventListener('change', this.boundModelChangeHandler);
     }
-    if (this.temperatureSlider && this.boundTempSliderHandler) {
-        this.temperatureSlider.removeEventListener('input', this.boundTempSliderHandler);
-        this.boundTempSliderHandler = null;
+    if (this.boundTempSliderHandler) {
+      this.temperatureSlider?.removeEventListener('input', this.boundTempSliderHandler);
     }
   }
 
@@ -265,8 +244,8 @@ export class SettingsModal {
     this.destroyDOM();
     this.create();
     if (this.modalContainer) {
-      this.modalContainer.classList.remove('hidden');
-      this.modalContainer.classList.add('visible-block');
+      this.modalContainer.classList.remove('checkra-hidden');
+      this.modalContainer.classList.add('checkra-visible-block');
     }
   }
 
@@ -276,8 +255,8 @@ export class SettingsModal {
   public hideModal(): void {
     if (this.modalContainer) {
       // this.modalContainer.style.display = 'none';
-      this.modalContainer.classList.add('hidden');
-      this.modalContainer.classList.remove('visible-block');
+      this.modalContainer.classList.add('checkra-hidden');
+      this.modalContainer.classList.remove('checkra-visible-block');
     }
   }
 
@@ -298,5 +277,23 @@ export class SettingsModal {
    */
   public destroy(): void {
     this.destroyDOM(); // First remove DOM and listeners
+  }
+
+  /**
+   * Helper to find the closest value in an array to a given target.
+   */
+  private _getClosestValue(target: number, values: number[]): number {
+    let closest = values[0];
+    let minDistance = Math.abs(target - closest);
+
+    for (let i = 1; i < values.length; i++) {
+      const currentDistance = Math.abs(target - values[i]);
+      if (currentDistance < minDistance) {
+        closest = values[i];
+        minDistance = currentDistance;
+      }
+    }
+
+    return closest;
   }
 }

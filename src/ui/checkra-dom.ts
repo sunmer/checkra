@@ -90,7 +90,7 @@ export class CheckraDOM {
     const viewer = document.createElement('div');
     viewer.id = 'checkra-feedback-viewer';
     // Hide initially; becomes visible via show()
-    viewer.classList.add('hidden');
+    viewer.classList.add('checkra-hidden');
 
     // Add resize event listeners
     viewer.addEventListener('mousedown', this.handleResizeStart);
@@ -131,7 +131,7 @@ export class CheckraDOM {
     // --- Action Buttons (in Header) --- (Container remains for now, but buttons removed)
     const actionButtonsContainer = document.createElement('div');
     actionButtonsContainer.id = 'checkra-feedback-action-buttons';
-    actionButtonsContainer.classList.add('hidden'); // Keep it hidden by default
+    actionButtonsContainer.classList.add('checkra-hidden'); // Keep it hidden by default
 
     // Add Settings Button (before close button)
     const settingsButton = document.createElement('button');
@@ -157,13 +157,13 @@ export class CheckraDOM {
     // Add Onboarding Container (initially hidden)
     const onboardingContainer = document.createElement('div');
     onboardingContainer.id = 'checkra-onboarding-container';
-    onboardingContainer.classList.add('hidden'); // Start hidden
+    onboardingContainer.classList.add('checkra-hidden'); // Start hidden
     contentWrapper.appendChild(onboardingContainer);
 
     const promptTitle = document.createElement('h4');
     promptTitle.textContent = this.originalPromptTitleText;
     if (!this.originalPromptTitleText) {
-      promptTitle.classList.add('hidden');
+      promptTitle.classList.add('checkra-hidden');
     }
     contentWrapper.appendChild(promptTitle);
 
@@ -198,7 +198,7 @@ export class CheckraDOM {
     // Add Footer CTA Container (initially hidden) to contentWrapper
     const footerCTAContainer = document.createElement('div');
     footerCTAContainer.id = 'checkra-footer-cta-container';
-    footerCTAContainer.classList.add('hidden');
+    footerCTAContainer.classList.add('checkra-hidden');
     // Basic styling for stickiness
     footerCTAContainer.style.position = 'sticky';
     contentWrapper.appendChild(footerCTAContainer);
@@ -330,8 +330,8 @@ export class CheckraDOM {
     this.showPromptInputArea(true);
     this.updateLoaderVisibility(false);
 
-    viewer.classList.remove('hidden');
-    viewer.classList.add('visible-flex');
+    viewer.classList.remove('checkra-hidden');
+    viewer.classList.add('checkra-visible-visible-flex');
     // Ensure margin matches actual width each time panel is shown
     this.updateCssPanelWidth(viewer.offsetWidth);
     document.documentElement.classList.add('checkra-panel-open'); // Add class to html element
@@ -340,8 +340,8 @@ export class CheckraDOM {
 
   public hide(): void {
     if (!this.elements) return;
-    this.elements.viewer.classList.add('hidden');
-    this.elements.viewer.classList.remove('visible-flex');
+    this.elements.viewer.classList.add('checkra-hidden');
+    this.elements.viewer.classList.remove('checkra-visible-visible-flex');
     document.documentElement.classList.remove('checkra-panel-open'); // Remove class from html element
   }
 
@@ -382,15 +382,15 @@ export class CheckraDOM {
   public clearAIResponseContent(): void {
     if (!this.elements) return;
     this.elements.responseContent.innerHTML = ''; // Clear all children
-    this.elements.responseContent.classList.add('hidden');
-    this.elements.responseContent.classList.remove('visible');
+    this.elements.responseContent.classList.add('checkra-hidden');
+    this.elements.responseContent.classList.remove('checkra-visible');
   }
 
   public clearUserMessage(): void {
     if (!this.elements) return;
     this.elements.userMessageContainer.innerHTML = '';
-    this.elements.userMessageContainer.classList.add('hidden');
-    this.elements.userMessageContainer.classList.remove('visible');
+    this.elements.userMessageContainer.classList.add('checkra-hidden');
+    this.elements.userMessageContainer.classList.remove('checkra-visible');
   }
 
   public setPromptState(enabled: boolean, value?: string): void {
@@ -410,24 +410,24 @@ export class CheckraDOM {
     if (!this.elements?.promptTitle || !this.elements.textareaContainer) return;
 
     // Always keep textarea container visible now due to sticky positioning
-    this.elements.textareaContainer.classList.remove('hidden');
-    this.elements.textareaContainer.classList.add('visible'); // Or 'visible-flex' if needed later
+    this.elements.textareaContainer.classList.remove('checkra-hidden');
+    this.elements.textareaContainer.classList.add('checkra-visible'); // Or 'visible-flex' if needed later
 
     // Update the title text and visibility using class
     if (show) {
       // Restore original title (which is now empty)
       this.elements.promptTitle.textContent = this.originalPromptTitleText;
       if (this.originalPromptTitleText) {
-        this.elements.promptTitle.classList.remove('hidden');
-        this.elements.promptTitle.classList.add('visible');
+        this.elements.promptTitle.classList.remove('checkra-hidden');
+        this.elements.promptTitle.classList.add('checkra-visible');
       } else {
-        this.elements.promptTitle.classList.add('hidden');
-        this.elements.promptTitle.classList.remove('visible');
+        this.elements.promptTitle.classList.add( 'checkra-hidden');
+        this.elements.promptTitle.classList.remove('checkra-visible');
       }
     } else {
       // Hide the title if input is hidden (irrespective of submittedPromptText)
-      this.elements.promptTitle.classList.add('hidden');
-      this.elements.promptTitle.classList.remove('visible');
+      this.elements.promptTitle.classList.add('checkra-hidden');
+      this.elements.promptTitle.classList.remove('checkra-visible');
     }
   }
 
@@ -441,8 +441,8 @@ export class CheckraDOM {
     // For now, it still uses the dedicated userMessageContainer, which Impl saves to history
     const { userMessageContainer } = this.elements;
     userMessageContainer.innerHTML = html;
-    userMessageContainer.classList.toggle('hidden', !html);
-    userMessageContainer.classList.toggle('visible', !!html);
+    userMessageContainer.classList.toggle('checkra-hidden', !html);
+    userMessageContainer.classList.toggle('checkra-visible', !!html);
   }
 
   /**
@@ -452,19 +452,19 @@ export class CheckraDOM {
   public showOnboardingView(show: boolean): void {
     if (!this.elements?.onboardingContainer) return;
     if (show) {
-      this.elements.onboardingContainer.classList.remove('hidden');
-      this.elements.onboardingContainer.classList.add('visible-flex');
+      this.elements.onboardingContainer.classList.remove('checkra-hidden');
+      this.elements.onboardingContainer.classList.add('checkra-visible-flex');
       // Update content when showing
       this.elements.onboardingContainer.innerHTML = this.createOnboardingView();
     } else {
-      this.elements.onboardingContainer.classList.add('hidden');
-      this.elements.onboardingContainer.classList.remove('visible-flex');
+      this.elements.onboardingContainer.classList.add('checkra-hidden');
+      this.elements.onboardingContainer.classList.remove('checkra-visible-flex');
     }
   }
 
   public isOnboardingVisible(): boolean {
     return !!this.elements?.onboardingContainer &&
-           !this.elements.onboardingContainer.classList.contains('hidden');
+           !this.elements.onboardingContainer.classList.contains('checkra-hidden');
   }
 
   // Updated onboarding content to be Markdown within an AI bubble
@@ -498,11 +498,11 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
     if (!this.elements?.footerCTAContainer) return;
 
     if (show) {
-      this.elements.footerCTAContainer.classList.remove('hidden');
-      this.elements.footerCTAContainer.classList.add('visible');
+      this.elements.footerCTAContainer.classList.remove('checkra-hidden');
+      this.elements.footerCTAContainer.classList.add('checkra-visible');
     } else {
-      this.elements.footerCTAContainer.classList.add('hidden');
-      this.elements.footerCTAContainer.classList.remove('visible');
+      this.elements.footerCTAContainer.classList.add('checkra-hidden');
+      this.elements.footerCTAContainer.classList.remove('checkra-visible');
       this.elements.footerCTAContainer.innerHTML = ''; // Clear content
     }
   }
@@ -554,8 +554,8 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
   public renderFullHistory(history: ConversationItem[]): void {
     if (!this.elements) return;
     this.clearAIResponseContent();
-    this.elements.responseContent.classList.remove('hidden');
-    this.elements.responseContent.classList.add('visible');
+    this.elements.responseContent.classList.remove('checkra-hidden');
+    this.elements.responseContent.classList.add('checkra-visible');
 
     history.forEach(item => {
       // createMessageElement will handle all necessary parsing/formatting for AI messages.
@@ -683,11 +683,11 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
       document.body.appendChild(toast);
     }
     // Reset any previous state so animation can replay
-    toast.classList.remove('visible', 'hiding');
+    toast.classList.remove('checkra-visible', 'checkra-hiding');
     // Force reflow to restart transition
     void toast.offsetWidth;
 
-    toast.classList.add('visible');
+    toast.classList.add('checkra-visible');
 
     // Fallback inline styles (in case CSS classes fail to apply due to specificity)
     toast.style.opacity = '1';
@@ -695,7 +695,7 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 
     // Automatically hide after a few seconds
     setTimeout(() => {
-      toast.classList.add('hiding');
+      toast.classList.add('checkra-hiding');
       toast.style.opacity = '0';
       toast.style.visibility = 'hidden';
     }, 4000);
@@ -719,11 +719,11 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
       document.body.appendChild(toast);
     }
     // Reset any previous state so animation can replay
-    toast.classList.remove('visible', 'hiding');
+    toast.classList.remove('checkra-visible', 'checkra-hiding');
     // Force reflow to restart transition
     void toast.offsetWidth;
 
-    toast.classList.add('visible');
+    toast.classList.add('checkra-visible');
 
     // Fallback inline styles (in case CSS classes fail to apply due to specificity)
     toast.style.opacity = '1';
@@ -731,7 +731,7 @@ Use this panel to edit your website with AI, ship variations, and analyze what w
 
     // Automatically hide after a few seconds
     setTimeout(() => {
-      toast.classList.add('hiding');
+      toast.classList.add('checkra-hiding');
       toast.style.opacity = '0';
       toast.style.visibility = 'hidden';
     }, 1500);
