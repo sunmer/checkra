@@ -80,6 +80,8 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   public boundHandleGenerationIdReceived = this.handleGenerationIdReceived.bind(this);
   private boundPrepareForInputFromSelection = this.prepareForInputFromSelection.bind(this);
 
+  private latestGradientDescriptor: any = null;
+
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
     initialVisibilityFromOptions: boolean = false,
@@ -162,6 +164,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
     eventEmitter.on('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
     eventEmitter.on('generationIdReceived', this.boundHandleGenerationIdReceived);
+    eventEmitter.on('gradientDescriptor', this.handleGradientDescriptorReceived.bind(this));
 
     this.domElements.responseContent.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
@@ -343,6 +346,12 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
         customWarn('[CheckraImpl finalizeResponse] Fix applied successfully by FixApplier.');
         this.selectionManager?.removeSelectionHighlight(); 
         await renderLucideIcons();
+        // --- Gradient handling ---
+        this.applyRuntimeGradient();
+        // --- Make content editable ---
+        if (appliedFixInfo.appliedFixWrapperElement) { // The wrapper for the new content
+            this.makeContentEditable(appliedFixInfo.appliedFixWrapperElement);
+        }
       } else {
         this.showError(`Failed to apply fix: ${this.currentFixIdForAI}. See console for details.`);
         customError('[CheckraImpl finalizeResponse] fixApplier.apply returned null/false.');
@@ -1167,5 +1176,63 @@ Your job:
   private handleGenerationIdReceived(id: string): void {
     this.currentGenerationIdForAI = id;
     customWarn(`[CheckraImpl] Received and cached generation ID: ${id}`);
+  }
+
+  private handleGradientDescriptorReceived(descriptor: any): void {
+    this.latestGradientDescriptor = descriptor;
+    customWarn('[CheckraImpl] Received gradientDescriptor:', descriptor);
+  }
+
+  private applyRuntimeGradient(): void {
+    if (!this.latestGradientDescriptor) return;
+    const descriptor = this.latestGradientDescriptor;
+    // Find all elements with data-checkra-gradient="true" in the viewer
+    if (!this.domElements?.responseContent) return;
+    const els = this.domElements.responseContent.querySelectorAll('[data-checkra-gradient="true"]');
+    els.forEach(el => {
+      // Remove any inline background-image to avoid conflicts
+      (el as HTMLElement).style.backgroundImage = '';
+      // Apply the runtime gradient
+      (el as HTMLElement).style.backgroundImage = `linear-gradient(${descriptor.angle}deg, ${descriptor.from}, ${descriptor.to})`;
+    });
+  }
+
+  private makeContentEditable(container: HTMLElement): void {
+    const selectors = 'h1, h2, h3, h4, h5, h6, p, li, span, div, blockquote, figcaption, caption';
+    const elements = container.querySelectorAll(selectors);
+  
+    const isEligibleForEditing = (element: Element): boolean => {
+      if (!element.textContent?.trim()) {
+          return false;
+      }
+  
+      if (element.tagName === 'DIV') {
+          const hasBlockChildren = element.querySelector('p, h1, h2, h3, h4, h5, h6, div, ul, ol, li, table, blockquote, form');
+          if (hasBlockChildren) {
+              return false;
+          }
+      }
+      
+      let hasDirectTextNode = false;
+      for (const node of Array.from(element.childNodes)) {
+          if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+              hasDirectTextNode = true;
+              break;
+          }
+      }
+  
+      return hasDirectTextNode;
+    };
+  
+    elements.forEach(el => {
+      if (el.closest('[contenteditable="true"]')) {
+        return;
+      }
+  
+      if (isEligibleForEditing(el)) {
+        (el as HTMLElement).contentEditable = 'true';
+        el.classList.add('checkra-editable-text');
+      }
+    });
   }
 }
