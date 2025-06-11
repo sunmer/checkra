@@ -470,7 +470,7 @@ export class CheckraDOM {
   // Updated onboarding content to be Markdown within an AI bubble
   private createOnboardingView(): string {
     const markdownContent = `
-### Welcome to Checkra!
+### Quick start
 Use this panel to edit your website with AI, ship variations, and analyze what works.
 
 **How to get started:**

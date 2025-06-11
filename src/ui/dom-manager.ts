@@ -145,61 +145,6 @@ export class CheckraDOM {
     }
   }
 
-  private createOnboardingContent(): HTMLDivElement {
-    const container = document.createElement('div');
-    container.id = 'checkra-onboarding-container';
-    container.innerHTML = `
-        <h4>Welcome to Checkra!</h4>
-        <p>To get started:</p>
-        <ul>
-            <li>Click the <span class="checkra-onboarding-button-representation">${SELECT_SVG_ICON}</span> button (or press S).</li>
-            <li>Select any element on your page.</li>
-            <li>Describe what you want to change or analyze.</li>
-        </ul>
-        <p>For example, you can try these on the current page (if applicable):</p>
-        <div class="checkra-message-bubble message-ai">
-         <ul>
-          <li><span class="checkra-onboarding-suggestion" data-suggestion="Make this text bolder and blue.">Make this text bolder and blue.</span></li>
-          <li><span class="checkra-onboarding-suggestion" data-suggestion="Rewrite this section to be more concise.">Rewrite this section to be more concise.</span></li>
-          <li><span class="checkra-onboarding-suggestion" data-suggestion="Add a call to action button here saying 'Sign Up'.">Add a call to action button here saying 'Sign Up'.</span></li>
-         </ul>
-        </div>
-        <button class="checkra-onboarding-button" id="checkra-onboarding-got-it">Got it!</button>
-        <button class="checkra-onboarding-link-button" id="checkra-onboarding-audit-page">Or, run a full page audit</button>
-    `;
-
-    const gotItButton = container.querySelector('#checkra-onboarding-got-it');
-    if (gotItButton && this.promptTextarea) { // Ensure promptTextarea exists for focus
-      gotItButton.addEventListener('click', () => {
-        this.showOnboardingView(false);
-        this.showPromptInputArea(true);
-        localStorage.setItem('checkra_onboarded', 'true');
-        this.promptTextarea!.focus(); // Non-null assertion as we checked it
-      });
-    }
-
-    const auditButton = container.querySelector('#checkra-onboarding-audit-page');
-    if (auditButton && this.onSuggestionClickCallback) {
-        auditButton.addEventListener('click', () => {
-            if (this.onSuggestionClickCallback) {
-                this.onSuggestionClickCallback('/audit page'); 
-            }
-        });
-    }
-
-    const suggestionSpans = container.querySelectorAll('.checkra-onboarding-suggestion');
-    suggestionSpans.forEach(span => {
-      span.addEventListener('click', (e) => {
-        const suggestionText = (e.target as HTMLElement).dataset.suggestion;
-        if (suggestionText && this.onSuggestionClickCallback) {
-          this.onSuggestionClickCallback(suggestionText);
-        }
-      });
-    });
-
-    return container;
-  }
-
   public create(
     onCloseCallback: () => void, 
     onSuggestionClick: (suggestionText: string) => void
@@ -285,14 +230,11 @@ export class CheckraDOM {
     this.actionButtonsContainer.appendChild(this.previewApplyButton);
     this.actionButtonsContainer.appendChild(this.cancelFixButton);
     
-    this.onboardingContainer = this.createOnboardingContent();
-
     this.header.appendChild(this.settingsButton);
     this.header.appendChild(this.loadingIndicator);
     this.header.appendChild(this.actionButtonsContainer); 
     this.header.appendChild(this.closeButton);
 
-    this.contentWrapper.appendChild(this.onboardingContainer);
     this.contentWrapper.appendChild(this.responseContent);
     this.contentWrapper.appendChild(this.userMessageContainer);
     this.contentWrapper.appendChild(this.conversationHistoryContainer);
