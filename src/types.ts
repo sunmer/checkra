@@ -75,6 +75,15 @@ export interface BackendPayloadMetadata extends PageMetadata {
   perfHints?: PerfHints;
   leverValues?: LeverValues;
   computedBackgroundColor?: string;
+
+  /**
+   * Dominant card / container style extracted from the page. Can be used by backend
+   * to re-skin generated HTML so that it visually matches the host site.
+   */
+  containerStyle?: CardStyle;
+
+  /** Site-wide typography style hints */
+  typographyStyle?: TypographyStyle;
 }
 
 export interface GenerateSuggestionRequestbody {
@@ -175,4 +184,29 @@ export interface GradientDescriptor {
   from: string; // e.g. '#2563eb'
   to: string;   // e.g. '#ef4444'
   angle: number; // degrees, e.g. 45
+}
+
+// --- New: Card / Container Style ---
+export interface CardStyle {
+  backgroundColor?: string;
+  border?: string;
+  borderRadius?: string;
+  boxShadow?: string;
+  padding?: string;
+  margin?: string;
+  classes?: string[];
+  /** optional layout / width / centering utilities from wrapper */
+  layoutClasses?: string[];
+}
+
+// --- Typography extraction ---
+export interface TypographyStyle {
+  /** Dominant body text classes (colour, weight, size) */
+  bodyClasses: string[];
+  /** Dominant heading classes (usually h1–h3) */
+  headingClasses: string[];
+  /** Optional link colour/decoration classes */
+  linkClasses?: string[];
+  /** Optional mapping of scale utilities */
+  scale?: { [tag: string]: string };
 }

@@ -38,51 +38,51 @@
 </head>
 
 <body class="relative flex flex-col min-h-screen bg-gray-50">
-  <div class="absolute inset-0 z-[-1] opacity-30"
-    style="background-image: radial-gradient(at 30% 30%, rgb(163, 230, 177) 0%, transparent 40%), radial-gradient(at 70% 20%, rgb(247, 241, 220) 0%, transparent 50%), radial-gradient(at 50% 50%, rgb(207, 207, 232) 0%, transparent 60%), radial-gradient(at 20% 80%, rgb(43, 194, 155) 0%, transparent 50%), radial-gradient(at 80% 80%, rgb(62, 215, 194) 0%, transparent 50%);">
-  </div>
-  <div
-    class="relative flex-grow flex flex-col before:absolute before:top-0 before:left-1/2 before:bg-[url('/polygon-bg-element.svg')] before:bg-no-repeat before:bg-top before:bg-cover before:w-full before:h-1/2 before:-z-[1] before:transform before:-translate-x-1/2">
-    <header class="relative z-10 flex flex-wrap sm:justify-start sm:flex-nowrap w-full bg-transparent text-sm py-4">
-      <nav class="max-w-[85rem] w-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between"
-        aria-label="Global">
-        <a class="flex-none text-xl font-semibold text-blue-600" href="/">Checkra</a>
-        <div class="flex flex-row items-center gap-5 justify-end">
-        </div>
-      </nav>
-    </header>
-    <main id="content" role="main" class="relative z-10 flex-grow">
+  <header class="relative z-10 flex flex-wrap sm:justify-start sm:flex-nowrap w-full bg-transparent text-sm py-4">
+    <nav class="max-w-[85rem] w-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between"
+      aria-label="Global">
+      <a class="flex-none text-xl font-semibold text-blue-600" href="/">Checkra</a>
+      <div class="flex flex-row items-center gap-5 justify-end">
+      </div>
+    </nav>
+  </header>
+  <main id="content" role="main" class="relative z-10 flex-grow">
 
-      <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
-        <div class="max-w-3xl mx-auto">
-          <h1 class="text-3xl lg:text-4xl font-bold text-gray-800 mb-8">Setup Instructions</h1>
+    <div class="max-w-[85rem] mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
+      <div class="max-w-3xl mx-auto">
+        <h1 class="text-3xl lg:text-4xl font-bold text-gray-800 mb-8">Setup Instructions</h1>
 
-          <div class="space-y-8">
-            <!-- HTML Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">Plain HTML</h2>
-              <p class="text-gray-600 mb-4">
-                For a standard HTML website, copy the following two lines and paste them inside the <code>&lt;head&gt;</code> section of your HTML file(s), preferably just before the closing <code>&lt;/head&gt;</code> tag.
-              </p>
-              <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">&lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
+        <div class="space-y-8">
+          <!-- HTML Section -->
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Plain HTML</h2>
+            <p class="text-gray-600 mb-4">
+              For a standard HTML website, copy the following two lines and paste them inside the
+              <code>&lt;head&gt;</code> section of your HTML file(s), preferably just before the closing
+              <code>&lt;/head&gt;</code> tag.
+            </p>
+            <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">&lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
 &lt;script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer&gt;&lt;/script&gt;</code></pre>
-              <p class="text-gray-600 mt-4">Checkra will appear automatically once the page loads.</p>
-            </div>
+            <p class="text-gray-600 mt-4">Checkra will appear automatically once the page loads.</p>
+          </div>
 
-            <!-- Shopify Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">Shopify</h2>
-              <p class="text-gray-600 mb-2">
-                To add Checkra to your Shopify theme and have it appear <strong class="font-medium">only during theme development or preview</strong>, follow these steps:
-              </p>
-              <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
-                <li>Go to your Shopify Admin > Online Store > Themes.</li>
-                <li>Find your current theme, click "Actions" > "Edit code".</li>
-                <li>Under "Layout", click on <code>theme.liquid</code>.</li>
-                <li>Find the closing <code>&lt;/head&gt;</code> tag.</li>
-                <li>Paste the following code snippet <strong class="font-medium">just before</strong> the closing <code>&lt;/head&gt;</code> tag. This uses Shopify's Liquid templating to detect if you're viewing a non-live theme or using the theme editor/previewer.</li>
-              </ol>
-              <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">{# Check if it's a development theme or preview mode #}
+          <!-- Shopify Section -->
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Shopify</h2>
+            <p class="text-gray-600 mb-2">
+              To add Checkra to your Shopify theme and have it appear <strong class="font-medium">only during theme
+                development or preview</strong>, follow these steps:
+            </p>
+            <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
+              <li>Go to your Shopify Admin > Online Store > Themes.</li>
+              <li>Find your current theme, click "Actions" > "Edit code".</li>
+              <li>Under "Layout", click on <code>theme.liquid</code>.</li>
+              <li>Find the closing <code>&lt;/head&gt;</code> tag.</li>
+              <li>Paste the following code snippet <strong class="font-medium">just before</strong> the closing
+                <code>&lt;/head&gt;</code> tag. This uses Shopify's Liquid templating to detect if you're viewing a
+                non-live theme or using the theme editor/previewer.</li>
+            </ol>
+            <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">{# Check if it's a development theme or preview mode #}
 {% if theme.role == 'development' or request.design_mode %}
 
   &lt;!-- Load Checkra only in development/preview --&gt;
@@ -90,54 +90,66 @@
   &lt;script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer&gt;&lt;/script&gt;
 
 {% endif %}</code></pre>
-              <p class="text-gray-600 mt-4">6. Click "Save". Checkra will now only appear when you are previewing the theme or working in the theme editor, not on your live storefront.</p>
-            </div>
+            <p class="text-gray-600 mt-4">6. Click "Save". Checkra will now only appear when you are previewing the
+              theme or working in the theme editor, not on your live storefront.</p>
+          </div>
 
-            <!-- Squarespace Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">Squarespace</h2>
-               <p class="text-gray-600 mb-2">
-                To add Checkra to your Squarespace site so it appears <strong class="font-medium">only when you are logged in and editing/previewing</strong> (not for public visitors):
-              </p>
-               <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
-                <li>Go to your Squarespace Dashboard > Settings > Advanced > Code Injection.</li>
-                <li>In the "Header" section, paste the following code snippet. This uses Squarespace's <code>{.squarespace-user-logged-in}</code> tag which only renders content when an administrator is logged in.</li>
-              </ol>
-               <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">{.squarespace-user-logged-in}
+          <!-- Squarespace Section -->
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Squarespace</h2>
+            <p class="text-gray-600 mb-2">
+              To add Checkra to your Squarespace site so it appears <strong class="font-medium">only when you are logged
+                in and editing/previewing</strong> (not for public visitors):
+            </p>
+            <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
+              <li>Go to your Squarespace Dashboard > Settings > Advanced > Code Injection.</li>
+              <li>In the "Header" section, paste the following code snippet. This uses Squarespace's
+                <code>{.squarespace-user-logged-in}</code> tag which only renders content when an administrator is
+                logged in.</li>
+            </ol>
+            <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">{.squarespace-user-logged-in}
   &lt;!-- Load Checkra only when logged in --&gt;
   &lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
   &lt;script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer&gt;&lt;/script&gt;
 {.end}</code></pre>
-              <p class="text-gray-600 mt-4">3. Click "Save". Checkra should now only appear for logged-in administrators, effectively acting as a preview-only tool.</p>
-              <p class="text-xs text-gray-500 mt-2">Note: Code Injection is typically available on Business and Commerce plans.</p>
-            </div>
+            <p class="text-gray-600 mt-4">3. Click "Save". Checkra should now only appear for logged-in administrators,
+              effectively acting as a preview-only tool.</p>
+            <p class="text-xs text-gray-500 mt-2">Note: Code Injection is typically available on Business and Commerce
+              plans.</p>
+          </div>
 
-             <!-- Webflow Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">Webflow</h2>
-               <p class="text-gray-600 mb-2">
-                Webflow doesn't have a straightforward way to detect "preview" mode via custom code for conditional loading. Here are two common approaches to use Checkra <strong class="font-medium">only during development</strong>:
-              </p>
-               <h3 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Approach 1: Manual Add/Remove (Recommended)</h3>
-              <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
-                 <li>Go to your Webflow Project Settings > Custom Code.</li>
-                <li>In the "Head Code" section, paste the standard Checkra code snippet <strong class="font-medium">while you are designing and testing</strong>:</li>
-                 <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto my-2">&lt;!-- Add this code when developing --&gt;
+          <!-- Webflow Section -->
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Webflow</h2>
+            <p class="text-gray-600 mb-2">
+              Webflow doesn't have a straightforward way to detect "preview" mode via custom code for conditional
+              loading. Here are two common approaches to use Checkra <strong class="font-medium">only during
+                development</strong>:
+            </p>
+            <h3 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Approach 1: Manual Add/Remove (Recommended)</h3>
+            <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
+              <li>Go to your Webflow Project Settings > Custom Code.</li>
+              <li>In the "Head Code" section, paste the standard Checkra code snippet <strong class="font-medium">while
+                  you are designing and testing</strong>:</li>
+              <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto my-2">&lt;!-- Add this code when developing --&gt;
 &lt;link rel="stylesheet" href="https://unpkg.com/checkra@latest/dist/style.css"&gt;
 &lt;script src="https://unpkg.com/checkra@latest/dist/checkra.umd.cjs" defer&gt;&lt;/script&gt;</code></pre>
-                <li>Click "Save Changes". Use Checkra within the Webflow Designer preview or on your staging domain (e.g., `your-site.webflow.io`).</li>
-                <li><strong class="font-medium">IMPORTANT: Before publishing to your live domain, remove this code snippet from the "Head Code" section and save changes.</strong></li>
-              </ol>
+              <li>Click "Save Changes". Use Checkra within the Webflow Designer preview or on your staging domain (e.g.,
+                `your-site.webflow.io`).</li>
+              <li><strong class="font-medium">IMPORTANT: Before publishing to your live domain, remove this code snippet
+                  from the "Head Code" section and save changes.</strong></li>
+            </ol>
 
-              <h3 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Approach 2: Staging Domain Only</h3>
-               <p class="text-gray-600 mb-4">
-                 If you primarily test on your Webflow staging domain (`*.webflow.io`), you can add JavaScript to check the hostname.
-              </p>
-              <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
-                 <li>Go to Project Settings > Custom Code.</li>
-                 <li>In the "Footer Code" section (important: must be footer), paste this script:</li>
-              </ol>
-               <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">&lt;script&gt;
+            <h3 class="text-lg font-semibold text-gray-700 mt-4 mb-2">Approach 2: Staging Domain Only</h3>
+            <p class="text-gray-600 mb-4">
+              If you primarily test on your Webflow staging domain (`*.webflow.io`), you can add JavaScript to check the
+              hostname.
+            </p>
+            <ol class="list-decimal list-inside text-gray-600 mb-4 space-y-1">
+              <li>Go to Project Settings > Custom Code.</li>
+              <li>In the "Footer Code" section (important: must be footer), paste this script:</li>
+            </ol>
+            <pre><code class="text-sm text-gray-800 bg-gray-100 p-4 rounded block overflow-x-auto mt-2">&lt;script&gt;
 (function() {
   // Load Checkra only on the .webflow.io staging domain
   if (window.location.hostname.endsWith('.webflow.io')) {
@@ -153,22 +165,24 @@
   }
 })();
 &lt;/script&gt;</code></pre>
-              <p class="text-gray-600 mt-4">3. Click "Save Changes" and publish. Checkra will now load only on your `*.webflow.io` domain, not your custom domain(s).</p>
-               <p class="text-xs text-gray-500 mt-2">Note: Adding custom code usually requires a paid Webflow site plan.</p>
-           </div>
+            <p class="text-gray-600 mt-4">3. Click "Save Changes" and publish. Checkra will now load only on your
+              `*.webflow.io` domain, not your custom domain(s).</p>
+            <p class="text-xs text-gray-500 mt-2">Note: Adding custom code usually requires a paid Webflow site plan.
+            </p>
+          </div>
 
-            <!-- NPM Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-              <h2 class="text-xl font-semibold text-gray-800 mb-4">NPM / Build Tools</h2>
-              <p class="text-gray-600 mb-4">
-                If you're using a JavaScript framework or build tools (like Vite, Webpack, etc.):<br>
-                1. Install the package using your preferred package manager.<br>
-                2. Import <code>initCheckra</code> in your project's entry point.<br>
-                3. Include the CSS via a &lt;link&gt; tag in your HTML's &lt;head&gt; tag.<br>
-                4. Call <code>initCheckra()</code> when your application mounts or the DOM is ready.
-              </p>
-              <div class="code-block bg-gray-100 p-4 rounded overflow-x-auto mt-2">
-                <pre><code class="text-sm text-gray-800"># 1. Install
+          <!-- NPM Section -->
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">NPM / Build Tools</h2>
+            <p class="text-gray-600 mb-4">
+              If you're using a JavaScript framework or build tools (like Vite, Webpack, etc.):<br>
+              1. Install the package using your preferred package manager.<br>
+              2. Import <code>initCheckra</code> in your project's entry point.<br>
+              3. Include the CSS via a &lt;link&gt; tag in your HTML's &lt;head&gt; tag.<br>
+              4. Call <code>initCheckra()</code> when your application mounts or the DOM is ready.
+            </p>
+            <div class="code-block bg-gray-100 p-4 rounded overflow-x-auto mt-2">
+              <pre><code class="text-sm text-gray-800"># 1. Install
 npm install checkra
 # or yarn add checkra
 # or pnpm add checkra
@@ -188,15 +202,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // isVisible: true // Default is true
   });
 });</code></pre>
-              </div>
             </div>
-
           </div>
+
         </div>
       </div>
+    </div>
 
-    </main>
-  </div>
+  </main>
 
   <footer class="mt-auto w-full max-w-[85rem] py-10 px-4 sm:px-6 lg:px-8 mx-auto">
     <div>
@@ -213,4 +226,5 @@ document.addEventListener('DOMContentLoaded', () => {
   </footer>
 
 </body>
+
 </html>

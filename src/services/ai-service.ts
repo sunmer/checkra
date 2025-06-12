@@ -4,6 +4,8 @@ import { customWarn, customError } from '../utils/logger';
 import { detectCssFramework } from '../utils/framework-detector';
 import { detectUiKit } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
+import { getCardStyle } from '../utils/container-style-extractor';
+import { getTypographyStyle } from '../utils/typography-style-extractor';
 import {
   GenerateSuggestionRequestbody,
   AddRatingRequestBody,
@@ -11,7 +13,9 @@ import {
   BackendPayloadMetadata,
   UiKitDetection,
   DetectedFramework,
-  GradientDescriptor
+  GradientDescriptor,
+  CardStyle,
+  TypographyStyle
 } from '../types';
 
 let serviceEventEmitter: any = null; // Local reference to the event emitter
@@ -335,6 +339,22 @@ const fetchFeedbackBase = async (
     let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
     let uiKitDetectionForPayload: UiKitDetection | undefined = undefined;
 
+    // --- New: dominant container style extraction ---
+    let cardStyleForPayload: CardStyle | null = null;
+    try {
+      cardStyleForPayload = await getCardStyle();
+    } catch (err) {
+      customWarn('[AI Service] Card style extraction failed:', err);
+    }
+
+    // Typography extraction
+    let typographyStyleForPayload: TypographyStyle | null = null;
+    try {
+      typographyStyleForPayload = getTypographyStyle();
+    } catch (err) {
+      customWarn('[AI Service] Typography style extraction failed:', err);
+    }
+
     if (sanitizedHtml) {
       const cssCtx = produceCssContext(sanitizedHtml);
       processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
@@ -355,7 +375,9 @@ const fetchFeedbackBase = async (
       cssDigests: cssDigestsForPayload,
       frameworkDetection: frameworkDetectionForPayload,
       uiKitDetection: uiKitDetectionForPayload,
-      computedBackgroundColor: computedBackgroundColor || undefined
+      computedBackgroundColor: computedBackgroundColor || undefined,
+      containerStyle: cardStyleForPayload || undefined,
+      typographyStyle: typographyStyleForPayload || undefined
     };
 
     const requestBody: GenerateSuggestionRequestbody = {
