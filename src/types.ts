@@ -84,6 +84,12 @@ export interface BackendPayloadMetadata extends PageMetadata {
 
   /** Site-wide typography style hints */
   typographyStyle?: TypographyStyle;
+
+  /**
+   * Lightweight visual samples of the biggest sections on page. Enables backend/LLM
+   * to wrap generated components in a skin that matches the host site.
+   */
+  sectionSamples?: SectionSample[];
 }
 
 export interface GenerateSuggestionRequestbody {
@@ -93,6 +99,7 @@ export interface GenerateSuggestionRequestbody {
   metadata: BackendPayloadMetadata;
   aiSettings: AiSettings;
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
+  generationMode: 'schema' | 'classic'
 }
 
 export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
@@ -188,6 +195,8 @@ export interface GradientDescriptor {
 
 // --- New: Card / Container Style ---
 export interface CardStyle {
+  /** Desired backend wrapper variant, if any */
+  variant?: 'card' | 'surface' | 'section' | 'none';
   backgroundColor?: string;
   border?: string;
   borderRadius?: string;
@@ -209,4 +218,19 @@ export interface TypographyStyle {
   linkClasses?: string[];
   /** Optional mapping of scale utilities */
   scale?: { [tag: string]: string };
+}
+
+// --- Section skin sampling (no legacy fields) ---
+export interface SectionSample {
+  skin: {
+    bgClass?: string;
+    bgColor?: string; // 6-digit hex (e.g. #1a2b3c) or undefined
+    paddingPx: number;
+    rounded: boolean;
+    shadow: boolean;
+  };
+  headingPresent: boolean;
+  layoutKind: 'single' | 'grid' | 'flex' | 'stack';
+  widthPx: number;
+  spacingBelowPx: number;
 }

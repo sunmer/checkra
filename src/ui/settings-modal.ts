@@ -13,8 +13,8 @@ export class SettingsModal {
   private temperatureDescriptionDisplay: HTMLParagraphElement | null = null;
 
   private currentSettings: AiSettings = {
-    model: 'gpt-4.1',
-    temperature: 0.5,
+    model: 'o4-mini',
+    temperature: 0.7,
   };
 
   // Map temperature values to descriptions
@@ -145,7 +145,7 @@ export class SettingsModal {
 
     if (this.modelSelect) {
       this.modelSelect.innerHTML = '';
-      const modelOptions = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1'];
+      const modelOptions = ['o4-mini'];
       modelOptions.forEach(optionText => {
         const option = document.createElement('option');
         option.value = optionText.toLowerCase().replace(/ /g, '-');
@@ -244,8 +244,10 @@ export class SettingsModal {
     this.destroyDOM();
     this.create();
     if (this.modalContainer) {
+      // Ensure it shows regardless of CSS default "display: none"
       this.modalContainer.classList.remove('checkra-hidden');
-      this.modalContainer.classList.add('checkra-visible-block');
+      this.modalContainer.classList.add('checkra-visible');
+      this.modalContainer.style.display = 'block';
     }
   }
 
@@ -256,7 +258,8 @@ export class SettingsModal {
     if (this.modalContainer) {
       // this.modalContainer.style.display = 'none';
       this.modalContainer.classList.add('checkra-hidden');
-      this.modalContainer.classList.remove('checkra-visible-block');
+      this.modalContainer.classList.remove('checkra-visible');
+      this.modalContainer.style.display = 'none';
     }
   }
 
@@ -266,7 +269,7 @@ export class SettingsModal {
    */
   public getCurrentSettings(): AiSettings {
     if (!this.currentSettings.model) {
-      this.currentSettings.model = 'gpt-4o';
+      this.currentSettings.model = 'o4-mini';
     }
     return { ...this.currentSettings };
   }

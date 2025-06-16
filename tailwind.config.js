@@ -17,6 +17,10 @@ export default {
   plugins: [
     require('@tailwindcss/typography'),
     require('@tailwindcss/forms')
-  ]
+  ],
+  // Force dark variants to only be applied when explicitly requested (e.g., adding 'dark' class),
+  // rather than following the user's OS setting. This prevents the demo `index.html` from
+  // unintentionally switching to dark mode on systems with dark preference.
+  darkMode: 'class'
 }
 

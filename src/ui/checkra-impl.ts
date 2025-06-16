@@ -78,9 +78,21 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   public boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
   public boundHandleAiAnalysisFinalized = this.handleAiAnalysisFinalized.bind(this);
   public boundHandleGenerationIdReceived = this.handleGenerationIdReceived.bind(this);
+  public boundHandleAiThinking = this.handleAiThinking.bind(this);
+  public boundHandleAiThinkingDone = this.handleAiThinkingDone.bind(this);
   private boundPrepareForInputFromSelection = this.prepareForInputFromSelection.bind(this);
 
   private latestGradientDescriptor: any = null;
+
+  // --- Self-driven progress updates ---
+  private progressTimerId: number | null = null;
+  
+  private stopProgressUpdates(): void {
+    if (this.progressTimerId !== null) {
+      clearTimeout(this.progressTimerId);
+      this.progressTimerId = null;
+    }
+  }
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
@@ -121,6 +133,8 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.boundHandleResolvedColorsUpdate = this.handleResolvedColorsUpdate.bind(this);
     this.boundHandleAiAnalysisFinalized = this.handleAiAnalysisFinalized.bind(this);
     this.boundHandleGenerationIdReceived = this.handleGenerationIdReceived.bind(this);
+    this.boundHandleAiThinking = this.handleAiThinking.bind(this);
+    this.boundHandleAiThinkingDone = this.handleAiThinkingDone.bind(this);
     this.getControlCallbacksForFix = this.getControlCallbacksForFix.bind(this);
   }
 
@@ -164,6 +178,8 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.on('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
     eventEmitter.on('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
     eventEmitter.on('generationIdReceived', this.boundHandleGenerationIdReceived);
+    eventEmitter.on('aiThinking', this.boundHandleAiThinking);
+    eventEmitter.on('aiThinkingDone', this.boundHandleAiThinkingDone);
     eventEmitter.on('gradientDescriptor', this.handleGradientDescriptorReceived.bind(this));
 
     this.domElements.responseContent.addEventListener('click', (event) => {
@@ -193,6 +209,9 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.authPendingActionHelper.handlePendingActionAfterLogin(this);
     eventEmitter.emit('feedbackViewerImplReady');
     await renderLucideIcons();
+
+    // We now drive our own progress updates; ignore backend thinking events
+    this.stopProgressUpdates();
   }
 
   public cleanup(): void {
@@ -214,6 +233,9 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.off('internalResolvedColorsUpdate', this.boundHandleResolvedColorsUpdate);
     eventEmitter.off('aiAnalysisFinalized', this.boundHandleAiAnalysisFinalized);
     eventEmitter.off('generationIdReceived', this.boundHandleGenerationIdReceived);
+    eventEmitter.off('aiThinking', this.boundHandleAiThinking);
+    eventEmitter.off('aiThinkingDone', this.boundHandleAiThinkingDone);
+    eventEmitter.off('gradientDescriptor', this.handleGradientDescriptorReceived.bind(this));
     this.viewerEvents.unsubscribe();
     this.domElements = null;
     this.domManager = null;
@@ -383,6 +405,8 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     } else {
         customWarn('[CheckraImpl finalizeResponse] No HTML fix content was processed (e.g. text-only response). Retaining selection context for potential re-prompt.');
     }
+
+    // No custom progress timer; backend will supply thinking events.
   }
 
   public showError(error: Error | string): void {
@@ -944,6 +968,9 @@ Your job:
     this.fixedOuterHTMLForCurrentCycle = finalHtmlToApply;
     this.currentElementInsertionModeForAI = insertionMode;
 
+    // HTML arrived – backend should soon send thinkingDone; ensure loader cleared later.
+    this.domManager?.updateLoaderVisibility(false);
+
     customWarn(`[CheckraImplementation handleDomUpdate] fixedOuterHTMLForCurrentCycle set from domUpdateHtml. Insertion mode: ${this.currentElementInsertionModeForAI}. Content snippet:`, finalHtmlToApply.substring(0,200));
     
     // Do NOT call fixApplier.apply here. Let finalizeResponse handle it.
@@ -1168,14 +1195,13 @@ Your job:
     if (this.domManager) {
       this.domManager.updateLastAIMessage(fullAnalysisText, false);
     }
-    
-    // Note: We do NOT finalize the overall response here (loaders, etc.).
-    // That is the job of finalizeResponse() which is triggered by the 'aiFinalized' event (end of entire SSE stream).
   }
 
   private handleGenerationIdReceived(id: string): void {
     this.currentGenerationIdForAI = id;
     customWarn(`[CheckraImpl] Received and cached generation ID: ${id}`);
+    // Show initial analysis loader
+    this.domManager?.updateLoaderVisibility(true, 'Analyzing request…');
   }
 
   private handleGradientDescriptorReceived(descriptor: any): void {
@@ -1234,5 +1260,36 @@ Your job:
         el.classList.add('checkra-editable-text');
       }
     });
+  }
+
+  private handleAiThinking(message: string): void {
+    customWarn('[CheckraImpl] handleAiThinking received:', message);
+    if (!this.domManager) return;
+
+    // Ensure a streaming AI item exists or create one
+    const activeStream = this.conversationHistoryManager.getActiveStreamingAIItem();
+    if (activeStream) {
+      const updatedContent = activeStream.content + (activeStream.content ? '\n' : '') + message;
+      this.conversationHistoryManager.updateLastAIMessage(updatedContent, true);
+    } else {
+      // Start a new streaming item so the user sees progress immediately
+      this.conversationHistoryManager.saveHistory({ type: 'ai', content: message, isStreaming: true });
+    }
+
+    // Also surface it in the loader at the top
+    this.domManager.updateLoaderVisibility(true, message || 'Working…');
+  }
+
+  private handleAiThinkingDone(): void {
+    customWarn('[CheckraImpl] handleAiThinkingDone received');
+
+    // Finalize any active streaming item that was only thinking messages (no analysis)
+    const activeStream = this.conversationHistoryManager.getActiveStreamingAIItem();
+    if (activeStream) {
+      // Mark as not streaming so UI stops showing typing animation
+      this.conversationHistoryManager.finalizeLastAIItem();
+    }
+
+    this.domManager?.updateLoaderVisibility(false);
   }
 }

@@ -23,7 +23,9 @@ export type EventName =
   | 'elementDeselected'     // Added for element deselection
   | 'fixRated'
   | 'aiJsonPatch' // Added for JSON patch data
-  | 'aiDomUpdateReceived'; // Added for direct DOM updates
+  | 'aiDomUpdateReceived' // Added for direct DOM updates
+  | 'aiThinking'
+  | 'aiThinkingDone';
 
 /**
  * Defines the payload types for each event.
@@ -55,6 +57,8 @@ export interface EventPayloads {
   'fixRated': AddRatingRequestBody;
   'aiJsonPatch': { payload: any; originalHtml: string }; // Added for JSON patch data
   'aiDomUpdateReceived': { html: string; insertionMode: 'replace' | 'insertBefore' | 'insertAfter' }; // Added for direct DOM updates
+  'aiThinking': string;
+  'aiThinkingDone': void;
 }
 
 export class EventEmitter {

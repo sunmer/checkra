@@ -1,6 +1,7 @@
 import Settings from '../settings';
 import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
+import { collectSectionSkinSamples } from '../utils/section-skin-sampler';
 import { detectCssFramework } from '../utils/framework-detector';
 import { detectUiKit } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
@@ -15,7 +16,8 @@ import {
   DetectedFramework,
   GradientDescriptor,
   CardStyle,
-  TypographyStyle
+  TypographyStyle,
+  SectionSample
 } from '../types';
 
 let serviceEventEmitter: any = null; // Local reference to the event emitter
@@ -355,6 +357,14 @@ const fetchFeedbackBase = async (
       customWarn('[AI Service] Typography style extraction failed:', err);
     }
 
+    // Section skin samples
+    let sectionSamplesForPayload: SectionSample[] | null = null;
+    try {
+      sectionSamplesForPayload = collectSectionSkinSamples();
+    } catch (err) {
+      customWarn('[AI Service] Section skin sampling failed:', err);
+    }
+
     if (sanitizedHtml) {
       const cssCtx = produceCssContext(sanitizedHtml);
       processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
@@ -377,14 +387,16 @@ const fetchFeedbackBase = async (
       uiKitDetection: uiKitDetectionForPayload,
       computedBackgroundColor: computedBackgroundColor || undefined,
       containerStyle: cardStyleForPayload || undefined,
-      typographyStyle: typographyStyleForPayload || undefined
+      typographyStyle: typographyStyleForPayload || undefined,
+      sectionSamples: sectionSamplesForPayload || undefined,
     };
 
     const requestBody: GenerateSuggestionRequestbody = {
       prompt: promptText,
       metadata: backendMetadata, // Use the consolidated metadata
       aiSettings: currentAiSettings,
-      insertionMode: insertionMode
+      insertionMode: insertionMode,
+      generationMode: 'schema'
     };
 
     if (generationId) {
@@ -491,6 +503,25 @@ const fetchFeedbackBase = async (
                     serviceEventEmitter.emit('aiAnalysisFinalized', analysisBuffer);
                   }
                   analysisBuffer = ''; // Reset for next potential message cycle
+                  break;
+                case 'thinking':
+                  /*
+                   * Front-end UX wants in-flight status messages ("Planning UI layout…", etc.).
+                   * Forward the message so UI can show it in the loader area.
+                   */
+                  if (parsedData.message && typeof parsedData.message === 'string') {
+                    if (serviceEventEmitter) {
+                      serviceEventEmitter.emit('aiThinking', parsedData.message);
+                    }
+                  } else {
+                    customWarn('[AI Service] thinking event received without a valid message:', parsedData);
+                  }
+                  break;
+                case 'thinkingDone':
+                  // Signal to UI that background thinking steps are finished; hide loader text.
+                  if (serviceEventEmitter) {
+                    serviceEventEmitter.emit('aiThinkingDone');
+                  }
                   break;
                 case 'generationId':
                   if (parsedData.generationId && serviceEventEmitter) {

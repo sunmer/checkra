@@ -210,37 +210,6 @@ function kMeans(vectors: number[][], k = 3, maxIter = 8): ClusterRes[] {
   return clusters;
 }
 
-const LAYOUT_RE = /^(max-w-|container|grid|flex|row|col-|mx-auto|px-|sm:px-|md:px-|lg:px-|gap-|sm:gap-|md:gap-|lg:gap-|justify-|items-|text-center)$/;
-
-function extractLayoutClasses(el: HTMLElement): string[] {
-  return Array.from(el.classList).filter(cls => LAYOUT_RE.test(cls));
-}
-
-function extractStyle(el: HTMLElement): CardStyle {
-  const st = getComputedStyle(el);
-  const styleClasses = Array.from(el.classList).filter(c => /^bg-|^border-|^shadow|^rounded|^(p|m|gap|g)(-|$)/.test(c));
-
-  // find layout classes on current or nearest parent
-  let layoutClasses: string[] = extractLayoutClasses(el);
-  let p: HTMLElement | null = el.parentElement;
-  let depth = 0;
-  while (layoutClasses.length === 0 && p && depth < 3) {
-    layoutClasses = extractLayoutClasses(p);
-    p = p.parentElement;
-    depth++;
-  }
-
-  return {
-    backgroundColor: st.backgroundColor,
-    border: st.border,
-    borderRadius: st.borderRadius,
-    boxShadow: st.boxShadow,
-    padding: st.padding,
-    margin: st.margin,
-    classes: styleClasses,
-    layoutClasses,
-  };
-}
 
 const SCHEME_KEY = () => {
   const scheme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
@@ -264,12 +233,13 @@ export async function getCardStyle(): Promise<CardStyle | null> {
   clusters.sort((a, b) => b.indexes.length - a.indexes.length);
   const top = clusters[0];
   if (top.indexes.length === 0) return null;
-  const medianIdx = top.indexes[Math.floor(top.indexes.length / 2)];
-  const winner = candidates[medianIdx];
-  const style = extractStyle(winner);
+  
+  const style = {
+    variant: 'card' as const
+  };
 
   customLog('[CardStyle] Cluster sizes', clusters.map(c => c.indexes.length));
-  customLog('[CardStyle] Winner element & extracted style', winner, style);
+  customLog('[CardStyle] Selected variant card');
 
   try {
     localStorage.setItem(key, JSON.stringify(style));
