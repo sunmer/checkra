@@ -305,6 +305,20 @@
   z-index: 100;
 }
 
+/* Fallback for browsers where ::before is easier than extra div */
+#checkra-feedback-viewer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  cursor: ew-resize;
+  background-color: transparent;
+  transition: background-color 0.2s;
+  z-index: 100;
+}
+
 #checkra-feedback-viewer::before:hover {
   background-color: rgba(255, 255, 255, 0.2);
 }

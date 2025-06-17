@@ -90,6 +90,15 @@ export function collectPageFingerprint(): PageFingerprint {
 
       const cleanedWrapper = wrapperClasses.filter(c => !ALIGN_RE.test(c));
 
+      // --- Background area histogram ---
+      const areaPx = rect.width * rect.height;
+      const bgHistogram: Record<string, number> = {};
+      if (bgHex) {
+        bgHistogram[bgHex] = areaPx;
+      }
+      let dominantSurfaceHex: string | undefined = undefined;
+      if (bgHex) dominantSurfaceHex = bgHex;
+
       const sampleHtml = el.outerHTML.substring(0, 250);
 
       const container: ContainerFingerprint = {
@@ -101,6 +110,9 @@ export function collectPageFingerprint(): PageFingerprint {
         wrapperClasses: cleanedWrapper,
         layoutKind,
         sampleHtml,
+        bgHistogram: Object.keys(bgHistogram).length ? bgHistogram : undefined,
+        totalAreaPx: areaPx,
+        dominantSurfaceHex,
       } as ContainerFingerprint & { _top?: number };
       (container as any)._top = rect.top;
       containers.push(container);

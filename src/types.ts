@@ -207,6 +207,12 @@ export interface ContainerFingerprint {
   layoutKind: 'stack' | 'grid' | 'feature' | 'single' | 'flex' | string;
   /** First 250 chars of outer HTML (debug-only). */
   sampleHtml?: string;
+  /** Hex colour → pixel area (capped & cleaned in sampler) */
+  bgHistogram?: Record<string, number>;
+  /** Total pixel area of this element (width × height) */
+  totalAreaPx?: number;
+  /** Most dominant surface hex (≥40 % share if present) */
+  dominantSurfaceHex?: string;
 }
 
 export interface AtomInputVariant {
