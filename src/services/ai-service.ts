@@ -1,12 +1,10 @@
 import Settings from '../settings';
 import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
-import { collectSectionSkinSamples } from '../utils/section-skin-sampler';
 import { detectCssFramework } from '../utils/framework-detector';
 import { detectUiKit } from '../utils/ui-kit-detector';
 import { generateColorScheme } from '../utils/color-utils';
-import { getCardStyle } from '../utils/container-style-extractor';
-import { getTypographyStyle } from '../utils/typography-style-extractor';
+import { buildSnippetLayout } from '../utils/snippet-layout';
 import {
   GenerateSuggestionRequestbody,
   AddRatingRequestBody,
@@ -14,10 +12,7 @@ import {
   BackendPayloadMetadata,
   UiKitDetection,
   DetectedFramework,
-  GradientDescriptor,
-  CardStyle,
-  TypographyStyle,
-  SectionSample
+  GradientDescriptor
 } from '../types';
 
 let serviceEventEmitter: any = null; // Local reference to the event emitter
@@ -330,8 +325,7 @@ const fetchFeedbackBase = async (
     const currentAiSettings = getCurrentAiSettings();
 
     let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
-    let processedHtml = sanitizedHtml;
-    let analysisBuffer = ''; // Renamed from analysisAccumulator for clarity with new event
+    let analysisBuffer = '';
     
     // --- Gradient descriptor for this request ---
     let activeGradientDescriptor: GradientDescriptor | null = null;
@@ -341,33 +335,17 @@ const fetchFeedbackBase = async (
     let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
     let uiKitDetectionForPayload: UiKitDetection | undefined = undefined;
 
-    // --- New: dominant container style extraction ---
-    let cardStyleForPayload: CardStyle | null = null;
+    // New page fingerprint sampler
+    let pageFingerprintForPayload: import('../types').PageFingerprint | undefined = undefined;
     try {
-      cardStyleForPayload = await getCardStyle();
+      const { collectPageFingerprint } = await import('../utils/page-fingerprint-sampler');
+      pageFingerprintForPayload = collectPageFingerprint();
     } catch (err) {
-      customWarn('[AI Service] Card style extraction failed:', err);
-    }
-
-    // Typography extraction
-    let typographyStyleForPayload: TypographyStyle | null = null;
-    try {
-      typographyStyleForPayload = getTypographyStyle();
-    } catch (err) {
-      customWarn('[AI Service] Typography style extraction failed:', err);
-    }
-
-    // Section skin samples
-    let sectionSamplesForPayload: SectionSample[] | null = null;
-    try {
-      sectionSamplesForPayload = collectSectionSkinSamples();
-    } catch (err) {
-      customWarn('[AI Service] Section skin sampling failed:', err);
+      customWarn('[AI Service] Page fingerprint sampling failed:', err);
     }
 
     if (sanitizedHtml) {
       const cssCtx = produceCssContext(sanitizedHtml);
-      processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
       cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
       uiKitDetectionForPayload = detectUiKit(sanitizedHtml);
@@ -386,26 +364,22 @@ const fetchFeedbackBase = async (
       frameworkDetection: frameworkDetectionForPayload,
       uiKitDetection: uiKitDetectionForPayload,
       computedBackgroundColor: computedBackgroundColor || undefined,
-      containerStyle: cardStyleForPayload || undefined,
-      typographyStyle: typographyStyleForPayload || undefined,
-      sectionSamples: sectionSamplesForPayload || undefined,
+      pageFingerprint: pageFingerprintForPayload,
     };
+
+    // Build snippetLayout as required by new backend contract
+    const snippetLayout = buildSnippetLayout(insertionMode, sanitizedHtml, pageFingerprintForPayload || null);
 
     const requestBody: GenerateSuggestionRequestbody = {
       prompt: promptText,
-      metadata: backendMetadata, // Use the consolidated metadata
+      metadata: backendMetadata,
+      snippetLayout,
       aiSettings: currentAiSettings,
-      insertionMode: insertionMode,
-      generationMode: 'schema'
+      insertionMode: insertionMode
     };
 
     if (generationId) {
       (requestBody as any).generationId = generationId;
-    }
-
-    if (sanitizedHtml) {
-      requestBody.html = processedHtml;
-      requestBody.htmlCharCount = sanitizedHtml.length;
     }
 
     if (serviceEventEmitter) {

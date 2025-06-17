@@ -187,11 +187,17 @@ export class RatingUI {
       let imageData: AddRatingRequestBody['imageData'] | undefined = undefined;
       try {
         const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(document.documentElement as HTMLElement, {
+        const target = fixInfo.appliedFixWrapperElement || document.documentElement;
+        const canvas = await html2canvas(target as HTMLElement, {
           useCORS: true,
           backgroundColor: null,
           scale: 1,
           logging: false,
+          // To capture only the element bounds without full viewport padding
+          scrollX: -window.scrollX,
+          scrollY: -window.scrollY,
+          windowWidth: target.clientWidth,
+          windowHeight: target.clientHeight,
         });
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');

@@ -77,32 +77,31 @@ export interface BackendPayloadMetadata extends PageMetadata {
   computedBackgroundColor?: string;
 
   /**
-   * Dominant card / container style extracted from the page. Can be used by backend
-   * to re-skin generated HTML so that it visually matches the host site.
+   * New, richer UI fingerprint describing page containers, atomic element
+   * variants, and Tailwind utility digest. This will supersede `sectionSamples`
+   * once migration is complete.
    */
-  containerStyle?: CardStyle;
-
-  /** Site-wide typography style hints */
-  typographyStyle?: TypographyStyle;
-
-  /**
-   * Lightweight visual samples of the biggest sections on page. Enables backend/LLM
-   * to wrap generated components in a skin that matches the host site.
-   */
-  sectionSamples?: SectionSample[];
+  pageFingerprint?: PageFingerprint;
 }
 
 export interface GenerateSuggestionRequestbody {
   prompt: string;
-  html?: string | null;
-  htmlCharCount?: number;
   metadata: BackendPayloadMetadata;
+  snippetLayout: SnippetLayout;
   aiSettings: AiSettings;
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
-  generationMode: 'schema' | 'classic'
 }
 
-export interface AddRatingRequestBody extends GenerateSuggestionRequestbody {
+export interface SnippetLayout {
+  /** combined class list for the outer container element (max-width, centering, padding) */
+  container: string | null;
+  /** optional single wrapper div utilities between container and grid/content */
+  wrapper: string | null;
+  /** first descendant that establishes grid/flex layout */
+  grid: string | null;
+}
+
+export interface AddRatingRequestBody extends Omit<GenerateSuggestionRequestbody, 'aiSettings'> {
   rating: number; // e.g., 1-5
   fixId: string;
   generationId?: string;
@@ -193,44 +192,63 @@ export interface GradientDescriptor {
   angle: number; // degrees, e.g. 45
 }
 
-// --- New: Card / Container Style ---
-export interface CardStyle {
-  /** Desired backend wrapper variant, if any */
-  variant?: 'card' | 'surface' | 'section' | 'none';
-  backgroundColor?: string;
-  border?: string;
-  borderRadius?: string;
-  boxShadow?: string;
-  padding?: string;
-  margin?: string;
-  classes?: string[];
-  /** optional layout / width / centering utilities from wrapper */
-  layoutClasses?: string[];
+// --- UI-Fingerprint (v1) ---
+
+export interface ContainerFingerprint {
+  id: string; // Stable within one fingerprint payload (e.g. "c1")
+  /** Heuristic semantic role (hero, feature, body, contrast, …). May be "unknown" */
+  role: 'hero' | 'feature' | 'body' | 'contrast' | 'unknown' | string;
+  bgHex?: string;
+  textHex?: string;
+  headingHex?: string;
+  /** Raw Tailwind (or other) classes applied to the section wrapper. */
+  wrapperClasses: string[];
+  /** Simplified layout descriptor. */
+  layoutKind: 'stack' | 'grid' | 'feature' | 'single' | 'flex' | string;
+  /** First 250 chars of outer HTML (debug-only). */
+  sampleHtml?: string;
 }
 
-// --- Typography extraction ---
-export interface TypographyStyle {
-  /** Dominant body text classes (colour, weight, size) */
-  bodyClasses: string[];
-  /** Dominant heading classes (usually h1–h3) */
-  headingClasses: string[];
-  /** Optional link colour/decoration classes */
-  linkClasses?: string[];
-  /** Optional mapping of scale utilities */
-  scale?: { [tag: string]: string };
+export interface AtomInputVariant {
+  wrapper?: string[];
+  input: string[];
+  label?: string[];
 }
 
-// --- Section skin sampling (no legacy fields) ---
-export interface SectionSample {
-  skin: {
-    bgClass?: string;
-    bgColor?: string; // 6-digit hex (e.g. #1a2b3c) or undefined
-    paddingPx: number;
-    rounded: boolean;
-    shadow: boolean;
-  };
-  headingPresent: boolean;
-  layoutKind: 'single' | 'grid' | 'flex' | 'stack';
-  widthPx: number;
-  spacingBelowPx: number;
+export interface AtomsFingerprint {
+  inputLight?: AtomInputVariant;
+  inputDark?: AtomInputVariant;
+  buttonPrimary?: string[];
+  // Allow for arbitrary future keys
+  [key: string]: any;
+}
+
+export interface PageFingerprint {
+  fingerprintVersion: number;
+  containers: ContainerFingerprint[];
+  atoms: AtomsFingerprint;
+  tailwindTokens?: string[];
+  preferredContainer?: PreferredContainer;
+  textStyles?: TextStyles;
+  brandTokens?: BrandTokens;
+  meta?: Record<string, any>;
+}
+
+// --- New enriched fingerprint sub-types ---
+export interface PreferredContainer {
+  variant: 'card' | 'surface' | 'section' | 'none';
+  classes: string[];
+  layoutKind: 'stack' | 'grid' | 'single';
+}
+
+export interface TextStyles {
+  body: string[];
+  heading: string[];
+  link?: string[];
+}
+
+export interface BrandTokens {
+  colors: string[];
+  typography: string[];
+  shapes: string[];
 }
