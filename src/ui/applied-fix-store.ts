@@ -17,6 +17,8 @@ export interface AppliedFixInfo {
   isRated?: boolean;
   resolvedColors?: ResolvedColorInfo;
   generationId?: string;
+  /** Identifier of UI component snippet used for this fix (e.g. "faq-01"). */
+  componentId?: string;
 }
 
 export class AppliedFixStore {

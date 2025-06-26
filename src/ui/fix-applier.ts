@@ -1,7 +1,8 @@
 import type { AppliedFixInfo, AppliedFixStore } from './applied-fix-store';
 import type { OverlayManager, ControlButtonCallbacks } from './overlay-manager';
 import type { GenerateSuggestionRequestbody, ResolvedColorInfo } from '../types';
-import { customWarn, customError } from '../utils/logger';
+import { customError, customWarn } from '../utils/logger';
+import { ensureSharedCss } from '../utils/checkra-style';
 
 export interface FixApplicationParams {
   fixId: string;
@@ -12,6 +13,8 @@ export interface FixApplicationParams {
   stableSelector?: string;
   currentResolvedColors: ResolvedColorInfo | null;
   generationId: string | null;
+  /** Optional identifier of the component snippet used (if generated from gallery) */
+  componentId?: string;
   // Callback to get control button handlers from CheckraImplementation
   getControlCallbacks: (fixId: string) => ControlButtonCallbacks; 
 }
@@ -37,6 +40,9 @@ export class FixApplier {
   }
 
   public apply(params: FixApplicationParams): AppliedFixInfo | null {
+    // Ensure shared CSS is available before applying any fix
+    ensureSharedCss();
+
     const { 
       fixId, originalHtml, fixedHtml, insertionMode, 
       requestBody, stableSelector, currentResolvedColors,
@@ -80,6 +86,7 @@ export class FixApplier {
       const endComment = document.createComment(` checkra-fix-end:${fixId} `);
       const appliedFixWrapper = document.createElement('div');
       appliedFixWrapper.className = 'checkra-feedback-applied-fix';
+      appliedFixWrapper.setAttribute('data-checkra-fix-id', fixId);
       appliedFixWrapper.setAttribute('data-checkra-applied-wrapper-for', fixId);
 
       // Insert elements into DOM
@@ -117,7 +124,8 @@ export class FixApplier {
         insertionMode: insertionMode, 
         requestBody: requestBody, 
         isRated: false,
-        resolvedColors: currentResolvedColors ? { ...currentResolvedColors } : undefined
+        resolvedColors: currentResolvedColors ? { ...currentResolvedColors } : undefined,
+        componentId: params.componentId ?? params.requestBody?.componentSpec?.id,
       };
 
       if(params.generationId)

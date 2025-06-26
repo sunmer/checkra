@@ -1,21 +1,17 @@
-import { parseColorString, rgbaToHex } from './color-utils';
-import { PageFingerprint, ContainerFingerprint, AtomsFingerprint, PreferredContainer, TextStyles, BrandTokens } from '../types';
+import { parseColorString } from './color-utils';
+import { PageFingerprint, ContainerFingerprint } from '../types';
 import { customLog, customWarn } from './logger';
+import { collectAtoms } from './atom-sampler';
 
 // Alignment utilities regex (shared)
 const ALIGN_RE = /^(text|items|self|place|content)-(center|left|right|justify)$/;
 
-/**
- * Simple heuristic luminance check – returns perceived brightness (0-255).
- */
-function getLuminance(rgb: { r: number; g: number; b: number }): number {
-  return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
-}
-
-function rgbStringToHexOrNull(rgbStr: string | null): string | undefined {
-  if (!rgbStr) return undefined;
-  const parsed = parseColorString(rgbStr);
-  return parsed ? rgbaToHex(parsed) : undefined;
+function colorStringToRgbaOrNull(colStr: string | null): string | undefined {
+  if (!colStr) return undefined;
+  const parsed = parseColorString(colStr);
+  if (!parsed) return undefined;
+  const { r, g, b, a } = parsed;
+  return `rgba(${r},${g},${b},${a})`;
 }
 
 /**
@@ -34,30 +30,79 @@ export function collectPageFingerprint(): PageFingerprint {
   }
 
   const viewportW = window.innerWidth;
+  // Width occupied by the Checkra viewer (if present). We will treat everything to its left as the
+  // main working area. This allows width checks to be relative to the usable viewport.
+  let usableViewportW = viewportW;
+  const viewerEl = document.getElementById('checkra-feedback-viewer');
+  if (viewerEl) {
+    const viewerRect = viewerEl.getBoundingClientRect();
+    // If the viewer sits on the right side, subtract its width from usable area
+    if (viewerRect.left >= 0 && viewerRect.width > 0) {
+      usableViewportW = Math.max(50, viewportW - viewerRect.width);
+    }
+  }
   let idCounter = 1;
 
   sectionEls.forEach(el => {
     try {
       const rect = el.getBoundingClientRect();
-      if (rect.width < viewportW * 0.6 || rect.height < 80) return; // Skip narrow/small blocks
-
-      const st = getComputedStyle(el);
-      const bgHex = rgbStringToHexOrNull(st.backgroundColor);
-
-      // text colour – use first <p> or fallback to el
-      let textHex: string | undefined;
-      const p = el.querySelector('p');
-      if (p) {
-        textHex = rgbStringToHexOrNull(getComputedStyle(p).color);
-      } else {
-        textHex = rgbStringToHexOrNull(st.color);
+      // Skip containers that are inside or overlap the Checkra viewer sidebar
+      if (el.closest('#checkra-feedback-viewer')) {
+        return;
+      }
+      // Also skip if the element is positioned to the right of the viewer (i.e., entirely within the viewer area)
+      if (viewerEl) {
+        const viewerRect = viewerEl.getBoundingClientRect();
+        if (rect.left >= viewerRect.left) {
+          return;
+        }
       }
 
-      // heading colour – first h2/h3
-      let headingHex: string | undefined;
-      const h = el.querySelector('h2, h3');
-      if (h) {
-        headingHex = rgbStringToHexOrNull(getComputedStyle(h as HTMLElement).color);
+      // Relaxed threshold: consider sections as containers if they occupy at least 40 % of the usable viewport width
+      // or are wider than 300 px (helps with mobile-optimised layouts).
+      const MIN_ABS_WIDTH = 300;
+      const MIN_WIDTH_RATIO = 0.4; // 40 %
+      if (rect.width < Math.max(MIN_ABS_WIDTH, usableViewportW * MIN_WIDTH_RATIO) || rect.height < 80) {
+        return; // Skip narrow/small blocks
+      }
+
+      const st = getComputedStyle(el);
+
+      // ---- Text & Heading colour detection ----
+      let textRgba: string | undefined;
+      let headingRgba: string | undefined;
+
+      // Helper to locate first descendant with a colour utility and return its RGBA string
+      const findColourInfo = (selector: string): { rgba?: string } => {
+        const nodes = el.querySelectorAll(selector);
+        for (const node of Array.from(nodes)) {
+          const clsTokens = safeSplitClassNames(node as Element);
+          const colourToken = clsTokens.find(isColorUtility);
+          if (colourToken) {
+            const c = colorStringToRgbaOrNull(getComputedStyle(node as HTMLElement).color);
+            if (c) return { rgba: c };
+          }
+        }
+        return {};
+      };
+
+      // 1) Try colour utilities first
+      const textInfo = findColourInfo('p, li, span');
+      textRgba = textInfo.rgba;
+
+      const headingInfo = findColourInfo('h1, h2, h3, h4');
+      headingRgba = headingInfo.rgba;
+
+      // 2) Fallbacks – computed colour even without utility
+      if (!textRgba) {
+        const p = el.querySelector('p');
+        if (p) textRgba = colorStringToRgbaOrNull(getComputedStyle(p).color);
+        if (!textRgba) textRgba = colorStringToRgbaOrNull(st.color);
+      }
+
+      if (!headingRgba) {
+        const h = el.querySelector('h1, h2, h3, h4');
+        if (h) headingRgba = colorStringToRgbaOrNull(getComputedStyle(h as HTMLElement).color);
       }
 
       // layoutKind heuristic – similar rules as old sampler
@@ -69,52 +114,90 @@ export function collectPageFingerprint(): PageFingerprint {
       if (directBlocks.length === 1) {
         const d = getComputedStyle(directBlocks[0] as HTMLElement).display;
         if (d === 'grid') layoutKind = 'grid';
-        else if (d === 'flex') layoutKind = 'flex';
         else layoutKind = 'single';
       } else if (directBlocks.length > 1) {
         layoutKind = 'stack';
       }
 
       // role heuristic – hero if near top, contrast if dark bg, etc.
-      let role: ContainerFingerprint['role'] = 'body';
-      if (rect.top < window.innerHeight * 0.3) role = 'hero';
-      if (bgHex) {
-        const parsed = parseColorString(st.backgroundColor);
-        if (parsed) {
-          const lum = getLuminance(parsed);
-          if (lum < 50) role = 'contrast';
-        }
-      }
+      const role: ContainerFingerprint['role'] = 'contrast';
 
       const wrapperClasses = Array.from(el.classList);
 
       const cleanedWrapper = wrapperClasses.filter(c => !ALIGN_RE.test(c));
 
-      // --- Background area histogram ---
-      const areaPx = rect.width * rect.height;
-      const bgHistogram: Record<string, number> = {};
-      if (bgHex) {
-        bgHistogram[bgHex] = areaPx;
-      }
-      let dominantSurfaceHex: string | undefined = undefined;
-      if (bgHex) dominantSurfaceHex = bgHex;
+      // Pixel area (rect.width * rect.height) could be useful for future heuristics – ignored for payload
 
-      const sampleHtml = el.outerHTML.substring(0, 250);
+      // --- Compute effective background (first opaque ancestor background) ---
+      const resolveEffectiveBg = (startEl: HTMLElement): string | undefined => {
+        let cur: HTMLElement | null = startEl;
+        while (cur) {
+          const bgStr = getComputedStyle(cur).backgroundColor;
+          const parsed = parseColorString(bgStr);
+          if (parsed && parsed.a !== undefined && parsed.a >= 0.99) {
+            return `rgba(${parsed.r},${parsed.g},${parsed.b},${parsed.a})`;
+          }
+          cur = cur.parentElement;
+        }
+        return 'rgba(255,255,255,1)'; // default white
+      };
+
+      const effectiveBg = resolveEffectiveBg(el);
+
+      // --- Dominant background via area tally ---
+      const areaByColor: Record<string, number> = {};
+      const tallyArea = (elem: HTMLElement) => {
+        const styleBg = getComputedStyle(elem).backgroundColor;
+        const parsed = parseColorString(styleBg);
+        if (parsed && parsed.a !== undefined && parsed.a >= 0.99) {
+          const key = `rgba(${parsed.r},${parsed.g},${parsed.b},${parsed.a})`;
+          const r = elem.getBoundingClientRect();
+          areaByColor[key] = (areaByColor[key] || 0) + r.width * r.height;
+        }
+      };
+
+      tallyArea(el);
+      // Scan descendants but keep cost low (≤300 nodes)
+      const descendents = Array.from(el.querySelectorAll('*')).slice(0, 300) as HTMLElement[];
+      descendents.forEach(tallyArea);
+
+      let dominantBg = effectiveBg;
+      const sortedArea = Object.entries(areaByColor).sort((a, b) => b[1] - a[1]);
+      if (sortedArea.length > 0) dominantBg = sortedArea[0][0];
+
+      // Muted text detection – any element with text utility differing from body/heading
+      let mutedClass: string | undefined;
+      let computedMutedColor: string | undefined;
+      if (textRgba || headingRgba) {
+        const nodes = el.querySelectorAll('span, p, li, small');
+        for (const node of Array.from(nodes)) {
+          const clsTokens = safeSplitClassNames(node as Element);
+          const colourToken = clsTokens.find(isColorUtility);
+          if (!colourToken) continue;
+          const currentColor = colorStringToRgbaOrNull(getComputedStyle(node as HTMLElement).color);
+          if (currentColor === textRgba || currentColor === headingRgba) continue;
+          const c = colorStringToRgbaOrNull(getComputedStyle(node as HTMLElement).color);
+          if (c) {
+            mutedClass = colourToken;
+            computedMutedColor = c;
+            break;
+          }
+        }
+      }
 
       const container: ContainerFingerprint = {
         id: `c${idCounter++}`,
         role,
-        bgHex,
-        textHex,
-        headingHex,
+        dominantBg,
+        computedHeadingColor: headingRgba || '',
+        computedBodyColor: textRgba || '',
+        mutedClass,
+        computedMutedColor,
         wrapperClasses: cleanedWrapper,
         layoutKind,
-        sampleHtml,
-        bgHistogram: Object.keys(bgHistogram).length ? bgHistogram : undefined,
-        totalAreaPx: areaPx,
-        dominantSurfaceHex,
       } as ContainerFingerprint & { _top?: number };
       (container as any)._top = rect.top;
+      (el as any).__checkra_containerId = container.id;
       containers.push(container);
     } catch (err) {
       customWarn('[PageFingerprint] failed to process section', err);
@@ -128,61 +211,27 @@ export function collectPageFingerprint(): PageFingerprint {
   // Trim to 5 most prominent
   const finalContainers = containers.slice(0, 5);
 
-  // --- ATOMS ---
-  const atoms: AtomsFingerprint = {};
-
-  // Buttons – pick first visually primary button (bg-* utility, or <button class=...>)
-  const btn = document.querySelector('button, a[class*="btn"], .btn-primary') as HTMLElement | null;
-  if (btn) {
-    atoms.buttonPrimary = Array.from(btn.classList);
+  // Fallback – ensure we always have at least one container so the caller
+  // receives useful data even on very simple pages.
+  if (finalContainers.length === 0 && sectionEls.length > 0) {
+    const fallbackEl = sectionEls[0];
+    // Fallback container when none detected
+    finalContainers.push({
+      id: 'c0',
+      role: 'body',
+      wrapperClasses: Array.from(fallbackEl.classList),
+      layoutKind: 'stack',
+    } as any);
   }
 
-  // Inputs – pick first input[type=text/email] etc.
-  const inputEl = document.querySelector('input[type="text"], input[type="email"], textarea') as HTMLElement | null;
-  if (inputEl) {
-    const stIn = getComputedStyle(inputEl);
-    const bgHex = rgbStringToHexOrNull(stIn.backgroundColor);
-    const variantKey = (() => {
-      if (!bgHex) return 'inputLight';
-      const parsed = parseColorString(stIn.backgroundColor);
-      if (!parsed) return 'inputLight';
-      const lum = getLuminance(parsed);
-      return lum < 128 ? 'inputDark' : 'inputLight';
-    })();
-    const parentWrapper = inputEl.parentElement;
-    const wrapperClasses = parentWrapper ? Array.from(parentWrapper.classList) : [];
-    const variant = {
-      wrapper: wrapperClasses,
-      input: Array.from(inputEl.classList),
-      label: parentWrapper?.querySelector('label') ? Array.from(parentWrapper.querySelector('label')!.classList) : undefined,
-    };
-    atoms[variantKey] = variant;
-  }
-
-  // Tailwind token digest – union of class lists
-  const tokenSet = new Set<string>();
-  finalContainers.forEach(c => c.wrapperClasses.forEach(cls => tokenSet.add(cls)));
-  if (atoms.buttonPrimary) atoms.buttonPrimary.forEach(cls => tokenSet.add(cls));
-  Object.values(atoms).forEach(v => {
-    if (typeof v === 'object' && v !== null) {
-      if ((v as any).wrapper) ((v as any).wrapper as string[]).forEach(cls => tokenSet.add(cls));
-      if ((v as any).input) ((v as any).input as string[]).forEach(cls => tokenSet.add(cls));
-      if ((v as any).label) ((v as any).label as string[]).forEach(cls => tokenSet.add(cls));
-    }
-  });
-
-  const tailwindTokens = Array.from(tokenSet).filter(t => t.startsWith('bg-') || t.startsWith('text-') || t.startsWith('px-') || t.startsWith('py-'));
+  const atoms = collectAtoms(finalContainers);
 
   const fingerprint: PageFingerprint = {
-    fingerprintVersion: 1,
+    fingerprintVersion: 2,
     containers: finalContainers,
     atoms,
-    tailwindTokens,
-    ...deriveBranding(finalContainers),
-    meta: {
-      generatedAt: Date.now(),
-    },
-  };
+    meta: { generatedAt: Date.now() },
+  } as any;
 
   customLog('[PageFingerprint] collected', fingerprint);
   return fingerprint;
@@ -190,90 +239,29 @@ export function collectPageFingerprint(): PageFingerprint {
 
 // TODO: Remove legacy SectionSample usage once backend fully migrates to pageFingerprint 
 
-// ---- Branding helpers ----
-
-function isDecorative(cls: string): boolean {
-  return /(bg-|border-|shadow-)/.test(cls);
+// Helper: safely split an element's class attribute into tokens, accounting for SVGAnimatedString
+function safeSplitClassNames(el: Element): string[] {
+  try {
+    const raw = (typeof (el as any).className === 'string')
+      ? (el as any).className as string
+      : ((el as any).className && typeof (el as any).className.baseVal === 'string')
+        ? (el as any).className.baseVal as string
+        : (el.getAttribute ? el.getAttribute('class') || '' : '');
+    return raw.split(/\s+/).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
-function deriveBranding(containers: ContainerFingerprint[]): {
-  preferredContainer?: PreferredContainer;
-  textStyles?: TextStyles;
-  brandTokens?: BrandTokens;
-} {
-  if (containers.length === 0) return {};
-
-  // Representative candidates: having bg-/border-/shadow-
-  const reps = containers.filter(c => c.wrapperClasses.some(isDecorative));
-  if (reps.length < 2) {
-    // fallback pick first two if less
-    while (reps.length < Math.min(2, containers.length)) reps.push(containers[reps.length]);
-  }
-
-  // Preferred container: most frequent wrapper signature among reps
-  const sigCounts: Record<string, { count: number; cont: ContainerFingerprint }> = {};
-  reps.forEach(c => {
-    const sig = c.wrapperClasses.join(' ');
-    sigCounts[sig] = sigCounts[sig] ? { count: sigCounts[sig].count + 1, cont: c } : { count: 1, cont: c };
-  });
-  const bestSig = Object.values(sigCounts).sort((a, b) => b.count - a.count)[0];
-  let preferredContainer: PreferredContainer | undefined;
-  if (bestSig) {
-    const cls = bestSig.cont.wrapperClasses;
-    // heuristic variant
-    let variant: PreferredContainer['variant'] = 'none';
-    if (cls.some(c => /shadow-/.test(c))) variant = 'card';
-    else if (cls.some(c => /bg-/.test(c))) variant = 'section';
-    else if (cls.some(c => /border-/.test(c))) variant = 'surface';
-
-    preferredContainer = {
-      variant,
-      classes: cls,
-      layoutKind: bestSig.cont.layoutKind as any,
-    };
-  }
-
-  // textStyles – gather from sampleHtml of reps; simple heuristic: collect classes from <p>, <h2>, <a>
-  const bodySet = new Set<string>();
-  const headingSet = new Set<string>();
-  const linkSet = new Set<string>();
-  const COLOR_RE = /(text-|bg-|border-)/;
-  reps.forEach(c => {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = c.sampleHtml || '';
-    const p = tmp.querySelector('p');
-    if (p) Array.from(p.classList).forEach(cls => { if (!COLOR_RE.test(cls) && !ALIGN_RE.test(cls)) bodySet.add(cls); });
-    const h = tmp.querySelector('h2, h3');
-    if (h) Array.from(h.classList).forEach(cls => { if (!COLOR_RE.test(cls) && !ALIGN_RE.test(cls)) headingSet.add(cls); });
-    const a = tmp.querySelector('a');
-    if (a) Array.from(a.classList).forEach(cls => { if (!COLOR_RE.test(cls) && !ALIGN_RE.test(cls)) linkSet.add(cls); });
-  });
-  const textStyles: TextStyles = {
-    body: Array.from(bodySet),
-    heading: Array.from(headingSet),
-    link: linkSet.size ? Array.from(linkSet) : undefined,
-  };
-
-  // brandTokens – colors, typography, shapes allow-lists
-  const colors: string[] = [];
-  const typography: string[] = [];
-  const shapes: string[] = [];
-  const COLOR_ALLOW = /^(bg-|text-|border-|ring-|from-|to-)/;
-  const TYPO_ALLOW = /^(font-|text-[\dxl]|leading-|tracking-)/;
-  const SHAPE_ALLOW = /^(rounded-|shadow-)/;
-  reps.forEach(c => {
-    c.wrapperClasses.forEach(cls => {
-      if (COLOR_ALLOW.test(cls)) colors.push(cls);
-      else if (TYPO_ALLOW.test(cls)) typography.push(cls);
-      else if (SHAPE_ALLOW.test(cls)) shapes.push(cls);
-    });
-  });
-
-  const brandTokens: BrandTokens = {
-    colors: Array.from(new Set(colors)),
-    typography: Array.from(new Set(typography)),
-    shapes: Array.from(new Set(shapes.filter((v, _, arr) => arr.indexOf(v) !== arr.lastIndexOf(v)))), // only common (>1 occur)
-  };
-
-  return { preferredContainer, textStyles, brandTokens };
+// Helper: determine whether a Tailwind class is a text color utility (and not size/alignment)
+function isColorUtility(cls: string): boolean {
+  if (!cls.startsWith('text-')) return false;
+  // Exclude non-colour utilities
+  if (/^text-transparent$/.test(cls)) return false;
+  if (/^text-current$/.test(cls)) return false;
+  if (/^text-\[/.test(cls)) return false;          // arbitrary value e.g. text-[rgb(…)]
+  if (/\/[^/]+$/.test(cls)) return false;           // opacity variants e.g. text-white/60
+  if (/^(text-(left|center|right|justify|start|end))$/.test(cls)) return false; // alignment
+  if (/^text-(xs|sm|base|lg|xl|\d+xl)$/.test(cls)) return false; // font-size utilities
+  return true;
 } 

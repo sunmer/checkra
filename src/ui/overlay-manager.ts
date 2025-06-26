@@ -8,6 +8,7 @@ const CLOSE_SVG = '&times;';
 const TOGGLE_SHOW_ORIGINAL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>`;
 const TOGGLE_SHOW_FIX_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
 const COPY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+const CHANGE_VARIANT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-layout-grid"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>`;
 const RATE_SVG = '★';
 
 export interface ControlButtonCallbacks {
@@ -15,6 +16,7 @@ export interface ControlButtonCallbacks {
   onToggle: () => void;
   onCopy: () => void;
   onRate?: (anchorElement: HTMLElement) => void;
+  onVariantChange?: (anchorElement: HTMLElement) => void;
 }
 
 interface FixControlElements {
@@ -22,6 +24,7 @@ interface FixControlElements {
   toggleButton: HTMLButtonElement;
   copyButton: HTMLButtonElement;
   rateButton?: HTMLButtonElement;
+  variantButton?: HTMLButtonElement;
 }
 
 interface OverlayManagerFixData {
@@ -90,31 +93,33 @@ export class OverlayManager {
         onRateCallback(rateButton as HTMLButtonElement);
       });
     }
-    return { closeButton, toggleButton, copyButton, rateButton };
+
+    // Variant button (optional)
+    let variantButton: HTMLButtonElement | undefined;
+    if (callbacks.onVariantChange) {
+      variantButton = document.createElement('button');
+      variantButton.innerHTML = CHANGE_VARIANT_SVG;
+      variantButton.title = 'Change variant';
+      variantButton.className = 'checkra-feedback-fix-btn checkra-change-variant-btn';
+      const onVariantCb = callbacks.onVariantChange;
+      variantButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onVariantCb(variantButton as HTMLButtonElement);
+      });
+    }
+
+    return { closeButton, toggleButton, copyButton, rateButton, variantButton };
   }
 
   private positionControlsOnce(controlsContainer: HTMLDivElement, appliedFixWrapperElement: HTMLElement): void {
     controlsContainer.style.display = 'flex'; 
     const controlsHeight = controlsContainer.offsetHeight;
 
-    const wrapperRect = appliedFixWrapperElement.getBoundingClientRect();
-    const viewportHeight = window.innerHeight;
-    const spaceAbove = wrapperRect.top;
-    const spaceBelow = viewportHeight - wrapperRect.bottom;
     const margin = 8;
-
-    let topStyle: string;
-    let transformStyle = 'translateX(-50%)';
-
-    if (spaceAbove > controlsHeight + margin || (spaceAbove > spaceBelow && spaceBelow < controlsHeight + margin)) {
-      topStyle = `-${margin + controlsHeight}px`;
-    } else {
-      topStyle = `${wrapperRect.height + margin}px`;
-    }
-    
+    const topStyle = `-${margin + controlsHeight}px`;
     controlsContainer.style.left = '50%';
     controlsContainer.style.top = topStyle;
-    controlsContainer.style.transform = transformStyle;
+    controlsContainer.style.transform = 'translateX(-50%)';
   }
 
   public showControlsForFix(
@@ -155,6 +160,7 @@ export class OverlayManager {
       const buttons = this.createAndGetButtons(fixId, callbacks);
       
       if (buttons.rateButton) controlsContainer.appendChild(buttons.rateButton);
+      if (buttons.variantButton) controlsContainer.appendChild(buttons.variantButton);
       controlsContainer.appendChild(buttons.copyButton);
       controlsContainer.appendChild(buttons.toggleButton);
       controlsContainer.appendChild(buttons.closeButton);

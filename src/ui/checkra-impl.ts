@@ -10,7 +10,6 @@ import { OverlayManager, ControlButtonCallbacks } from './overlay-manager';
 import { AppliedFixStore, AppliedFixInfo } from './applied-fix-store';
 import { RatingUI } from './rating-ui';
 import { SnapshotService } from '../services/snapshot-service';
-import { StatsFetcher, StatsFetcherResult, getFriendlyQueryName } from '../analytics/stats-fetcher';
 import { AuthPendingActionHelper, type AuthCallbackInterface } from '../auth/auth-pending-action-helper';
 import { GENERIC_HTML_REGEX } from '../utils/regex';
 import { ConversationHistory, type ConversationItem } from './conversation-history';
@@ -20,6 +19,9 @@ import { FixApplier } from './fix-applier';
 import { AIResponsePipeline, type ExtractedFix } from './ai-response-pipeline';
 import { ViewerEvents, type ViewerEventCallbacks } from './viewer-events';
 import { renderLucideIcons } from '../utils/icon-renderer';
+import Settings from '../settings';
+import { fetchComponentSnippet } from '../services/ai-service';
+import { VariantPicker } from '../ui/variant-picker';
 
 export class CheckraImplementation implements AuthCallbackInterface, ViewerEventCallbacks {
   private domElements: CheckraViewerElements | null = null;
@@ -31,7 +33,6 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   public appliedFixStore: AppliedFixStore;
   private ratingUI: RatingUI;
   private snapshotService: SnapshotService;
-  private statsFetcher: StatsFetcher;
   private authPendingActionHelper: AuthPendingActionHelper;
   private conversationHistoryManager: ConversationHistory;
   private commandDispatcher: CommandDispatcher;
@@ -39,6 +40,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
   private fixApplier: FixApplier;
   private aiResponsePipeline: AIResponsePipeline;
   private viewerEvents: ViewerEvents;
+  private variantPicker: VariantPicker;
 
   // --- State ---
   private isVisible: boolean = false;
@@ -59,6 +61,10 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
 
   // --- Quick Suggestion Flow ---
   private queuedPromptText: string | null = null;
+
+  // --- Component gallery state ---
+  private snippetCatalogue: Record<string, any[]> | null = null;
+  private pendingGalleryComponentId: string | null = null;
 
   private boundHandleEscapeKey: ((event: KeyboardEvent) => void) | null = null;
 
@@ -105,13 +111,13 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.appliedFixStore = new AppliedFixStore();
     this.ratingUI = new RatingUI();
     this.snapshotService = new SnapshotService();
-    this.statsFetcher = new StatsFetcher();
     this.authPendingActionHelper = new AuthPendingActionHelper();
     this.conversationHistoryManager = new ConversationHistory();
     this.commandDispatcher = new CommandDispatcher(this, this.snapshotService);
     this.fixApplier = new FixApplier(this.appliedFixStore, this.overlayManager);
     this.aiResponsePipeline = new AIResponsePipeline();
     this.viewerEvents = new ViewerEvents(this);
+    this.variantPicker = new VariantPicker();
 
     this.handleTextareaKeydown = this.handleTextareaKeydown.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
@@ -136,6 +142,11 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     this.boundHandleAiThinking = this.handleAiThinking.bind(this);
     this.boundHandleAiThinkingDone = this.handleAiThinkingDone.bind(this);
     this.getControlCallbacksForFix = this.getControlCallbacksForFix.bind(this);
+
+    // Listen for gallery item clicks emitted by DOM
+    eventEmitter.on('galleryItemClicked', (data: { componentId: string }) => {
+      this.handleGalleryItemClicked(data.componentId);
+    });
   }
 
   public async initialize(
@@ -143,8 +154,10 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     settingsModal: SettingsModal
   ): Promise<void> {
     try {
+      // Clear any persisted state that may rely on legacy snippet ids
       this.conversationHistoryManager.clearHistory();
       localStorage.removeItem('checkra_onboarded');
+      // No longer caching snippet catalogue – nothing in sessionStorage to clear
     } catch (e) { /* Silently fail */ }
 
     const handleClose = () => this.hide(true, true);
@@ -182,12 +195,6 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
     eventEmitter.on('aiThinkingDone', this.boundHandleAiThinkingDone);
     eventEmitter.on('gradientDescriptor', this.handleGradientDescriptorReceived.bind(this));
 
-    this.domElements.responseContent.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      if (target.classList.contains('checkra-stat-badge') && target.dataset.queryname) {
-        this.initiateStatsFetch(target.dataset.queryname);
-      }
-    });
     this.addGlobalListeners();
     const panelWasClosedByUser = localStorage.getItem(this.PANEL_CLOSED_BY_USER_KEY) === 'true';
     if (this.optionsInitialVisibility && !panelWasClosedByUser) {
@@ -361,6 +368,7 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
         requestBody: this.requestBodyForCurrentCycle,
         stableSelector: this.stableSelectorForAI,
         generationId: this.currentGenerationIdForAI,
+        componentId: this.requestBodyForCurrentCycle?.componentSpec?.id,
         currentResolvedColors: this.currentResolvedColors,
         getControlCallbacks: this.getControlCallbacksForFix
       });
@@ -671,7 +679,11 @@ export class CheckraImplementation implements AuthCallbackInterface, ViewerEvent
       onClose: () => this.handleAppliedFixClose(fixId),
       onToggle: () => this.handleAppliedFixToggle(fixId),
       onCopy: () => this.handleAppliedFixCopy(fixId),
-      onRate: this.enableRating ? (anchorElement: HTMLElement) => this.handleAppliedFixRate(fixId, anchorElement) : undefined
+      onRate: this.enableRating ? (anchorElement: HTMLElement) => this.handleAppliedFixRate(fixId, anchorElement) : undefined,
+      onVariantChange: (() => {
+        const info = this.appliedFixStore.get(fixId);
+        return info && info.componentId ? (anchorElement: HTMLElement) => this.handleAppliedFixVariant(fixId, anchorElement) : undefined;
+      })()
     };
   }
 
@@ -758,6 +770,10 @@ Your job:
     this.domManager.showPromptInputArea(false);
     this.domManager.clearAIResponseContent();
     this.domManager.updateLoaderVisibility(false);
+
+    // Populate the onboarding container with the component gallery
+    this.loadComponentGallery();
+
     this.domManager.show();
     this.isVisible = true;
     this.onToggleCallback(true);
@@ -841,51 +857,6 @@ Your job:
       authError,
       this
     );
-  }
-
-  public displayStatsBadges(): void {
-    if (!this.domManager) return;
-    const badgesHtml = `
-      <div class="checkra-stats-badges-wrapper">
-        <div class="checkra-stats-badges">
-          <button class="checkra-stat-badge" data-queryname="metrics_1d">${getFriendlyQueryName('metrics_1d')}</button>
-          <button class="checkra-stat-badge" data-queryname="metrics_7d">${getFriendlyQueryName('metrics_7d')}</button>
-          <button class="checkra-stat-badge" data-queryname="geo_top5_7d">${getFriendlyQueryName('geo_top5_7d')}</button>
-        </div>
-      </div>
-    `;
-    this.conversationHistoryManager.saveHistory({ type: 'usermessage', content: badgesHtml });
-  }
-
-  public async initiateStatsFetch(queryName: string): Promise<void> {
-    if (!this.domManager) return;
-    this.domManager.appendHistoryItem({
-      type: 'ai',
-      content: `Fetching ${getFriendlyQueryName(queryName)}...`,
-      isStreaming: true
-    });
-    try {
-      const result = await this.statsFetcher.fetchStats(queryName);
-      this.handleStatsResult(result);
-    } catch (error) {
-      if (error instanceof AuthenticationRequiredError) {
-        await this.invokeAuthRedirect('fetchStats', { queryName }, error); 
-      } else {
-        customError("[FeedbackViewerImpl] Unexpected error during initiateStatsFetch:", error);
-        this.domManager.updateLastAIMessage(`Sorry, an unexpected error occurred while fetching stats.`, false);
-      }
-    }
-  }
-
-  private handleStatsResult(result: StatsFetcherResult): void {
-    if (!this.domManager) return;
-    if (result.success && result.markdownTable) {
-      this.domManager.updateLastAIMessage(result.markdownTable, false);
-    } else if (result.message) {
-      this.domManager.updateLastAIMessage(result.message, false);
-    } else {
-      this.domManager.updateLastAIMessage("Received an unrecognized response while fetching stats.", false);
-    }
   }
 
   private handleJsonPatch(patchEvent: { payload: any; originalHtml: string }): void {
@@ -1153,6 +1124,18 @@ Your job:
     this.domManager.showFooterCTA(false);
     this.domElements?.promptTextarea.focus();
 
+    // If this selection was initiated by the gallery, immediately fire the preview request
+    if (this.pendingGalleryComponentId) {
+      fetchComponentSnippet(
+        'gallery-preview',
+        this.pendingGalleryComponentId,
+        details.insertionMode,
+        'none'
+      );
+      // Clear pending state so future selections behave normally
+      this.pendingGalleryComponentId = null;
+    }
+
     if (this.queuedPromptText && this.domElements) {
       this.domElements.promptTextarea.value = this.queuedPromptText;
       this.queuedPromptText = null;
@@ -1291,5 +1274,167 @@ Your job:
     }
 
     this.domManager?.updateLoaderVisibility(false);
+  }
+
+  private handleGalleryItemClicked(componentId: string): void {
+    if (!this.selectionManager) {
+      customError('[CheckraImpl] SelectionManager not ready – cannot start insertion flow');
+      return;
+    }
+
+    this.pendingGalleryComponentId = componentId;
+
+    // Begin selection flow – when user finishes, prepareForInputFromSelection
+    // will be invoked and will trigger the snippet request automatically.
+    this.selectionManager.startElementSelection('replace', this.boundPrepareForInputFromSelection);
+  }
+
+  /**
+   * Fetches the snippet catalogue (cached in sessionStorage) and renders
+   * the component gallery inside the onboarding container.
+   */
+  private async loadComponentGallery(): Promise<void> {
+    if (!this.domElements?.onboardingContainer) return;
+
+    const container = this.domElements.onboardingContainer;
+    // Ensure vertical stacking of categories
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'stretch';
+
+    container.innerHTML = 'Loading components…';
+
+    try {
+      if (!this.snippetCatalogue) {
+        const resp = await fetch(`${Settings.API_URL}/snippets`);
+        if (!resp.ok) throw new Error(`Failed to fetch catalogue: ${resp.status}`);
+        this.snippetCatalogue = await resp.json();
+      }
+
+      if (!this.snippetCatalogue) throw new Error('No catalogue data');
+
+      // Build markup
+      const htmlParts: string[] = [];
+      Object.keys(this.snippetCatalogue).forEach((category) => {
+        htmlParts.push(`<h3 style="margin-top:1rem">${category.charAt(0).toUpperCase() + category.slice(1)}</h3>`);
+        htmlParts.push('<ul class="checkra-gallery-list" style="list-style:none;padding:0;">');
+        this.snippetCatalogue![category].forEach((entry: any) => {
+          const thumbAlt = entry.title || entry.displayName || entry.id;
+          const thumbHtml = entry.previewImg
+            ? `<img src="${entry.previewImg}" alt="${thumbAlt}" style="width:48px;height:32px;object-fit:cover;border-radius:4px;" />`
+            : `<div style="width:48px;height:32px;background:#555;border-radius:4px;"></div>`;
+
+          const displayLabel = entry.title || entry.displayName || entry.id;
+
+          htmlParts.push(`
+            <li style="margin:4px 0;">
+              <button class="checkra-gallery-item" data-category="${category}" data-component-id="${entry.id}" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:1px solid #444;border-radius:4px;background:#2b2b2b;color:#eee;cursor:pointer;">
+                ${thumbHtml}
+                <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${displayLabel}</span>
+              </button>
+            </li>
+          `);
+        });
+        htmlParts.push('</ul>');
+      });
+
+      container.innerHTML = htmlParts.join('\n');
+
+      // Delegate clicks
+      container.addEventListener('click', (e: Event) => {
+        const target = e.target as HTMLElement;
+        const button = target.closest('.checkra-gallery-item') as HTMLElement | null;
+        if (button) {
+          const compId = button.dataset['componentId'] || button.getAttribute('data-component-id');
+          if (compId) {
+            eventEmitter.emit('galleryItemClicked', { componentId: compId });
+          }
+        }
+      });
+
+    } catch (err) {
+      container.innerHTML = `<p style="color:red">Failed to load component catalogue.</p>`;
+      customError('[CheckraImpl] loadComponentGallery error:', err);
+    }
+  }
+
+  /** Handles opening the variant picker and subsequent selection */
+  private async handleAppliedFixVariant(fixId: string, anchorElement: HTMLElement): Promise<void> {
+    const fixInfo = this.appliedFixStore.get(fixId);
+    if (!fixInfo || !fixInfo.componentId) {
+      customWarn('[CheckraImpl] handleAppliedFixVariant invoked but fix has no componentId – ignoring.');
+      return;
+    }
+
+    // Ensure catalogue is loaded
+    if (!this.snippetCatalogue) {
+      try {
+        const resp = await fetch(`${Settings.API_URL}/snippets`);
+        if (!resp.ok) throw new Error(`Failed to fetch catalogue: ${resp.status}`);
+        this.snippetCatalogue = await resp.json();
+      } catch (err) {
+        customError('[CheckraImpl] Could not load snippet catalogue for variant picker:', err);
+        return;
+      }
+    }
+
+    if (!this.snippetCatalogue) return;
+
+    // Flatten catalogue entries
+    const allEntries: any[] = [];
+    Object.values(this.snippetCatalogue).forEach((arr: any) => {
+      if (Array.isArray(arr)) allEntries.push(...arr);
+    });
+
+    const currentEntry = allEntries.find((e) => e.id === fixInfo.componentId);
+    if (!currentEntry) {
+      customWarn('[CheckraImpl] Current snippet not found in catalogue – cannot show variants.');
+      return;
+    }
+
+    const componentKey = currentEntry.component;
+    const siblingVariants = allEntries.filter((e) => {
+      return e.component === componentKey && e.id !== fixInfo.componentId;
+    });
+
+    this.variantPicker.showVariantPopover(
+      anchorElement,
+      siblingVariants,
+      (selectedVariantId: string) => this.applyVariantSelection(fixId, selectedVariantId),
+      () => {/* no-op on close*/}
+    );
+  }
+
+  /** Executes variant swap workflow */
+  private applyVariantSelection(oldFixId: string, newComponentId: string): void {
+    const oldFixInfo = this.appliedFixStore.get(oldFixId);
+    if (!oldFixInfo) return;
+
+    const oldWrapperEl = oldFixInfo.appliedFixWrapperElement;
+    if (!oldWrapperEl) return;
+
+    // Remove old marker comments but keep wrapper for now
+    oldFixInfo.markerStartNode?.remove();
+    oldFixInfo.markerEndNode?.remove();
+
+    const newFixId = `checkra-fix-${Date.now()}`;
+    oldWrapperEl.setAttribute('data-checkra-fix-id', newFixId);
+
+    // Hide controls for the old fix (will be recreated when new variant applied)
+    this.overlayManager.hideControlsForFix(oldFixId);
+    this.appliedFixStore.delete(oldFixId);
+
+    // Prepare context for FixApplier via finalizeResponse later
+    this.currentFixIdForAI = newFixId;
+    // Keep the very first original HTML so that close reverts completely
+    this.originalOuterHTMLForAI = oldFixInfo.originalOuterHTML;
+    this.stableSelectorForAI = oldFixInfo.stableTargetSelector;
+    this.currentElementInsertionModeForAI = oldFixInfo.insertionMode;
+    this.targetElementForAI = oldWrapperEl;
+    this.currentResolvedColors = oldFixInfo.resolvedColors ?? null;
+    this.currentGenerationIdForAI = null;
+
+    // Fire the snippet fetch (will stream via SSE and finalizeResponse will apply)
+    fetchComponentSnippet('gallery-preview', newComponentId, oldFixInfo.insertionMode, 'none');
   }
 }

@@ -42,6 +42,8 @@ declare global {
 export interface AiSettings {
   model: string;
   temperature: number;
+  /** Optional copy quality mode (e.g. "none" for fast preview) */
+  copyQuality?: string;
 }
 
 // --- Updated and New Interfaces ---
@@ -71,9 +73,7 @@ export interface PageMetadata {
 export interface BackendPayloadMetadata extends PageMetadata {
   cssDigests?: any; // Consider defining a more specific type for cssDigests if possible
   frameworkDetection?: DetectedFramework;
-  uiKitDetection?: UiKitDetection;
   perfHints?: PerfHints;
-  leverValues?: LeverValues;
   computedBackgroundColor?: string;
 
   /**
@@ -81,24 +81,25 @@ export interface BackendPayloadMetadata extends PageMetadata {
    * variants, and Tailwind utility digest. This will supersede `sectionSamples`
    * once migration is complete.
    */
-  pageFingerprint?: PageFingerprint;
+  pageFingerprint?: PageFingerprint | null;
+
+  /** Whether the host site currently prefers a dark UI (class-based or meta). */
+  prefersDarkMode?: boolean;
+
+  /** Optional UI-kit detection result (internal, may be undefined) */
+  uiKitDetection?: any;
 }
 
 export interface GenerateSuggestionRequestbody {
   prompt: string;
   metadata: BackendPayloadMetadata;
-  snippetLayout: SnippetLayout;
   aiSettings: AiSettings;
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter';
-}
-
-export interface SnippetLayout {
-  /** combined class list for the outer container element (max-width, centering, padding) */
-  container: string | null;
-  /** optional single wrapper div utilities between container and grid/content */
-  wrapper: string | null;
-  /** first descendant that establishes grid/flex layout */
-  grid: string | null;
+  /** Optional component specification for snippet generation */
+  componentSpec?: {
+    id: string;
+    library: string;
+  };
 }
 
 export interface AddRatingRequestBody extends Omit<GenerateSuggestionRequestbody, 'aiSettings'> {
@@ -136,18 +137,7 @@ export interface PerfHints {
   canvasMs?: number;
 }
 
-export interface LeverValues {
-  spacingStep?: string;
-  depthPreset?: string;
-  motionPreset?: string;
-}
 // --- End Updated and New Interfaces ---
-
-export interface UiKitDetection {
-  name: 'material-ui' | 'flowbite' | 'preline' | 'ant-design' | 'chakra-ui' | 'mantine' | 'headless-ui' | 'react-bootstrap' | null;
-  confidence: number | null;
-  version?: string;
-}
 
 export interface DetectedFramework {
   name: 'tailwind' | 'bootstrap' | 'custom';
@@ -194,25 +184,32 @@ export interface GradientDescriptor {
 
 // --- UI-Fingerprint (v1) ---
 
+export type ContainerLayout = 'stack' | 'single' | 'grid';
+
 export interface ContainerFingerprint {
-  id: string; // Stable within one fingerprint payload (e.g. "c1")
-  /** Heuristic semantic role (hero, feature, body, contrast, …). May be "unknown" */
-  role: 'hero' | 'feature' | 'body' | 'contrast' | 'unknown' | string;
-  bgHex?: string;
-  textHex?: string;
-  headingHex?: string;
-  /** Raw Tailwind (or other) classes applied to the section wrapper. */
+  id: string;                 // "c1"
+  role: 'contrast';           // literal for v2
+  dominantBg: string;         // solid or opaque colour string
+  computedHeadingColor: string;
+  computedBodyColor: string;
+  computedMutedColor?: string;
   wrapperClasses: string[];
-  /** Simplified layout descriptor. */
-  layoutKind: 'stack' | 'grid' | 'feature' | 'single' | 'flex' | string;
-  /** First 250 chars of outer HTML (debug-only). */
-  sampleHtml?: string;
-  /** Hex colour → pixel area (capped & cleaned in sampler) */
-  bgHistogram?: Record<string, number>;
-  /** Total pixel area of this element (width × height) */
-  totalAreaPx?: number;
-  /** Most dominant surface hex (≥40 % share if present) */
-  dominantSurfaceHex?: string;
+  layoutKind: ContainerLayout;
+}
+
+export type AtomRole =
+  | 'buttonPrimary' | 'buttonSecondary' | 'buttonIcon'
+  | 'link' | 'navItem'
+  | 'heading' | 'bodyText' | 'caption'
+  | 'inputText' | 'textarea' | 'select'
+  | 'badge' | 'avatar'
+  | 'cardSurface' | 'elevatedSurface' | 'modalSurface';
+
+export interface AtomEntry {
+  id: string;         // "a1"
+  role: AtomRole;
+  containerId: string;
+  html: string;       // outerHTML snippet (≤2 KB)
 }
 
 export interface AtomInputVariant {
@@ -221,22 +218,13 @@ export interface AtomInputVariant {
   label?: string[];
 }
 
-export interface AtomsFingerprint {
-  inputLight?: AtomInputVariant;
-  inputDark?: AtomInputVariant;
-  buttonPrimary?: string[];
-  // Allow for arbitrary future keys
-  [key: string]: any;
-}
-
 export interface PageFingerprint {
-  fingerprintVersion: number;
+  fingerprintVersion: 2;
   containers: ContainerFingerprint[];
-  atoms: AtomsFingerprint;
-  tailwindTokens?: string[];
-  preferredContainer?: PreferredContainer;
-  textStyles?: TextStyles;
-  brandTokens?: BrandTokens;
+  atoms: AtomEntry[];
+
+  /** Whether the host site currently prefers a dark UI (class-based or meta). */
+  prefersDarkMode?: boolean;
   meta?: Record<string, any>;
 }
 
@@ -257,4 +245,13 @@ export interface BrandTokens {
   colors: string[];
   typography: string[];
   shapes: string[];
+}
+
+export type MoleculeRole = 'inputText' | 'buttonPrimary';
+
+export interface MoleculeSample {
+  role: MoleculeRole;
+  containerId: string;
+  wrapperHtml: string;
+  classes: string[];
 }

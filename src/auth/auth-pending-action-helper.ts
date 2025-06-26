@@ -2,7 +2,6 @@ import { customError, customWarn } from '../utils/logger';
 import { startLogin, isLoggedIn, AuthenticationRequiredError } from './auth';
 // import type { CheckraImplementation } from '../ui/checkra-impl'; // REMOVED
 import type { AppliedFixInfo } from '../ui/applied-fix-store';
-import { getFriendlyQueryName } from '../analytics/stats-fetcher';
 
 const PENDING_ACTION_TYPE_KEY = 'checkra_auth_pending_action_type';
 const PENDING_ACTION_DATA_KEY = 'checkra_auth_pending_action_data';
@@ -16,7 +15,6 @@ export interface PendingAction {
 export interface AuthCallbackInterface {
   renderUserMessage(message: string): void;
   showError(error: Error | string): void;
-  initiateStatsFetch(queryName: string): Promise<void>;
   handlePublishCommand(): Promise<void>;
   handleSaveDraftCommand(): Promise<void>;
   appliedFixStore: { // Simplified interface for what's needed from AppliedFixStore
@@ -149,15 +147,6 @@ export class AuthPendingActionHelper {
             await uiCallbacks.handlePublishCommand();
           } else if (actionType === 'saveDraft') {
             await uiCallbacks.handleSaveDraftCommand();
-          }
-          break;
-        case 'fetchStats':
-          if (actionData && typeof actionData.queryName === 'string') {
-            uiCallbacks.renderUserMessage(`Resuming stats fetch for ${getFriendlyQueryName(actionData.queryName)} after login...`);
-            await uiCallbacks.initiateStatsFetch(actionData.queryName);
-          } else {
-            customError('[AuthPendingActionHelper] Invalid or missing queryName for pending fetchStats action.');
-            uiCallbacks.showError('Could not restore stats fetch: missing query details.');
           }
           break;
         default:

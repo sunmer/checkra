@@ -2,15 +2,11 @@ import Settings from '../settings';
 import { getEffectiveApiKey, getCurrentAiSettings } from '../core/index';
 import { customWarn, customError } from '../utils/logger';
 import { detectCssFramework } from '../utils/framework-detector';
-import { detectUiKit } from '../utils/ui-kit-detector';
-import { generateColorScheme } from '../utils/color-utils';
-import { buildSnippetLayout } from '../utils/snippet-layout';
+import { generateColorScheme, parseColorString, rgbaToHex } from '../utils/color-utils';
 import {
-  GenerateSuggestionRequestbody,
   AddRatingRequestBody,
   PageMetadata,
   BackendPayloadMetadata,
-  UiKitDetection,
   DetectedFramework,
   GradientDescriptor
 } from '../types';
@@ -274,28 +270,44 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   // --- New brand colour & lever extraction ---
   try {
     const frameworkInfo = detectCssFramework();
-    const { colours, lever, perf } = await (await import('../utils/design-tokens')).resolveBrandColors(
+    const { colours } = await (await import('../utils/design-tokens')).resolveBrandColors(
       document.body,
       frameworkInfo,
       document.body.outerHTML,
       extractColorsFromElement
     );
     if (colours) {
+      // Helper to convert utility token to hex colour
+      const tokenToHex = (token: string): string | null => {
+        if (!token || token.startsWith('#')) return token;
+        if (!/^((text|bg|border)-[a-zA-Z0-9\-]+)/.test(token)) return token;
+        const span = document.createElement('span');
+        span.style.position = 'absolute';
+        span.style.left = '-9999px';
+        span.style.top = '-9999px';
+        span.className = token;
+        document.body.appendChild(span);
+        const colorStr = getComputedStyle(span).color;
+        document.body.removeChild(span);
+        const parsed = parseColorString(colorStr);
+        if (parsed) {
+          return rgbaToHex(parsed);
+        }
+        return null;
+      };
+
+      const resolvedPrimary = tokenToHex(colours.primary) || colours.primary;
+      const resolvedAccent = tokenToHex(colours.accent) || colours.accent;
+
       metadata.brand = {
         inferred: colours,
-        primary: colours.primary,
-        accent: colours.accent,
-        primaryUtilityToken: null,
-        accentUtilityToken : null,
+        primary: resolvedPrimary,
+        accent: resolvedAccent,
+        primaryUtilityToken: colours.primary,
+        accentUtilityToken: colours.accent,
       } as any;
     }
-    if (lever) {
-      // @ts-ignore attach custom for now; will be forwarded later
-      (metadata as any).leverValues = lever;
-    }
-    // Attach perfHints so backend can debug slow paths
-    // @ts-ignore
-    (metadata as any).perfHints = perf;
+    // perfHints retained only for client-side dev console – do not send to backend
     // generate palette if not already done
     if (metadata.brand && colours?.primary) {
         const palette = generateColorScheme(colours.primary, colours.accent);
@@ -308,21 +320,31 @@ const getPageMetadata = async (): Promise<PageMetadata> => {
   return metadata as PageMetadata;
 };
 
-/**
- * Base function for handling feedback/audit requests and streaming SSE responses.
- */
+interface ExtraRequestOptions {
+  componentSpec?: {
+    id: string;
+  };
+  /** Override or extend aiSettings for a specific generation */
+  aiSettingsOverride?: Partial<import('../types').AiSettings>;
+}
+
 const fetchFeedbackBase = async (
   apiUrl: string,
   promptText: string,
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
   imageDataUrl?: string | null,
-  computedBackgroundColor?: string | null,
-  generationId?: string | null
+  generationId?: string | null,
+  extras?: ExtraRequestOptions
 ): Promise<void> => {
   try {
     const pageMeta = await getPageMetadata(); // Renamed to pageMeta for clarity
-    const currentAiSettings = getCurrentAiSettings();
+    let currentAiSettings = getCurrentAiSettings();
+
+    // Apply any AI-settings overrides supplied for this call (e.g. gallery preview)
+    if (extras?.aiSettingsOverride) {
+      currentAiSettings = { ...currentAiSettings, ...extras.aiSettingsOverride } as any;
+    }
 
     let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
     let analysisBuffer = '';
@@ -331,9 +353,7 @@ const fetchFeedbackBase = async (
     let activeGradientDescriptor: GradientDescriptor | null = null;
 
     // These will now be part of BackendPayloadMetadata
-    let cssDigestsForPayload: CssContext['cssDigests'] | null = null;
     let frameworkDetectionForPayload: DetectedFramework | undefined = undefined;
-    let uiKitDetectionForPayload: UiKitDetection | undefined = undefined;
 
     // New page fingerprint sampler
     let pageFingerprintForPayload: import('../types').PageFingerprint | undefined = undefined;
@@ -346,48 +366,55 @@ const fetchFeedbackBase = async (
 
     if (sanitizedHtml) {
       const cssCtx = produceCssContext(sanitizedHtml);
-      cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
-      uiKitDetectionForPayload = detectUiKit(sanitizedHtml);
     } else {
       // No element selected, perform global detections
       frameworkDetectionForPayload = detectCssFramework(); // Global detection
-      uiKitDetectionForPayload = detectUiKit(); // Global detection (checks document.body)
-      const cssCtx = produceCssContext(''); // Produces empty tokens for the globally detected framework
-      cssDigestsForPayload = cssCtx.cssDigests;
     }
     
     // Construct BackendPayloadMetadata
     const backendMetadata: BackendPayloadMetadata = {
       ...pageMeta, // Spread PageMetadata
-      cssDigests: cssDigestsForPayload,
       frameworkDetection: frameworkDetectionForPayload,
-      uiKitDetection: uiKitDetectionForPayload,
-      computedBackgroundColor: computedBackgroundColor || undefined,
-      pageFingerprint: pageFingerprintForPayload,
+      pageFingerprint: pageFingerprintForPayload ?? null,
+      prefersDarkMode: document.documentElement.classList.contains('dark') || document.body.classList.contains('dark'),
     };
 
-    // Build snippetLayout as required by new backend contract
-    const snippetLayout = buildSnippetLayout(insertionMode, sanitizedHtml, pageFingerprintForPayload || null);
-
-    const requestBody: GenerateSuggestionRequestbody = {
+    const requestBody: any = {
       prompt: promptText,
       metadata: backendMetadata,
-      snippetLayout,
       aiSettings: currentAiSettings,
-      insertionMode: insertionMode
     };
 
+    if (!extras?.componentSpec) {
+      requestBody.insertionMode = insertionMode;
+    }
+
+    if (extras?.componentSpec) {
+      requestBody.componentSpec = extras.componentSpec;
+    }
+
     if (generationId) {
-      (requestBody as any).generationId = generationId;
+      requestBody.generationId = generationId;
     }
 
     if (serviceEventEmitter) {
       serviceEventEmitter.emit('requestBodyPrepared', requestBody);
     }
 
+    // --- Debug ------------------------------------------------------
+    customWarn('[AI Service] DEBUG – sending generateFull request', {
+      url: apiUrl,
+      prompt: promptText,
+      componentId: extras?.componentSpec?.id,
+      hasInsertionMode: !!requestBody.insertionMode
+    });
+
     const currentApiKey = getEffectiveApiKey();
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream'
+    };
     if (currentApiKey) {
       headers['Authorization'] = `Bearer ${currentApiKey}`;
     } else {
@@ -420,6 +447,8 @@ const fetchFeedbackBase = async (
       throw new Error("Response body is null, cannot process stream.");
     }
 
+    customWarn('[AI Service] DEBUG – SSE stream opened');
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -441,6 +470,7 @@ const fetchFeedbackBase = async (
       for (const line of lines) {
         if (line.startsWith('event:')) {
           currentEventType = line.substring(6).trim();
+          customWarn('[AI Service] DEBUG – event line', currentEventType);
         } else if (line.startsWith('data:')) {
           const jsonString = line.substring(5).trim();
           if (jsonString) {
@@ -454,6 +484,9 @@ const fetchFeedbackBase = async (
                 // For now, we will not process data without an explicit event type under the new model.
                 continue;
               }
+
+              // Verbose log of every parsed event
+              customWarn('[AI Service] DEBUG – parsed SSE event', currentEventType, parsedData);
 
               switch (currentEventType) {
                 case 'colors':
@@ -604,11 +637,10 @@ export const fetchFeedback = async (
   promptText: string,
   selectedHtml: string | null,
   insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
-  computedBackgroundColor?: string | null,
   generationId?: string | null
 ): Promise<void> => {
   const apiUrl = `${Settings.API_URL}/checkraCompletions/generateFull`;
-  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, computedBackgroundColor, generationId);
+  return fetchFeedbackBase(apiUrl, promptText, selectedHtml, insertionMode, imageDataUrl, generationId, undefined);
 };
 
 /**
@@ -684,3 +716,36 @@ function applyGradientToHtml(htmlString: string, gradientSpec: GradientDescripto
   }
   return wrapper.innerHTML;
 }
+
+/**
+ * Convenience wrapper for gallery snippet preview / confirm generation.
+ */
+export const fetchComponentSnippet = async (
+  prompt: 'gallery-preview' | 'gallery-confirm',
+  componentId: string,
+  insertionMode: 'replace' | 'insertBefore' | 'insertAfter',
+  copyQuality: 'none' | undefined = 'none'
+): Promise<void> => {
+  const apiUrl = `${Settings.API_URL}/checkraCompletions/generateFull`;
+  const aiSettingsOverride: Partial<import('../types').AiSettings> = {};
+  if (copyQuality) {
+    aiSettingsOverride.copyQuality = copyQuality;
+  }
+
+  const componentSpec = {
+    id: componentId
+  };
+
+  return fetchFeedbackBase(
+    apiUrl,
+    prompt,
+    null, // no selectedHtml for new insertions
+    insertionMode,
+    null,
+    null,
+    {
+      componentSpec,
+      aiSettingsOverride
+    }
+  );
+};

@@ -2,14 +2,15 @@ import { initCheckra } from './core/index';
 import './core/shortcut-handler';
 import { CheckraOptions } from './types';
 import { API_BASE } from './config';
-import { initAnalytics } from './analytics/analytics';
 import { customWarn, customError } from './utils/logger';
 import { fetchProtected, isLoggedIn } from './auth/auth';
 import { getSiteId } from './utils/id';
+import { ensureSharedCss } from './utils/checkra-style';
 
 // Re-export core functions and types
 export { initCheckra } from './core/index';
 export type { CheckraOptions } from './types';
+export { ensureSharedCss } from './utils/checkra-style';
 
 // --- Auto-initialization logic ---
 
@@ -224,7 +225,9 @@ function checkForCheckraIdInUrl(): void {
 // Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   checkForCheckraIdInUrl(); // Updated function call
-  initAnalytics();
+
+  // Auto-inject shared CSS for UMD builds
+  ensureSharedCss();
 
   const initialize = () => {
     // Check if already initialized

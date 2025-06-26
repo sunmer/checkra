@@ -35,9 +35,6 @@ export class CommandDispatcher {
       case '/help':
         this.checkraImpl.showOnboarding();
         return true;
-      case '/stats':
-        this.checkraImpl.displayStatsBadges();
-        return true;
       default:
         return false;
     }
