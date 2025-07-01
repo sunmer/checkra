@@ -114,3 +114,15 @@ export interface LeverValues {
   motionPreset?: string;
 }
 // --- End Updated and New Interfaces ---
+
+// --- Shared UI Types ---
+export interface ConversationItem {
+  type: 'user' | 'ai' | 'usermessage' | 'error';
+  content: string;
+  isStreaming?: boolean;
+  fix?: {
+    originalHtml: string;
+    fixedHtml: string;
+    fixId: string;
+  };
+}

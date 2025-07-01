@@ -1,17 +1,16 @@
-# Checkra: Your inline AI-based website editor
+# Checkra: Your inline AI-based growth copilot
 
-Ask for sharper design, stronger copy or entirely new sections for your existing website. Share the results and analyse the impact all from the same tool.
-
+Get copy and micro-UX improvements for your existing website. Share the results and analyse the impact all from the same tool.
 
 ## Key Features
 
-*   ✨ **AI Live Editor:** Instantly make, test and analyze UI & content changes using an intuitive AI sidebar – without leaving your own website. Say goodbye to slow PRs and clunky CMS workflows
-*   🚀 **Ship changes with one command:** Simply type `/publish` to generate a publicly shareable URL, or `/save` to create a private draft. A/B tests and demos made easy
-*   📊 **Built-in Analytics:** Automatically track variant performance and get key stats directly from the AI sidebar for quick, data-driven decisions
+*   ✨ **AI Live Editor:** Instantly make, test and analyze copy & micro-UX changes using an intuitive AI sidebar – without leaving your own website. Say goodbye to slow PRs and clunky CMS workflows
+*   🚀 **Ship changes with one command:** Simply type `/publish` to generate a publicly shareable URL, or `/save` to create a private draft
+
 
 ## Use cases
 * **Developers**: Rapid Prototyping & Validation of UI/UX hypotheses
-* **Designers**: Iterate on live UI visuals, saving devs from tedious pixel-pushing tickets
+* **Designers**: Iterate on live UI visuals, saving devs from back-and-forths
 * **Growth Teams**: Validate UI ideas quickly, preventing dev effort on unproven features
 
 ## Installation

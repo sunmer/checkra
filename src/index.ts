@@ -2,7 +2,6 @@ import { initCheckra } from './core/index';
 import './core/shortcut-handler';
 import { CheckraOptions } from './types';
 import { API_BASE } from './config';
-import { initAnalytics } from './analytics/analytics';
 import { customWarn, customError } from './utils/logger';
 import { fetchProtected, isLoggedIn } from './auth/auth';
 import { getSiteId } from './utils/id';
@@ -224,7 +223,6 @@ function checkForCheckraIdInUrl(): void {
 // Check if running in a browser environment
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   checkForCheckraIdInUrl(); // Updated function call
-  initAnalytics();
 
   const initialize = () => {
     // Check if already initialized

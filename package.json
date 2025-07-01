@@ -49,7 +49,6 @@
     "@tailwindcss/postcss": "^4.0.14",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^18.19.86",
-    "@types/pako": "^2.0.3",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.38.0",
     "postcss": "^8.4.39",
@@ -63,7 +62,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",
     "html2canvas": "^1.4.1",
-    "marked": "^15.0.8",
-    "pako": "^2.1.0"
+    "marked": "^15.0.8"
   }
 }

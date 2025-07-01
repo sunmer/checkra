@@ -301,10 +301,6 @@ const fetchFeedbackBase = async (
 
     let sanitizedHtml: string | null = selectedHtml ? selectedHtml.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') : null;
     let processedHtml = sanitizedHtml;
-    let originalSentHtmlForPatch: string | null = null;
-    let jsonPatchAccumulator: string = '';
-    let patchStartSeen: boolean = false;
-    let analysisAccumulator: string = '';
     
     // These will now be part of BackendPayloadMetadata
     let cssDigestsForPayload: any = null;
@@ -316,14 +312,7 @@ const fetchFeedbackBase = async (
       processedHtml = `${cssCtx.comment}\n${sanitizedHtml}`;
       cssDigestsForPayload = cssCtx.cssDigests;
       frameworkDetectionForPayload = cssCtx.frameworkDetection;
-      uiKitDetectionForPayload = sanitizedHtml ? detectUiKit(sanitizedHtml) : undefined; // Moved here
-
-      if (insertionMode === 'replace' && sanitizedHtml && sanitizedHtml.length >= 500) {
-        originalSentHtmlForPatch = sanitizedHtml;
-        customWarn('[AI Service] JSON Patch mode activated: insertionMode is replace and selectedHtml.length >= 500.');
-      } else if (insertionMode === 'replace') {
-        customWarn('[AI Service] Direct HTML replace mode activated: insertionMode is replace and selectedHtml.length < 500.');
-      }
+      uiKitDetectionForPayload = sanitizedHtml ? detectUiKit(sanitizedHtml) : undefined;
     } else {
       // Even if no HTML is selected, we might want to send framework/UI kit info if detected globally
       // For now, only produceCssContext is called if selectedHtml exists.
@@ -409,25 +398,16 @@ const fetchFeedbackBase = async (
               const jsonString = buffer.substring(5).trim();
               if (jsonString) {
                 const data = JSON.parse(jsonString);
-                if (originalSentHtmlForPatch) {
-                  if (typeof data.content === 'string') {
-                    jsonPatchAccumulator += data.content;
-                  }
-                } else if (data.type === 'json-patch') {
-                  let parsedPayload: any = jsonPatchAccumulator;
-                  try { parsedPayload = JSON.parse(jsonPatchAccumulator || jsonString); } catch (e) { /* ... */ }
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: data.payload || parsedPayload, originalHtml: originalSentHtmlForPatch });
+                if (data.type === 'json-patch') {
+                  let parsedPayload: any = data.payload;
+                  try { parsedPayload = JSON.parse(data.payload || jsonString); } catch (e) { /* ... */ }
+                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: data.originalHtml || '' });
                 } else if (data.content) {
                   if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', data.content);
                 } else { /* ... */ }
               }
             } catch (e) { /* ... */ }
           }
-        }
-        if (originalSentHtmlForPatch && jsonPatchAccumulator.length > 0) {
-          let parsedPayload: any = jsonPatchAccumulator;
-          try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-          if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
         }
         if (serviceEventEmitter) serviceEventEmitter.emit('aiFinalized');
         break;
@@ -446,7 +426,11 @@ const fetchFeedbackBase = async (
             if (jsonString) {
               const parsedData = JSON.parse(jsonString);
               if (currentEventType) {
-                if (currentEventType === 'domUpdateHtml') {
+                if (currentEventType === 'analysis') {
+                  if (parsedData.content && serviceEventEmitter) {
+                    serviceEventEmitter.emit('aiResponseChunk', parsedData.content);
+                  }
+                } else if (currentEventType === 'domUpdateHtml') {
                   if (parsedData.html && parsedData.insertionMode) {
                     if (serviceEventEmitter) {
                       serviceEventEmitter.emit('aiDomUpdateReceived', {
@@ -458,52 +442,14 @@ const fetchFeedbackBase = async (
                     customWarn('[AI Service] Received domUpdateHtml event with missing html or insertionMode:', parsedData);
                   }
                 } else {
+                  // For unforeseen named events, just forward them generically.
                   if (serviceEventEmitter) {
                     serviceEventEmitter.emit(currentEventType, parsedData);
                   }
                 }
                 currentEventType = null;
               } else {
-                if (parsedData.type === 'json-patch') {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiJsonPatch', { payload: parsedData.payload, originalHtml: originalSentHtmlForPatch || '' });
-                } else if (originalSentHtmlForPatch) {
-                  const raw = parsedData.content;
-                  const cleaned = typeof raw === 'string' ? raw.replace(/\u001b/g, '') : '';
-
-                  if (patchStartSeen) { 
-                      jsonPatchAccumulator += cleaned;
-                  } else { // Still in analysis phase for this patch mode request
-                      analysisAccumulator += cleaned; // Accumulate for the complete record, potentially used by end-of-stream handler
-
-                      const markerIndexInCleaned = cleaned.indexOf('[PATCH_START]');
-
-                      if (markerIndexInCleaned !== -1) { // Marker is in the current chunk
-                          const preMarkerTextInChunk = cleaned.substring(0, markerIndexInCleaned);
-                          if (preMarkerTextInChunk.trim().length > 0 && serviceEventEmitter) {
-                              serviceEventEmitter.emit('aiResponseChunk', preMarkerTextInChunk); // Stream this part of analysis
-                          }
-                          patchStartSeen = true;
-                          const postMarkerTextInChunk = cleaned.substring(markerIndexInCleaned + '[PATCH_START]'.length);
-                          if (postMarkerTextInChunk.length > 0) {
-                              jsonPatchAccumulator += postMarkerTextInChunk;
-                          }
-                          // analysisAccumulator has served its purpose for streaming leading up to the marker found in *this chunk*.
-                          // The full analysisAccumulator (if stream ends before marker) is handled by end-of-stream logic.
-                      } else { // No marker in this specific 'cleaned' chunk, so it's purely analysis to be streamed
-                          if (cleaned.trim().length > 0 && serviceEventEmitter) {
-                              serviceEventEmitter.emit('aiResponseChunk', cleaned); // Stream this analysis chunk
-                          }
-                      }
-                  }
-                } else if (parsedData.userMessage) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiUserMessage', parsedData.userMessage);
-                } else if (parsedData.content) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiResponseChunk', parsedData.content);
-                } else if (parsedData.error) {
-                  if (serviceEventEmitter) serviceEventEmitter.emit('aiError', `Stream Error: ${parsedData.error}${parsedData.details ? ' - ' + parsedData.details : ''}`);
-                } else { 
-                  // customWarn('[AI Service] Received unhandled data structure in SSE stream:', parsedData);
-                }
+                // No currentEventType – ignore (protocol guarantees named events).
               }
             }
           } catch (e) {
@@ -512,16 +458,6 @@ const fetchFeedbackBase = async (
           }
         }
       }
-    }
-
-    if (originalSentHtmlForPatch && !patchStartSeen && analysisAccumulator.trim().length > 0 && serviceEventEmitter) {
-      serviceEventEmitter.emit('aiResponseChunk', analysisAccumulator);
-    }
-
-    if (originalSentHtmlForPatch && patchStartSeen && jsonPatchAccumulator.length > 0 && serviceEventEmitter) {
-      let parsedPayload: any = jsonPatchAccumulator;
-      try { parsedPayload = JSON.parse(jsonPatchAccumulator); } catch (e) { /* ... */ }
-      serviceEventEmitter.emit('aiJsonPatch', { payload: parsedPayload, originalHtml: originalSentHtmlForPatch });
     }
   } catch (error) {
     customError("Error in fetchFeedbackBase:", error);
