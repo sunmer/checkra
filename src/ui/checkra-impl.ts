@@ -63,6 +63,13 @@ export class CheckraImplementation {
   private boundHandleSubmit = this.handleSubmit.bind(this);
   private boundHandleMiniSelectClick = this.handleMiniSelectClick.bind(this);
   private boundHandleSettingsClick = this.handleSettingsClick.bind(this);
+  private boundHandleAuditClick = this.handleAuditClick.bind(this);
+
+  private auditSectionInfo: Map<number, { selector: string; originalHtml: string }> = new Map();
+
+  private boundHandleAuditComplete = this.handleAuditComplete.bind(this);
+
+  private boundHandleAuditError = (p: any) => this.showError(`Audit error (section ${p.section}): ${p.message}`);
 
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
@@ -106,6 +113,7 @@ export class CheckraImplementation {
     this.domElements.submitButton.addEventListener('click', this.boundHandleSubmit);
     this.domElements.miniSelectButton?.addEventListener('click', this.boundHandleMiniSelectClick);
     this.domElements.settingsButton?.addEventListener('click', this.boundHandleSettingsClick);
+    this.domElements.auditButton?.addEventListener('click', this.boundHandleAuditClick);
     
     eventEmitter.on('aiResponseChunk', this.boundUpdateResponse);
     eventEmitter.on('aiUserMessage', this.boundRenderUserMessage);
@@ -117,6 +125,12 @@ export class CheckraImplementation {
     eventEmitter.on('aiJsonPatch', this.boundHandleJsonPatch);
     eventEmitter.on('aiDomUpdateReceived', this.boundHandleDomUpdate);
     eventEmitter.on('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
+    eventEmitter.on('auditRatingReceived', this.handleAuditRating.bind(this));
+    eventEmitter.on('auditAnalysisReceived', this.handleAuditAnalysis.bind(this));
+    eventEmitter.on('auditDomUpdateReceived', this.handleAuditDomUpdate.bind(this));
+    eventEmitter.on('auditError', this.boundHandleAuditError);
+    eventEmitter.on('auditComplete', this.boundHandleAuditComplete);
+    eventEmitter.on('runAuditRequested', this.boundHandleAuditClick);
 
     this.addGlobalListeners();
 
@@ -159,6 +173,12 @@ export class CheckraImplementation {
     eventEmitter.off('aiJsonPatch', this.boundHandleJsonPatch);
     eventEmitter.off('aiDomUpdateReceived', this.boundHandleDomUpdate);
     eventEmitter.off('requestBodyPrepared', this.boundHandleRequestBodyPrepared);
+    eventEmitter.off('auditRatingReceived', this.handleAuditRating as any);
+    eventEmitter.off('auditAnalysisReceived', this.handleAuditAnalysis as any);
+    eventEmitter.off('auditDomUpdateReceived', this.handleAuditDomUpdate as any);
+    eventEmitter.off('auditError', this.boundHandleAuditError);
+    eventEmitter.off('auditComplete', this.boundHandleAuditComplete);
+    eventEmitter.off('runAuditRequested', this.boundHandleAuditClick);
 
     this.domElements = null;
     this.domManager = null;
@@ -733,5 +753,90 @@ export class CheckraImplementation {
     } catch {
       return null;
     }
+  }
+
+  private handleAuditClick(): void {
+    if (!this.domManager) return;
+    const sections = this.scanAboveFoldSections();
+    if (sections.length === 0) {
+      this.showError('No sections found above the fold.');
+      return;
+    }
+    // Map for later look-up
+    this.auditSectionInfo.clear();
+    sections.forEach(sec => {
+      this.auditSectionInfo.set(sec.idx, { selector: sec.selector, originalHtml: sec.originalHtml });
+    });
+    // Show spinner and history entry
+    this.domManager.updateLoaderVisibility(true, 'Auditing page…');
+    this.conversationController.addUserMessage('/audit');
+    this.domManager.appendHistoryItem({ type: 'user', content: 'Running quick audit…' });
+    // fire request
+    import('../services/ai-service').then(mod => {
+      (mod as any).fetchAudit(sections);
+    });
+  }
+
+  private scanAboveFoldSections(): Array<{ idx: number; selector: string; html: string; originalHtml: string }> {
+    const secs: any[] = [];
+    const foldY = window.scrollY + window.innerHeight * 1.1;
+    let idx = 0;
+    const elements = Array.from(document.querySelectorAll('section, header, main, article, div')) as HTMLElement[];
+    elements.forEach(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < foldY && rect.bottom > 0 && rect.height > 60 && rect.width > 200) {
+        const selector = this.generateSelectorForElement(el);
+        if (!selector) return;
+        const html = this.fixManager.preprocessHtmlForAI(el.outerHTML);
+        secs.push({ idx: idx++, selector, html, originalHtml: el.outerHTML });
+      }
+    });
+    return secs;
+  }
+
+  private generateSelectorForElement(el: Element): string | null {
+    try {
+      return generateStableSelector(el);
+    } catch {
+      return null;
+    }
+  }
+
+  private handleAuditRating(payload: any): void {
+    const { section, scores } = payload;
+    const content = `Section ${section} scorecard:\n• Message clarity: ${scores.messageClarity}\n• Action strength: ${scores.actionStrength}\n• Trust & credibility: ${scores.trustCredibility}\n• Reading ease: Grade ${scores.readingEase}`;
+    this.conversationController.append({ type: 'ai', content });
+    this.domManager?.appendHistoryItem({ type: 'ai', content });
+  }
+
+  private handleAuditAnalysis(payload: any): void {
+    const { section, content } = payload;
+    const msg = `Section ${section} analysis:\n${content}`;
+    this.conversationController.append({ type: 'ai', content: msg });
+    this.domManager?.appendHistoryItem({ type: 'ai', content: msg });
+  }
+
+  private handleAuditDomUpdate(payload: any): void {
+    const { section, html, insertionMode } = payload;
+    const info = this.auditSectionInfo.get(section);
+    if (!info) return;
+    const fixId = `audit-${section}`;
+    // Ensure the target element is marked for FixManager lookup
+    const targetElement = document.querySelector(info.selector);
+    if (targetElement) {
+      (targetElement as HTMLElement).setAttribute('data-checkra-fix-id', fixId);
+    }
+    this.fixManager.applyFix(
+      fixId,
+      info.originalHtml,
+      html,
+      insertionMode,
+      { prompt: '/audit', metadata: {} as any, aiSettings: { model: 'gpt-4o-mini', temperature: 0.7 }, insertionMode } as any,
+      info.selector
+    );
+  }
+
+  private handleAuditComplete(): void {
+    this.domManager?.updateLoaderVisibility(false);
   }
 }

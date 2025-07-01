@@ -113,6 +113,16 @@ export interface LeverValues {
   depthPreset?: string;
   motionPreset?: string;
 }
+
+// -------- Audit Types ---------
+export interface SectionScoreCard {
+  messageClarity: 'A' | 'B' | 'C' | 'D' | 'F';
+  actionStrength: number; // 0-100
+  trustCredibility: number; // 0-100
+  readingEase: number; // grade level 3-12
+}
+// --------------------------------
+
 // --- End Updated and New Interfaces ---
 
 // --- Shared UI Types ---

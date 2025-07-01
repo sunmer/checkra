@@ -533,3 +533,111 @@ export function initializeAiServiceListeners(emitter: any): void {
     sendFixRating(payload);
   });
 }
+
+// ---------------------- NEW AUDIT API ---------------------------
+
+export interface AuditSectionPayload {
+  idx: number;
+  selector: string;
+  html: string;
+  boundingRect?: { top: number; left: number; width: number; height: number };
+}
+
+export const fetchAudit = async (
+  sections: AuditSectionPayload[],
+  aiSettings?: Partial<import('../types').AiSettings>
+): Promise<void> => {
+  try {
+    if (!sections || sections.length === 0) {
+      throw new Error('No sections provided for audit.');
+    }
+
+    const pageMeta = await getPageMetadata();
+    const currentAiSettings = aiSettings ? { ...getCurrentAiSettings(), ...aiSettings } : getCurrentAiSettings();
+
+    const requestBody: any = {
+      audit: true,
+      sections: sections.map(s => ({ idx: s.idx, selector: s.selector, html: s.html, boundingRect: s.boundingRect })),
+      metadata: pageMeta,
+      aiSettings: currentAiSettings,
+    };
+
+    const currentApiKey = getEffectiveApiKey();
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (currentApiKey) headers['Authorization'] = `Bearer ${currentApiKey}`;
+
+    const response = await fetch(`${Settings.API_URL}/checkraCompletions/audit`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Audit request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let currentEventType: string | null = null;
+
+    const emit = (type: string, data: any) => {
+      if (serviceEventEmitter) serviceEventEmitter.emit(type, data);
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        if (buffer.trim()) {
+          if (buffer.startsWith('data:')) {
+            try {
+              const jsonString = buffer.substring(5).trim();
+              if (jsonString) {
+                const parsed = JSON.parse(jsonString);
+                if (currentEventType) emit(mapAuditEvent(currentEventType), parsed);
+              }
+            } catch {}
+          }
+        }
+        emit('auditComplete', { totalSections: sections.length });
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          currentEventType = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          try {
+            const jsonString = line.substring(5).trim();
+            if (!jsonString) continue;
+            const parsedData = JSON.parse(jsonString);
+            if (currentEventType) {
+              emit(mapAuditEvent(currentEventType), parsedData);
+              currentEventType = null;
+            }
+          } catch (err) {
+            emit('auditError', { section: -1, message: `Parse error: ${err instanceof Error ? err.message : String(err)}` });
+            currentEventType = null;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    if (serviceEventEmitter) serviceEventEmitter.emit('auditError', { section: -1, message: err instanceof Error ? err.message : String(err) });
+  }
+};
+
+function mapAuditEvent(evt: string): string {
+  switch (evt) {
+    case 'rating': return 'auditRatingReceived';
+    case 'analysis': return 'auditAnalysisReceived';
+    case 'domUpdateHtml': return 'auditDomUpdateReceived';
+    case 'auditError': return 'auditError';
+    case 'auditComplete': return 'auditComplete';
+    default: return evt;
+  }
+}
