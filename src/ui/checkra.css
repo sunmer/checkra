@@ -115,7 +115,8 @@
 /* Common style for buttons, now without absolute positioning */
 .checkra-feedback-applied-fix .feedback-fix-close-btn,
 .checkra-feedback-applied-fix .feedback-fix-copy-btn,
-.checkra-feedback-applied-fix .feedback-fix-toggle {
+.checkra-feedback-applied-fix .feedback-fix-toggle,
+.checkra-feedback-applied-fix .feedback-fix-info-btn {
   width: 20px;
   height: 20px;
   background-color: rgba(50, 50, 50, 0.5);
@@ -139,7 +140,8 @@
 
 .checkra-feedback-applied-fix .feedback-fix-close-btn:hover,
 .checkra-feedback-applied-fix .feedback-fix-copy-btn:hover,
-.checkra-feedback-applied-fix .feedback-fix-toggle:hover {
+.checkra-feedback-applied-fix .feedback-fix-toggle:hover,
+.checkra-feedback-applied-fix .feedback-fix-info-btn:hover {
   transform: scale(1.1);
 }
 
@@ -173,7 +175,8 @@
 
 /* Icon sizing within buttons */
 .checkra-feedback-applied-fix .feedback-fix-copy-btn svg,
-.checkra-feedback-applied-fix .feedback-fix-toggle svg {
+.checkra-feedback-applied-fix .feedback-fix-toggle svg,
+.checkra-feedback-applied-fix .feedback-fix-info-btn svg {
   width: 12px;
   height: 12px;
   stroke: currentColor;
@@ -1269,4 +1272,41 @@
   background: #2563eb;
   color: #fff;
   border-color: #2563eb;
+}
+
+.checkra-feedback-applied-fix .feedback-rating-feedback-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #666;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+/* --- Styles for audit INFO overlay --- */
+.checkra-feedback-applied-fix .feedback-fix-info-overlay {
+  position: absolute;
+  bottom: 30px; /* place above control bar */
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 260px;
+  background-color: rgba(30,30,30,0.95);
+  border: 1px solid rgba(80,80,80,0.9);
+  border-radius: 16px;
+  padding: 8px 10px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+  font-size: 12px;
+  color: #eee;
+  z-index: 20;
+}
+
+.checkra-feedback-applied-fix .feedback-fix-info-overlay div {
+  margin-bottom: 6px;
+}
+
+.checkra-feedback-applied-fix .feedback-fix-info-overlay div:last-child {
+  margin-bottom: 0;
 }

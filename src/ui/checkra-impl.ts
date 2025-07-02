@@ -65,7 +65,7 @@ export class CheckraImplementation {
   private boundHandleSettingsClick = this.handleSettingsClick.bind(this);
   private boundHandleAuditClick = this.handleAuditClick.bind(this);
 
-  private auditSectionInfo: Map<number, { selector: string; originalHtml: string }> = new Map();
+  private auditSectionInfo: Map<number, { selector: string; originalHtml: string; scores?: import('../types').SectionScoreCard; analysis?: string }> = new Map();
 
   private boundHandleAuditComplete = this.handleAuditComplete.bind(this);
 
@@ -77,7 +77,9 @@ export class CheckraImplementation {
     enableRating: boolean = false
   ) {
     this.optionsInitialVisibility = initialVisibilityFromOptions;
-    this.enableRating = enableRating;
+    // Enable rating automatically when running via Vite dev server (import.meta.env.DEV === true)
+    const isDevBuild = typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.DEV;
+    this.enableRating = enableRating || isDevBuild;
 
     this.conversationController.clear();
 
@@ -778,20 +780,88 @@ export class CheckraImplementation {
   }
 
   private scanAboveFoldSections(): Array<{ idx: number; selector: string; html: string; originalHtml: string }> {
-    const secs: any[] = [];
-    const foldY = window.scrollY + window.innerHeight * 1.1;
-    let idx = 0;
-    const elements = Array.from(document.querySelectorAll('section, header, main, article, div')) as HTMLElement[];
-    elements.forEach(el => {
+    const results: { idx: number; selector: string; html: string; originalHtml: string }[] = [];
+    const foldY = window.scrollY + window.innerHeight;
+    const bodyWidth = document.body.clientWidth;
+
+    const blocks = Array.from(document.querySelectorAll('section, header, main, article, div')) as HTMLElement[];
+
+    const viewportHeight = window.innerHeight;
+
+    // Heuristic rules:
+    // 1. Element must be in the top viewport (any overlap with fold)
+    // 2. Not the Checkra panel
+    // 3. Min height & width
+    // 4. Not gigantic (> 1.8 × viewport height)
+    // 5. Sufficient text
+    const qualifies = (el: HTMLElement): boolean => {
+      if (el.closest('#checkra-feedback-viewer')) return false;
       const rect = el.getBoundingClientRect();
-      if (rect.top < foldY && rect.bottom > 0 && rect.height > 60 && rect.width > 200) {
-        const selector = this.generateSelectorForElement(el);
-        if (!selector) return;
-        const html = this.fixManager.preprocessHtmlForAI(el.outerHTML);
-        secs.push({ idx: idx++, selector, html, originalHtml: el.outerHTML });
-      }
+      if (rect.top >= foldY || rect.bottom <= 0) return false;
+      if (rect.height < 80) return false;
+      if (rect.height > viewportHeight * 1.8) return false; // too tall – likely outer wrapper
+      if (rect.width / bodyWidth < 0.6) return false;
+      if (el.innerText.trim().length < 40) return false;
+      return true;
+    };
+
+    let candidates = blocks.filter(qualifies);
+
+    // Prefer deeper (more specific) elements by sorting: first by top, then by depth(desc), then by height
+    candidates.sort((a, b) => {
+      const ta = a.getBoundingClientRect().top;
+      const tb = b.getBoundingClientRect().top;
+      if (Math.abs(ta - tb) > 5) return ta - tb;
+      const depthA = getDomDepth(a);
+      const depthB = getDomDepth(b);
+      if (depthA !== depthB) return depthB - depthA; // deeper first
+      return a.getBoundingClientRect().height - b.getBoundingClientRect().height;
     });
-    return secs;
+
+    const picked: HTMLElement[] = [];
+    let idx = 0;
+    for (const el of candidates) {
+      if (picked.some(p => p.contains(el) || el.contains(p))) continue; // avoid ancestor/descendant of picked
+      const selector = this.generateSelectorForElement(el);
+      if (!selector) continue;
+      // Store the original HTML BEFORE adding the placeholder attribute
+      const originalHtml = el.outerHTML;
+      el.setAttribute('data-checkra-fix-id', `audit-placeholder-${idx}`);
+      const html = this.fixManager.preprocessHtmlForAI(el.outerHTML);
+      results.push({ idx, selector, html, originalHtml });
+      picked.push(el);
+      idx++;
+      if (idx >= 3) break;
+    }
+
+    function getDomDepth(node: HTMLElement): number {
+      let depth = 0;
+      let current: HTMLElement | null = node;
+      while (current && current.parentElement) {
+        depth++;
+        current = current.parentElement as HTMLElement;
+      }
+      return depth;
+    }
+
+    // If no candidate picked, fallback to largest block above fold (unchanged)
+    if (results.length === 0) {
+      const largest = blocks
+        .filter(el => el.getBoundingClientRect().top < foldY)
+        .sort((a, b) => (b.getBoundingClientRect().width * b.getBoundingClientRect().height) - (a.getBoundingClientRect().width * a.getBoundingClientRect().height))[0];
+      if (largest) {
+        const selector = this.generateSelectorForElement(largest);
+        if (selector) {
+          // Store the original HTML BEFORE adding the placeholder attribute
+          const originalHtml = largest.outerHTML;
+          largest.setAttribute('data-checkra-fix-id', 'audit-placeholder-0');
+          const html = this.fixManager.preprocessHtmlForAI(largest.outerHTML);
+          results.push({ idx:0, selector, html, originalHtml });
+        }
+      }
+    }
+
+    return results;
   }
 
   private generateSelectorForElement(el: Element): string | null {
@@ -807,6 +877,11 @@ export class CheckraImplementation {
     const content = `Section ${section} scorecard:\n• Message clarity: ${scores.messageClarity}\n• Action strength: ${scores.actionStrength}\n• Trust & credibility: ${scores.trustCredibility}\n• Reading ease: Grade ${scores.readingEase}`;
     this.conversationController.append({ type: 'ai', content });
     this.domManager?.appendHistoryItem({ type: 'ai', content });
+    const info = this.auditSectionInfo.get(section);
+    if (info) {
+      info.scores = scores;
+      this.auditSectionInfo.set(section, info);
+    }
   }
 
   private handleAuditAnalysis(payload: any): void {
@@ -814,10 +889,16 @@ export class CheckraImplementation {
     const msg = `Section ${section} analysis:\n${content}`;
     this.conversationController.append({ type: 'ai', content: msg });
     this.domManager?.appendHistoryItem({ type: 'ai', content: msg });
+    const info = this.auditSectionInfo.get(section);
+    if (info) {
+      info.analysis = content;
+      this.auditSectionInfo.set(section, info);
+    }
   }
 
   private handleAuditDomUpdate(payload: any): void {
     const { section, html, insertionMode } = payload;
+    console.log('[Audit] domUpdateReceived', { section, insertionMode });
     const info = this.auditSectionInfo.get(section);
     if (!info) return;
     const fixId = `audit-${section}`;
@@ -826,14 +907,33 @@ export class CheckraImplementation {
     if (targetElement) {
       (targetElement as HTMLElement).setAttribute('data-checkra-fix-id', fixId);
     }
+    const cleanedHtml = this.fixManager.postprocessHtmlFromAI(
+      html.replace(/\[\.\.\.content trimmed.*?\]/gi, '')
+    );
+    
+    // Remove any audit placeholder attributes from the raw HTML string
+    const finalCleanedHtml = cleanedHtml.replace(/\s*data-checkra-fix-id="audit-placeholder-\d+"/g, '');
+    
+    console.log('[Audit] cleanedHtml length', cleanedHtml.length);
+
+    // Pass scores/analysis if already available so the info button renders immediately
     this.fixManager.applyFix(
       fixId,
       info.originalHtml,
-      html,
+      finalCleanedHtml,
       insertionMode,
       { prompt: '/audit', metadata: {} as any, aiSettings: { model: 'gpt-4o-mini', temperature: 0.7 }, insertionMode } as any,
-      info.selector
+      info.selector,
+      info.scores,
+      info.analysis
     );
+
+    // If analysis comes later, we'll update the stored fixInfo (button already exists)
+    const fixInfo = this.fixManager.getAppliedFixes().get(fixId);
+    if (fixInfo) {
+      if (info.scores) fixInfo.auditScores = info.scores;
+      if (info.analysis) fixInfo.auditAnalysis = info.analysis;
+    }
   }
 
   private handleAuditComplete(): void {
