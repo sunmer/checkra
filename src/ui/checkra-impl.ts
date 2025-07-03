@@ -71,6 +71,9 @@ export class CheckraImplementation {
 
   private boundHandleAuditError = (p: any) => this.showError(`Audit error (section ${p.section}): ${p.message}`);
 
+  // Page scan loader
+  private pageScanLoaderElement: HTMLDivElement | null = null;
+
   constructor(
     private onToggleCallback: (isVisible: boolean) => void,
     initialVisibilityFromOptions: boolean = false,
@@ -759,6 +762,8 @@ export class CheckraImplementation {
 
   private handleAuditClick(): void {
     if (!this.domManager) return;
+    // Show page scan loader
+    this.showPageScanLoader();
     const sections = this.scanAboveFoldSections();
     if (sections.length === 0) {
       this.showError('No sections found above the fold.');
@@ -916,6 +921,9 @@ export class CheckraImplementation {
     
     console.log('[Audit] cleanedHtml length', cleanedHtml.length);
 
+    // First response -> hide scan loader
+    this.hidePageScanLoader();
+
     // Pass scores/analysis if already available so the info button renders immediately
     this.fixManager.applyFix(
       fixId,
@@ -938,5 +946,20 @@ export class CheckraImplementation {
 
   private handleAuditComplete(): void {
     this.domManager?.updateLoaderVisibility(false);
+    this.hidePageScanLoader();
+  }
+
+  private showPageScanLoader(): void {
+    const bar = document.createElement('div');
+    bar.className = 'checkra-page-scan-bar';
+    document.body.appendChild(bar);
+    this.pageScanLoaderElement = bar;
+  }
+
+  private hidePageScanLoader(): void {
+    if (this.pageScanLoaderElement) {
+      this.pageScanLoaderElement.remove();
+      this.pageScanLoaderElement = null;
+    }
   }
 }

@@ -1568,3 +1568,23 @@
   background-color: #505772 !important;
   color: #fff !important;
 }
+
+/* ---------- Page Scan Loader ---------- */
+@keyframes checkra-page-scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.checkra-page-scan-bar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 6px;
+  background-color: #2563eb;
+  box-shadow: 0 0 12px rgba(37,99,235,0.6);
+  opacity: 0.95;
+  z-index: 2147483646; /* Just below viewer */
+  animation: checkra-page-scan 4s linear infinite;
+  pointer-events: none;
+}
