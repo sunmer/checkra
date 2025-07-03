@@ -7,8 +7,8 @@ import { eventEmitter } from '../core/index';
 import { generateStableSelector } from '../utils/selector-utils';
 import { API_BASE } from '../config';
 import { getSiteId } from '../utils/id';
-import { fetchProtected, AuthenticationRequiredError, logout, startLogin, isLoggedIn } from '../auth/auth';
-import { customWarn, customError } from '../utils/logger';
+import { fetchProtected, logout, isLoggedIn } from '../auth/auth';
+import { customError } from '../utils/logger';
 import { GenerateSuggestionRequestbody, ConversationItem } from '../types';
 import { ConversationController } from './checkra-conversation';
 import { FixManager, createCenteredLoaderElement } from './checkra-fix-manager';
@@ -566,17 +566,6 @@ export class CheckraImplementation {
     }
   }
 
-  private async handleAuthenticationRequiredAndRedirect(actionType: string, actionData: any, authError: AuthenticationRequiredError): Promise<void> {
-    try {
-      localStorage.setItem(PENDING_ACTION_TYPE_KEY, actionType);
-      if (actionData) localStorage.setItem(PENDING_ACTION_DATA_KEY, JSON.stringify(actionData));
-      const loginUrl = authError.loginUrl ?? await startLogin();
-      if (loginUrl) window.location.href = loginUrl as any;
-    } catch (e) {
-      this.showError('Could not prepare for login.');
-    }
-  }
-
   private async handlePendingActionAfterLogin(): Promise<void> {
     const actionType = localStorage.getItem(PENDING_ACTION_TYPE_KEY);
     if (!actionType || !(await isLoggedIn())) return;
@@ -903,7 +892,7 @@ export class CheckraImplementation {
 
   private handleAuditDomUpdate(payload: any): void {
     const { section, html, insertionMode } = payload;
-    console.log('[Audit] domUpdateReceived', { section, insertionMode });
+    
     const info = this.auditSectionInfo.get(section);
     if (!info) return;
     const fixId = `audit-${section}`;
@@ -919,8 +908,6 @@ export class CheckraImplementation {
     // Remove any audit placeholder attributes from the raw HTML string
     const finalCleanedHtml = cleanedHtml.replace(/\s*data-checkra-fix-id="audit-placeholder-\d+"/g, '');
     
-    console.log('[Audit] cleanedHtml length', cleanedHtml.length);
-
     // First response -> hide scan loader
     this.hidePageScanLoader();
 

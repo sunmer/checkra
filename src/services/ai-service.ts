@@ -513,7 +513,6 @@ export const sendFixRating = async (feedbackPayload: AddRatingRequestBody): Prom
       }
       throw new Error(specificErrorMessage);
     }
-    console.log('[AI Service] Fix rating submitted successfully.');
 
   } catch (error) {
     customError("Error in sendFixRating:", error);
