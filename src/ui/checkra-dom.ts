@@ -472,19 +472,15 @@ export class CheckraDOM {
   private createOnboardingView(): string {
 
     const markdownContent = `
-### Welcome to Checkra!
-Use this panel to edit your website with AI, ship variations, and analyze what works.
-
 **How to get started:**
 * <a href="#" class="quick-audit-button onboarding-run-audit"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check-icon lucide-shield-check" style="margin-right:6px; vertical-align:middle;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg>Run a quick page audit</a>
 * Or try one of these prompts:
 
-* <span class="onboarding-suggestion" data-prompt="Change this headline to be more exciting">Change this headline to be more exciting</span>
-* <span class="onboarding-suggestion" data-prompt="Improve the visual design here">Improve the visual design here</span>
-* <span class="onboarding-suggestion" data-prompt="Rewrite this hero section">Rewrite this hero section</span>
+* <span class="onboarding-suggestion" data-prompt="Improve this headline">Improve this headline</span>
+* <span class="onboarding-suggestion" data-prompt="Review this section for conversion">Review this section for conversion</span>
 
 * Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/publish</kbd> to get a shareable url for your changes
-* Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> for all commands.
+* Open this panel anytime by pressing <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">Shift</kbd> twice quickly. Type <kbd style="background: #333; padding: 1px 4px; border-radius: 3px; border: 1px solid #555;">/help</kbd> to show this onboarding again.
     `;
 
     return `
