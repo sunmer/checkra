@@ -9,15 +9,19 @@
   margin-top: 14px !important;
   margin-bottom: 0.5em !important;
   font-weight: 600 !important;
-  font-size: var(--checkra-base-font-size) !important; /* Ensure consistency */
-  font-family: var(--checkra-base-font-stack) !important; /* Ensure consistency */
-  line-height: 1.4 !important; /* Example, adjust as needed */
+  font-size: var(--checkra-base-font-size) !important;
+  /* Ensure consistency */
+  font-family: var(--checkra-base-font-stack) !important;
+  /* Ensure consistency */
+  line-height: 1.4 !important;
+  /* Example, adjust as needed */
 }
 
 #checkra-feedback-response-content .checkra-streamed-content p {
   margin-bottom: 0.8em !important;
   line-height: 1.6 !important;
-  color: #fff !important; /* Assuming default text color */
+  color: #fff !important;
+  /* Assuming default text color */
   font-size: var(--checkra-base-font-size) !important;
   font-family: var(--checkra-base-font-stack) !important;
 }
@@ -26,9 +30,12 @@
   background-color: #3a3a3a !important;
   padding: 0.2em 0.4em !important;
   border-radius: 3px !important;
-  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace !important; /* Could also use var */
-  font-size: 0.9em !important; /* Relative to parent, or var(--checkra-base-font-size) * 0.9 */
-  color: #eee !important; /* Example color for code text */
+  font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace !important;
+  /* Could also use var */
+  font-size: 0.9em !important;
+  /* Relative to parent, or var(--checkra-base-font-size) * 0.9 */
+  color: #eee !important;
+  /* Example color for code text */
 }
 
 #checkra-feedback-response-content .checkra-streamed-content pre {
@@ -46,14 +53,16 @@
   border-radius: 0 !important;
   font-size: var(--checkra-base-font-size) !important;
   font-family: var(--checkra-base-font-stack) !important;
-  color: #eee !important; /* Example color for code text in pre */
+  color: #eee !important;
+  /* Example color for code text in pre */
 }
 
 #checkra-feedback-response-content .checkra-streamed-content ul,
 #checkra-feedback-response-content .checkra-streamed-content ol {
   padding-left: 20px !important;
   margin-bottom: 1em !important;
-  color: #fff !important; /* Assuming default text color */
+  color: #fff !important;
+  /* Assuming default text color */
   font-size: var(--checkra-base-font-size) !important;
   font-family: var(--checkra-base-font-stack) !important;
 }
@@ -75,9 +84,16 @@
 /* --- Applied Fix Styles (New Wrapper) --- */
 .checkra-feedback-applied-fix {
   position: relative;
+  /* For absolute positioned children */
+  background-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
   outline: none;
   box-sizing: border-box;
-  flex-shrink: 0; /* Prevent container from shrinking */
+  flex-shrink: 0;
+  /* Prevent container from shrinking */
 }
 
 /* Container for the actual content inside the applied fix wrapper */
@@ -94,12 +110,18 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 5px; /* Space between buttons */
-  padding: 3px; /* Small padding around the buttons */
-  background-color: rgba(40, 40, 40, 0.5); /* Subtle background for the control strip */
-  border-radius: 16px; /* Rounded corners for the container */
-  z-index: 12; /* Ensure it's above other content, and above applied-fix-content if it had a z-index */
-  pointer-events: auto; /* Make sure the container itself can receive pointer events if needed */
+  gap: 5px;
+  /* Space between buttons */
+  padding: 3px;
+  /* Small padding around the buttons */
+  background-color: rgba(40, 40, 40, 0.5);
+  /* Subtle background for the control strip */
+  border-radius: 16px;
+  /* Rounded corners for the container */
+  z-index: 12;
+  /* Ensure it's above other content, and above applied-fix-content if it had a z-index */
+  pointer-events: auto;
+  /* Make sure the container itself can receive pointer events if needed */
 }
 
 /* --- ADDED: Outline for actively selected element --- */
@@ -159,7 +181,8 @@
 .checkra-feedback-applied-fix .feedback-fix-toggle:hover {
   /* background-color: rgba(60, 180, 110, 0.9) !important; REMOVED - will be handled by a separate class */
   /* Use !important to override inline style - Comment kept for context */
-  color: white; /* This can remain if desired for hover on non-toggled state */
+  color: white;
+  /* This can remain if desired for hover on non-toggled state */
 }
 
 /* NEW class for active/toggled-on state */
@@ -170,7 +193,8 @@
 
 /* Optional: if you want the toggled-on state to also have a specific hover different from default hover */
 .checkra-feedback-applied-fix .feedback-fix-toggle.toggled-on:hover {
-  background-color: rgba(50, 160, 90, 0.9) !important; /* Slightly darker green on hover when toggled */
+  background-color: rgba(50, 160, 90, 0.9) !important;
+  /* Slightly darker green on hover when toggled */
 }
 
 /* Icon sizing within buttons */
@@ -187,13 +211,15 @@
   width: 20px;
   height: 20px;
   background-color: rgba(50, 50, 50, 0.8);
-  color: #eee; /* Star color */
+  color: #eee;
+  /* Star color */
   border-radius: 50%;
   cursor: pointer !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px; /* Adjust if star looks too small/big */
+  font-size: 12px;
+  /* Adjust if star looks too small/big */
   font-weight: bold;
   line-height: 1;
   pointer-events: auto;
@@ -206,20 +232,27 @@
 
 .checkra-feedback-applied-fix .feedback-fix-rate-btn:hover {
   transform: scale(1.1);
-  background-color: rgba(70, 70, 70, 0.9); /* Slightly different hover for rate */
-  color: #ffeb3b; /* Gold color for star on hover */
+  background-color: rgba(70, 70, 70, 0.9);
+  /* Slightly different hover for rate */
+  color: #ffeb3b;
+  /* Gold color for star on hover */
 }
 
 /* --- ADDED: Styles for the Rate Button when rated --- */
 .checkra-feedback-applied-fix .feedback-fix-rate-btn.rated {
-  color: #ffeb3b; /* Persistent gold color for star */
-  background-color: rgba(50, 50, 50, 0.8); /* Keep original background or a slightly different one if desired */
-  cursor: default !important; /* Indicate it's not interactive */
-  opacity: 0.7; /* Slightly dim it to show it's disabled, optional */
+  color: #ffeb3b;
+  /* Persistent gold color for star */
+  background-color: rgba(50, 50, 50, 0.8);
+  /* Keep original background or a slightly different one if desired */
+  cursor: default !important;
+  /* Indicate it's not interactive */
+  opacity: 0.7;
+  /* Slightly dim it to show it's disabled, optional */
 }
 
 .checkra-feedback-applied-fix .feedback-fix-rate-btn.rated:hover {
-  transform: none; /* No scale transform on hover when rated */
+  transform: none;
+  /* No scale transform on hover when rated */
   /* Optional: ensure hover doesn't change colors if it's already rated */
   color: #ffeb3b;
   background-color: rgba(50, 50, 50, 0.8);
@@ -227,23 +260,57 @@
 
 /* --- ADDED: Styles for the new Custom Rating Options Dropdown --- */
 .checkra-feedback-applied-fix .feedback-fix-rating-options {
-  /* Positioning (top, right, z-index, position:absolute) is handled by inline styles in JS */
-  background-color: rgba(40, 40, 40, 0.95); /* Darker, slightly more opaque */
+  position: absolute;
+  top: 10px;
+  /* Position below the controls container which is at top: -10px */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(30, 30, 30, 0.95);
   border: 1px solid rgba(80, 80, 80, 0.9);
-  border-radius: 16px; /* To match button bar */
-  padding: 5px; 
-  min-width: 160px; /* Adjust as needed */
-  box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+  border-radius: 16px;
+  padding: 8px 10px;
+  min-width: 200px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
-  gap: 3px; /* Small gap between options */
+  gap: 4px;
+  z-index: 20;
+}
+
+/* Add arrow pointing up for rating options */
+.checkra-feedback-applied-fix .feedback-fix-rating-options::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid rgba(80, 80, 80, 0.9);
+}
+
+.checkra-feedback-applied-fix .feedback-fix-rating-options::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(1px);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid rgba(30, 30, 30, 0.95);
 }
 
 .checkra-feedback-applied-fix .feedback-rating-option {
-  background-color: transparent; /* Options transparent against container bg */
+  background-color: transparent;
+  /* Options transparent against container bg */
   color: #eee;
   padding: 8px 10px;
-  border-radius: 12px; /* Slightly rounded corners for options */
+  border-radius: 12px;
+  /* Slightly rounded corners for options */
   cursor: pointer !important;
   font-size: 12px;
   text-align: left;
@@ -258,7 +325,8 @@
 
 /* --- Viewer Layout & Header --- */
 #checkra-feedback-viewer {
-  all: initial; /* ADDED: Reset all inherited styles */
+  all: initial;
+  /* ADDED: Reset all inherited styles */
 
   /* --- Re-declare essential properties after 'all: initial' --- */
   display: flex;
@@ -266,40 +334,56 @@
   position: fixed;
   top: 0;
   right: 0;
-  width: var(--checkra-panel-width); /* Use the CSS variable */
+  width: var(--checkra-panel-width);
+  /* Use the CSS variable */
   height: 100vh;
   background: linear-gradient(rgb(21 29 54 / 90%), rgb(4 6 9 / 95%));
-  backdrop-filter: blur(2px); /* May need -webkit-backdrop-filter for Safari */
-  color: white !important; /* Default text color for the viewer */
+  backdrop-filter: blur(2px);
+  /* May need -webkit-backdrop-filter for Safari */
+  color: white !important;
+  /* Default text color for the viewer */
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
-  z-index: 2147483647 !important; /* MAX Z-INDEX TO ENSURE IT IS ALWAYS ON TOP */
+  z-index: 2147483647 !important;
+  /* MAX Z-INDEX TO ENSURE IT IS ALWAYS ON TOP */
   font-family: var(--checkra-base-font-stack) !important;
-  line-height: 1.5 !important; /* Base line height */
+  line-height: 1.5 !important;
+  /* Base line height */
   border-left: 1px solid rgba(255, 255, 255, 0.1);
-  box-sizing: border-box !important; /* Crucial for layout consistency */
-  transform: translateX(0); /* If panel is always 'rendered' and visibility controlled by class on html/body */
+  box-sizing: border-box !important;
+  /* Crucial for layout consistency */
+  transform: translateX(0);
+  /* If panel is always 'rendered' and visibility controlled by class on html/body */
   padding: 5px 15px;
-  
+
   /* Base font size variable */
-  --checkra-base-font-size: 12px; 
-  font-size: var(--checkra-base-font-size) !important; 
+  --checkra-base-font-size: 12px;
+  font-size: var(--checkra-base-font-size) !important;
 
   /* ADDED: Base font stack variable */
-  --checkra-base-font-stack: 
-    "SF Mono", /* San Francisco Mono (macOS, newer) */
-    "Consolas", /* Windows (since Vista/Office 2007) - Very popular, clear */
-    "Menlo", /* macOS (older, still very good) */
-    "DejaVu Sans Mono", /* Linux - Very common and good */
-    "Liberation Mono", /* Linux - Another common and good one */
-    "Roboto Mono", /* Android, or if user has it installed */
-    -apple-system, /* Keep your existing UI fallbacks */
+  --checkra-base-font-stack:
+    "SF Mono",
+    /* San Francisco Mono (macOS, newer) */
+    "Consolas",
+    /* Windows (since Vista/Office 2007) - Very popular, clear */
+    "Menlo",
+    /* macOS (older, still very good) */
+    "DejaVu Sans Mono",
+    /* Linux - Very common and good */
+    "Liberation Mono",
+    /* Linux - Another common and good one */
+    "Roboto Mono",
+    /* Android, or if user has it installed */
+    -apple-system,
+    /* Keep your existing UI fallbacks */
     BlinkMacSystemFont,
     "Segoe UI",
     Roboto,
     Helvetica,
     Arial,
-    monospace, /* Final monospace fallback */
-    sans-serif; /* Absolute final fallback */
+    monospace,
+    /* Final monospace fallback */
+    sans-serif;
+  /* Absolute final fallback */
 }
 
 /* Add resizable border */
@@ -310,7 +394,8 @@
   top: 0 !important;
   width: 4px !important;
   height: 100% !important;
-  background-color: transparent !important; /* Base, hover changes this */
+  background-color: transparent !important;
+  /* Base, hover changes this */
   cursor: ew-resize !important;
   transition: background-color 0.2s !important;
   z-index: 100 !important;
@@ -333,7 +418,8 @@
 #checkra-feedback-viewer textarea,
 /* #checkra-feedback-viewer button, /* REMOVED to allow specific button cursors */
 #checkra-feedback-viewer #checkra-feedback-response-content {
-  cursor: auto !important; /* Added !important here too for robustness */
+  cursor: auto !important;
+  /* Added !important here too for robustness */
   /* Keep default cursor for interactive elements */
 }
 
@@ -342,7 +428,8 @@
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  z-index: 10 !important; /* Should be less than main viewer but enough for header items */
+  z-index: 10 !important;
+  /* Should be less than main viewer but enough for header items */
   min-height: 40px !important;
   box-sizing: border-box !important;
   flex-shrink: 0 !important;
@@ -353,7 +440,7 @@
   overflow-y: auto !important;
   box-sizing: border-box !important;
   width: 100% !important;
-  position: relative !important; 
+  position: relative !important;
 }
 
 
@@ -376,26 +463,28 @@
   height: 30px !important;
   border-radius: 50% !important;
   color: white !important;
-  display: inline-flex !important; 
+  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
-  background-color: #2563eb !important; 
+  background-color: #3e465f !important;
   user-select: none !important;
-  padding: 0 !important; 
+  padding: 0 !important;
   box-sizing: border-box !important;
-  order: 2 !important; 
+  order: 2 !important;
   flex-shrink: 0 !important;
-  border: none !important; 
+  border: none !important;
 }
 
 #checkra-feedback-viewer #checkra-feedback-submit-button svg {
-  width: 18px; /* Match mini-select */
-  height: 18px; /* Match mini-select */
+  width: 18px;
+  /* Match mini-select */
+  height: 18px;
+  /* Match mini-select */
 }
 
 #checkra-feedback-viewer #checkra-feedback-submit-button:hover:not(:disabled) {
-  background-color: #1d4ed8 !important;
+  background-color: #3e465f !important;
   opacity: 1 !important;
 }
 
@@ -420,7 +509,8 @@
   border-radius: 4px !important;
   font-family: var(--checkra-base-font-stack) !important;
   font-size: var(--checkra-base-font-size) !important;
-  line-height: 1.4 !important; /* Added line-height */
+  line-height: 1.4 !important;
+  /* Added line-height */
   resize: none !important;
   box-sizing: border-box !important;
   min-height: 80px !important;
@@ -438,13 +528,13 @@
 }
 
 #checkra-button-row {
-    display: flex !important;
-    justify-content: flex-end !important;
-    align-items: center !important;
-    gap: 8px !important;
-    position: absolute !important;
-    bottom: 20px !important;
-    right: 20px !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  position: absolute !important;
+  bottom: 20px !important;
+  right: 20px !important;
 }
 
 #checkra-mini-select-btn {
@@ -460,7 +550,7 @@
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
-  background-color: rgb(28 112 230) !important;
+  background-color: #3e465f !important;
   user-select: none !important;
   padding: 0 !important;
   box-sizing: border-box !important;
@@ -475,8 +565,9 @@
 }
 
 #checkra-mini-select-btn:hover {
-  cursor: pointer !important; /* Already has !important from user edit, ensuring it stays */
-  background-color: rgba(20, 100, 220, 0.95) !important;
+  cursor: pointer !important;
+  /* Already has !important from user edit, ensuring it stays */
+  background-color: #3e465f !important;
 }
 
 /* --- Loading Indicator --- */
@@ -529,12 +620,15 @@
   -moz-appearance: none !important;
   padding: 4px 10px !important;
   font-size: 0.9em !important;
-  font-family: var(--checkra-base-font-stack) !important; /* Added font-family */
-  line-height: 1.3 !important; /* Added line-height */
+  font-family: var(--checkra-base-font-stack) !important;
+  /* Added font-family */
+  line-height: 1.3 !important;
+  /* Added line-height */
   border-radius: 0.3rem !important;
   cursor: pointer !important;
   color: white !important;
-  border: none !important; /* Usually good for buttons you style fully */
+  border: none !important;
+  /* Usually good for buttons you style fully */
   transition: background-color 0.2s, opacity 0.2s !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -769,13 +863,13 @@
 
 /* --- ADDED: Conversation History Bubble Styles --- */
 .checkra-message-bubble {
-  padding: 10px 0 !important; 
+  padding: 10px 0 !important;
   border-radius: 12px !important;
-  margin-bottom: 10px !important; 
-  max-width: 90% !important; 
-  word-wrap: break-word !important; 
+  margin-bottom: 10px !important;
+  max-width: 90% !important;
+  word-wrap: break-word !important;
   clear: both !important;
-  box-sizing: border-box !important; 
+  box-sizing: border-box !important;
 }
 
 .message-user {
@@ -795,7 +889,8 @@
   border: 1px solid #8f2d2d !important;
   margin-right: auto;
   border-radius: 4px;
-  padding: 10px !important; /* This was likely here before or similar */
+  padding: 10px !important;
+  /* This was likely here before or similar */
   font-family: var(--checkra-base-font-stack) !important;
   font-size: var(--checkra-base-font-size) !important;
 }
@@ -803,15 +898,19 @@
 .message-usermessage {
   background-color: rgba(0, 0, 0, 0.1) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 4px !important; /* RESTORED if it was 4px, or let it inherit from .checkra-message-bubble (12px) if that was the case */
+  border-radius: 4px !important;
+  /* RESTORED if it was 4px, or let it inherit from .checkra-message-bubble (12px) if that was the case */
   color: #ccc !important;
   font-style: italic;
-  font-size: 0.9em !important; /* This was specific, retain and make important */
+  font-size: 0.9em !important;
+  /* This was specific, retain and make important */
   text-align: center;
   margin-left: auto;
   margin-right: auto;
-  max-width: 100%; /* RESTORED */
-  padding: 10px; /* This was likely here before or similar */
+  max-width: 100%;
+  /* RESTORED */
+  padding: 10px;
+  /* This was likely here before or similar */
   font-family: var(--checkra-base-font-stack) !important;
 }
 
@@ -819,15 +918,17 @@
 .message-usermessage:has(.checkra-stats-badges-wrapper) {
   background-color: transparent !important;
   border: none !important;
-  padding: 0 !important; /* Remove padding from the bubble itself, .checkra-stats-badges has its own */
+  padding: 0 !important;
+  /* Remove padding from the bubble itself, .checkra-stats-badges has its own */
 }
 
 /* AI messages styling - padding was likely part of .checkra-message-bubble or here */
 .checkra-message-bubble.message-ai {
-   padding: 10px !important; 
-   font-family: var(--checkra-base-font-stack) !important; 
-   font-size: var(--checkra-base-font-size) !important; 
-   color: #fff !important; /* Ensure base text color for AI bubble content */
+  padding: 10px !important;
+  font-family: var(--checkra-base-font-stack) !important;
+  font-size: var(--checkra-base-font-size) !important;
+  color: #fff !important;
+  /* Ensure base text color for AI bubble content */
 }
 
 /* Ensure content within bubbles respects formatting */
@@ -954,48 +1055,49 @@
 
 /* --- ADDED: Onboarding Styles --- */
 .onboarding-button-representation {
-    display: inline-flex; /* Use inline-flex for alignment */
-    align-items: center;
-    justify-content: center;
-    width: 24px; /* Slightly smaller than real button */
-    height: 24px;
-    border-radius: 50%;
-    background-color: rgb(28 112 230); /* Match select button color */
-    color: white;
-    margin: 0 0 2px 0; /* Adjust spacing */
-    vertical-align: middle; /* Align with text */
-    pointer-events: none; /* Not clickable */
-    padding: 0; /* Ensure no extra padding */
-    box-sizing: border-box;
+  display: inline-flex; /* Use inline-flex for alignment */
+  align-items: center;
+  justify-content: center;
+  width: 24px; /* Slightly smaller than real button */
+  height: 24px;
+  border-radius: 50%;
+  background-color: #3e465f !important; /* Brand color */
+  color: white;
+  margin: 0 0 2px 0; /* Adjust spacing */
+  vertical-align: middle; /* Align with text */
+  pointer-events: none; /* Not clickable */
+  padding: 0; /* Ensure no extra padding */
+  box-sizing: border-box;
 }
 
 .onboarding-button-representation svg {
-    width: 14px; /* Smaller icon */
-    height: 14px;
-    stroke: currentColor;
+  width: 14px;
+  /* Smaller icon */
+  height: 14px;
+  stroke: currentColor;
 }
 
 /* Style for the submit button representation */
 .onboarding-button-representation.submit-representation {
-    background-color: #2563eb; /* Match submit button color */
+  background-color: #3e465f !important;
 }
 
 /* Style for onboarding buttons */
 .onboarding-button {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer !important;
-    font-size: 1em;
-    font-weight: 500;
-    transition: background-color 0.2s, opacity 0.2s;
-    background-color: #2563eb;
-    color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer !important;
+  font-size: 1em;
+  font-weight: 500;
+  transition: background-color 0.2s, opacity 0.2s;
+  background-color: #2563eb;
+  color: white;
 }
 
 .onboarding-button:hover {
-    opacity: 0.9;
-    background-color: #1d4ed8;
+  opacity: 0.9;
+  background-color: #1d4ed8;
 }
 
 /* ADDED: Style for the link-like audit button in onboarding */
@@ -1008,12 +1110,20 @@
 }
 
 .onboarding-link-button:hover {
-  color: #cce0ff; /* Lighter blue on hover */
+  color: #cce0ff;
+  /* Lighter blue on hover */
 }
 
 @keyframes checkraFadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .checkra-fix-fade-in {
@@ -1025,15 +1135,18 @@
   top: 20px !important;
   right: 20px !important;
   background-color: #333 !important;
-  color: #eee !important; 
+  color: #eee !important;
   padding: 10px 20px !important;
   border-radius: 6px !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
-  z-index: 20000 !important; /* Ensure it's above a very high z-index viewer, if necessary */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+  z-index: 20000 !important;
+  /* Ensure it's above a very high z-index viewer, if necessary */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
   font-size: 14px !important;
-  opacity: 0 !important; /* Initial state for transition */
-  visibility: hidden !important; /* Initial state for transition */
+  opacity: 0 !important;
+  /* Initial state for transition */
+  visibility: hidden !important;
+  /* Initial state for transition */
   transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out !important;
   white-space: nowrap !important;
 }
@@ -1052,47 +1165,72 @@
   cursor: not-allowed;
 }
 
-#checkra-onboarding-container ul li > .onboarding-button-representation {
-  margin-top: 0.1em; /* Minor adjustment if icons are slightly misaligned with text baseline */
+#checkra-onboarding-container .quick-audit-button {
+  background: #3e465f;
+  padding: 8px 12px;
+  /* increase horizontal for icon */
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  text-decoration: none;
+  border: 1px solid #c1c1c1;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+#checkra-onboarding-container .quick-audit-button:hover {
+  background-color: #505772 !important;
+  color: #ffffff !important;
 }
 
 /* Style for suggestion examples in onboarding */
 #checkra-onboarding-container .checkra-message-bubble.message-ai ul li .onboarding-suggestion {
-  background-color: rgba(255, 255, 255, 0.08); /* Subtle background */
+  background-color: #3e465f !important;
   padding: 0.15em 0.4em;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   font-family: var(--checkra-base-font-stack);
   font-size: 0.9em;
-  color: #c8d3f5;
+  color: #ffffff;
   display: inline-block;
   line-height: 1.4;
   cursor: pointer !important;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+#checkra-onboarding-container .checkra-message-bubble.message-ai ul li .onboarding-suggestion:hover {
+  background-color: #505772 !important;
+  color: #ffffff;
 }
 
 /* --- ADDED: Stats Command Badge Styles --- */
 /* This is the only new part we want to keep and refine */
 .checkra-stats-badges {
   display: flex;
-  flex-direction: column; /* Stack badges vertically */
-  gap: 8px; /* Space between badges */
-  padding: 5px 0; /* Padding around the badge container */
+  flex-direction: column;
+  /* Stack badges vertically */
+  gap: 8px;
+  /* Space between badges */
+  padding: 5px 0;
+  /* Padding around the badge container */
 }
 
 .checkra-stat-badge {
   appearance: none !important;
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
-  background-color: rgba(255, 255, 255, 0.1) !important; 
+  background-color: rgba(255, 255, 255, 0.1) !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: #cce0ff !important; 
+  color: #cce0ff !important;
   padding: 8px 12px !important;
   border-radius: 6px !important;
   cursor: pointer !important;
-  text-align: left !important; 
+  text-align: left !important;
   font-family: var(--checkra-base-font-stack) !important;
   font-size: var(--checkra-base-font-size) !important;
-  line-height: 1.4 !important; /* Added line-height */
+  line-height: 1.4 !important;
+  /* Added line-height */
   transition: background-color 0.2s, border-color 0.2s !important;
 }
 
@@ -1105,7 +1243,9 @@
 #checkra-feedback-viewer button,
 #checkra-feedback-viewer a,
 #checkra-feedback-viewer [role="button"],
-#checkra-feedback-viewer [data-checkra-interactive] /* Generic attribute for custom interactive elements */
+#checkra-feedback-viewer [data-checkra-interactive]
+
+/* Generic attribute for custom interactive elements */
 #checkra-feedback-viewer input[type="button"],
 #checkra-feedback-viewer input[type="submit"],
 #checkra-feedback-viewer input[type="reset"] {
@@ -1130,7 +1270,7 @@
   color: #eee !important;
   padding: 14px 24px !important;
   border-radius: 8px !important;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.35) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35) !important;
   z-index: 20000 !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
   font-size: 15px !important;
@@ -1151,96 +1291,125 @@
 
 /* --- NEW: Docking Behavior & Panel Width Variable --- */
 :root {
-  --checkra-panel-width: 360px; /* Default width, can be adjusted */
+  --checkra-panel-width: 360px;
+  /* Default width, can be adjusted */
 }
 
 /* Class to be added to <html> or <body> when panel is open */
 .checkra-panel-open {
   margin-right: var(--checkra-panel-width);
-  overflow-x: hidden; /* Prevent horizontal scrollbars from the margin */
-  transition: margin-right 0.25s ease-in-out; /* Smooth transition */
+  overflow-x: hidden;
+  /* Prevent horizontal scrollbars from the margin */
+  transition: margin-right 0.25s ease-in-out;
+  /* Smooth transition */
 }
+
 /* --- END NEW Docking Behavior --- */
 
 /* --- Responsive adjustments for docking --- */
 @media (max-width: 768px) {
+
   /* On smaller screens, revert to overlay behavior */
   .checkra-panel-open {
-    margin-right: 0; /* No push for overlay */
+    margin-right: 0;
+    /* No push for overlay */
   }
 
   #checkra-feedback-viewer {
-    width: 100vw; /* Full width for overlay on small screens */
+    width: 100vw;
+    /* Full width for overlay on small screens */
     /* Optional: Add a bit of top offset if there are mobile browser bars */
     /* top: env(safe-area-inset-top, 0px); */
     /* height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); */
-    border-left: none; /* No border needed if full width */
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.2); /* Shadow might be from bottom */
+    border-left: none;
+    /* No border needed if full width */
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
+    /* Shadow might be from bottom */
   }
 }
 
 /* Persistent Plus Icon for Insertions (already exists) */
 .checkra-insert-indicator {
-  position: relative; /* Ensure it's a positioning context for the spinner */
+  position: relative;
+  /* Ensure it's a positioning context for the spinner */
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden; /* Prevent spinner from showing if it somehow overflows bounds before rotating */
+  overflow: hidden;
+  /* Prevent spinner from showing if it somehow overflows bounds before rotating */
 }
 
 /* Loading state for the Plus Icon */
 .checkra-insert-indicator.loading::before {
   content: '';
-  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  box-sizing: border-box;
+  /* Include padding and border in the element's total width and height */
   display: block;
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 16px; /* Slightly larger for better visibility */
+  width: 16px;
+  /* Slightly larger for better visibility */
   height: 16px;
-  margin-top: -8px; /* Half of height */
-  margin-left: -8px; /* Half of width */
-  border: 2px solid rgba(255, 255, 255, 0.3); /* Softer base border */
-  border-top-color: #2563eb; /* Blue spinner part - should match .checkra-replace-loader */
+  margin-top: -8px;
+  /* Half of height */
+  margin-left: -8px;
+  /* Half of width */
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  /* Softer base border */
+  border-top-color: #2563eb;
+  /* Blue spinner part - should match .checkra-replace-loader */
   border-radius: 50%;
   animation: checkra-spinner 0.8s linear infinite;
 }
 
 .checkra-insert-indicator.loading {
   /* Hide the original '+' sign when loading */
-  color: transparent !important; /* Try with !important to ensure override */
-  font-size: 0 !important; /* Another way to hide text content if color transparent fails */
+  color: transparent !important;
+  /* Try with !important to ensure override */
+  font-size: 0 !important;
+  /* Another way to hide text content if color transparent fails */
 }
 
 /* Centered Loader for Replace Mode */
-.checkra-replace-loader { /* This is the container, handles centering */
+.checkra-replace-loader {
+  /* This is the container, handles centering */
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 32px; /* Container size, can be same as spinner or slightly larger for padding */
+  width: 32px;
+  /* Container size, can be same as spinner or slightly larger for padding */
   height: 32px;
   z-index: 10001;
-  display: flex; /* To center the spinner-inner if its size is different, or just in case */
+  display: flex;
+  /* To center the spinner-inner if its size is different, or just in case */
   align-items: center;
   justify-content: center;
   /* No border or animation directly on this container */
 }
 
-.checkra-spinner-inner { /* This is the actual spinning element */
-  width: 100%; /* Fill the container, or set specific size e.g. 32px */
-  height: 100%; /* Fill the container */
+.checkra-spinner-inner {
+  /* This is the actual spinning element */
+  width: 100%;
+  /* Fill the container, or set specific size e.g. 32px */
+  height: 100%;
+  /* Fill the container */
   border: 4px solid rgba(0, 0, 0, 0.1);
-  border-left-color: #2563eb; /* Blue spinner part */
+  border-left-color: #2563eb;
+  /* Blue spinner part */
   border-radius: 50%;
-  animation: checkra-spinner 1s linear infinite; /* Apply the existing rotation animation */
-  box-sizing: border-box; /* Ensure border is within the width/height */
+  animation: checkra-spinner 1s linear infinite;
+  /* Apply the existing rotation animation */
+  box-sizing: border-box;
+  /* Ensure border is within the width/height */
 }
 
 /* Dimming overlay for element being replaced */
 .checkra-element-dimmed {
   opacity: 0.6;
-  position: relative; /* Needed if the loader is a child and absolutely positioned relative to this */
+  position: relative;
+  /* Needed if the loader is a child and absolutely positioned relative to this */
   /* Add a pseudo-element overlay for better dimming if needed */
 }
 
@@ -1253,51 +1422,63 @@
 
 /* Ensure highlighted element can be a positioning context */
 .checkra-highlight-container {
-    position: relative !important; /* Allow absolute positioning of loader inside */
+  position: relative !important;
+  /* Allow absolute positioning of loader inside */
 }
 
 .feedback-rating-chip {
-  background: #333;
-  color: #eee;
-  border: 1px solid #888;
+  background-color: rgba(50, 50, 50, 0.8) !important;
+  color: #eee !important;
+  border: 1px solid rgba(100, 100, 100, 0.8);
   border-radius: 8px;
   padding: 4px 10px;
   font-size: 12px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  margin: 0 2px 2px 0;
+  cursor: pointer !important;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  display: inline-block;
+  user-select: none;
+  font-family: var(--checkra-base-font-stack);
+  line-height: 1.4;
 }
 
 .feedback-rating-chip.active {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
+  background-color: #2563eb !important;
+  color: #fff !important;
+  border-color: #2563eb !important;
 }
 
 .checkra-feedback-applied-fix .feedback-rating-feedback-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 4px 6px;
+  padding: 6px 8px;
   font-size: 12px;
-  background: #ffffff;
-  color: #000000;
-  border: 1px solid #666;
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: #000000 !important;
+  border: 1px solid rgba(100, 100, 100, 0.8) !important;
   border-radius: 4px;
-  margin-bottom: 4px;
+  outline: none;
+  font-family: var(--checkra-base-font-stack);
+}
+
+.checkra-feedback-applied-fix .feedback-rating-feedback-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 /* --- Styles for audit INFO overlay --- */
 .checkra-feedback-applied-fix .feedback-fix-info-overlay {
   position: absolute;
-  bottom: 30px; /* place above control bar */
+  top: 10px;
+  /* Position below the controls container which is at top: -10px */
   left: 50%;
   transform: translateX(-50%);
-  max-width: 260px;
-  background-color: rgba(30,30,30,0.95);
-  border: 1px solid rgba(80,80,80,0.9);
+  min-width: 200px;
+  max-width: 300px;
+  background-color: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(80, 80, 80, 0.9);
   border-radius: 16px;
   padding: 8px 10px;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   font-size: 12px;
   color: #eee;
   z-index: 20;
@@ -1309,4 +1490,81 @@
 
 .checkra-feedback-applied-fix .feedback-fix-info-overlay div:last-child {
   margin-bottom: 0;
+}
+
+/* Add arrow pointing up for info overlay */
+.checkra-feedback-applied-fix .feedback-fix-info-overlay::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid rgba(80, 80, 80, 0.9);
+}
+
+.checkra-feedback-applied-fix .feedback-fix-info-overlay::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(1px);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid rgba(30, 30, 30, 0.95);
+}
+
+/* Style the feedback form inside rating options */
+.checkra-feedback-applied-fix .feedback-rating-feedback-form {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(80, 80, 80, 0.5);
+}
+
+.checkra-feedback-applied-fix .feedback-rating-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.checkra-feedback-applied-fix .feedback-rating-feedback-submit {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.checkra-feedback-applied-fix .feedback-rating-feedback-submit:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.checkra-feedback-applied-fix .feedback-rating-feedback-submit:disabled {
+  background-color: #60a5fa;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- BRAND BUTTON COLORS ---------- */
+#checkra-mini-select-btn,
+#checkra-feedback-viewer #checkra-feedback-submit-button {
+  background-color: #3e465f !important;
+  color: #fff !important;
+}
+
+#checkra-mini-select-btn:hover:not(:disabled),
+#checkra-feedback-viewer #checkra-feedback-submit-button:hover:not(:disabled) {
+  background-color: #505772 !important;
+  color: #fff !important;
 }

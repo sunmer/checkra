@@ -9,29 +9,15 @@ export class SettingsModal {
   private modalContainer: HTMLDivElement | null = null;
   private closeButton: HTMLButtonElement | null = null;
   private modelSelect: HTMLSelectElement | null = null;
-  private temperatureSlider: HTMLInputElement | null = null;
-  private temperatureDescriptionDisplay: HTMLParagraphElement | null = null;
 
   private currentSettings: AiSettings = {
     model: 'gpt-4.1',
     temperature: 0.7,
   };
 
-  // Map temperature values to descriptions - Updated for 0.0-1.2 range, step 0.2
-  private tempValueToDescription: { [key: number]: string } = {
-    0.0: "Deterministic",
-    0.2: "Focused",
-    0.4: "Creative",
-    0.6: "Imaginative",
-    0.8: "More Creative",
-    1.0: "Wild",
-    1.2: "Chaotic"
-  };
-
   // Store bound event handlers
   private boundHideModalHandler: (() => void) | null = null;
   private boundModelChangeHandler: ((event: Event) => void) | null = null;
-  private boundTempSliderHandler: ((event: Event) => void) | null = null;
 
   /**
    * Creates a new SettingsModal instance.
@@ -54,8 +40,6 @@ export class SettingsModal {
     this.modalContainer = null;
     this.closeButton = null;
     this.modelSelect = null;
-    this.temperatureSlider = null;
-    this.temperatureDescriptionDisplay = null;
   }
 
   /**
@@ -100,41 +84,6 @@ export class SettingsModal {
     content.appendChild(modelLabel);
     content.appendChild(this.modelSelect);
 
-    // --- Temperature Slider --- // Modify this section
-    const tempLabel = document.createElement('label');
-    tempLabel.textContent = 'Creativity:'; // Updated label
-    tempLabel.htmlFor = 'checkra-ai-temperature-slider'; // Changed ID ref
-
-    this.temperatureSlider = document.createElement('input');
-    this.temperatureSlider.type = 'range';
-    this.temperatureSlider.id = 'checkra-ai-temperature-slider';
-    this.temperatureSlider.min = '0.0'; // Updated min
-    this.temperatureSlider.max = '1.2'; // Updated max
-    this.temperatureSlider.step = '0.2'; // Updated step
-
-    // Find the closest step to the current setting using updated range/step
-    const closestTempValue = this._findClosestStep(
-        this.currentSettings.temperature,
-        0.0,
-        1.2,
-        0.2
-    );
-    this.temperatureSlider.value = String(closestTempValue);
-    // Update the setting itself to the snapped value
-    this.currentSettings.temperature = closestTempValue;
-
-    this.temperatureDescriptionDisplay = document.createElement('p');
-    this.temperatureDescriptionDisplay.id = 'checkra-ai-temperature-description';
-
-    // Initial description uses updated range/step via helper
-    this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(closestTempValue);
-
-
-    content.appendChild(tempLabel);
-    content.appendChild(this.temperatureSlider); // Add slider
-    content.appendChild(this.temperatureDescriptionDisplay); // Add description display
-
-
     // --- Append major sections to modal container ---
     this.modalContainer.appendChild(header);
     this.modalContainer.appendChild(content);
@@ -167,38 +116,10 @@ export class SettingsModal {
   }
 
   /**
-   * Helper to find the closest valid step for the slider.
-   */
-  private _findClosestStep(value: number, min: number, max: number, step: number): number {
-      if (value <= min) return min;
-      if (value >= max) return max;
-      // Calculate the nearest step index
-      const steps = Math.round((value - min) / step);
-      let closest = min + steps * step;
-      // Clamp to max/min just in case
-      closest = Math.min(max, Math.max(min, closest));
-      // Round to handle potential floating point inaccuracies with step
-      const precision = (step.toString().split('.')[1] || '').length;
-      return parseFloat(closest.toFixed(precision));
-  }
-
-  /**
-   * Helper to get the description for a given temperature value.
-   * Reverted to original logic.
-   */
-  private _getTemperatureDescription(value: number): string {
-      // Use the closest step value to look up in the map, using updated range/step
-      const closestStep = this._findClosestStep(value, 0.0, 1.2, 0.2); // Updated args
-      const description = this.tempValueToDescription[closestStep] || "Unknown Setting"; // Use updated map
-      // Format the output string to include the value
-      return `${description} (${closestStep.toFixed(1)})`;
-  }
-
-  /**
    * Attaches event listeners to the DOM elements.
    */
   private attachListeners(): void {
-    if (!this.closeButton || !this.modelSelect || !this.temperatureSlider || !this.temperatureDescriptionDisplay) {
+    if (!this.closeButton || !this.modelSelect) {
       console.error(`[SettingsModal] Cannot attach listeners: elements not found.`);
       return;
     }
@@ -211,19 +132,6 @@ export class SettingsModal {
       this.currentSettings.model = selectedModel;
       eventEmitter.emit('settingsChanged', { ...this.currentSettings });
     };
-    this.boundTempSliderHandler = (event: Event) => {
-      const slider = event.target as HTMLInputElement;
-      const selectedTemp = parseFloat(slider.value);
-      if (!isNaN(selectedTemp)) {
-          this.currentSettings.temperature = selectedTemp;
-          if (this.temperatureDescriptionDisplay) {
-              this.temperatureDescriptionDisplay.textContent = this._getTemperatureDescription(selectedTemp);
-          }
-          eventEmitter.emit('settingsChanged', { ...this.currentSettings });
-      } else {
-          console.warn(`[Settings] Invalid temperature value from slider: ${slider.value}`);
-      }
-    };
     const boundOverlayClickHandler = (event: MouseEvent) => {
       if (this.modalContainer && event.target === this.modalContainer) {
         event.stopPropagation(); // Prevent click from reaching document listener
@@ -233,7 +141,6 @@ export class SettingsModal {
 
     this.closeButton.addEventListener('click', this.boundHideModalHandler);
     this.modelSelect.addEventListener('change', this.boundModelChangeHandler);
-    this.temperatureSlider.addEventListener('input', this.boundTempSliderHandler);
     this.modalContainer?.addEventListener('click', boundOverlayClickHandler);
   }
 
@@ -251,10 +158,6 @@ export class SettingsModal {
     if (this.modelSelect && this.boundModelChangeHandler) {
       this.modelSelect.removeEventListener('change', this.boundModelChangeHandler);
       this.boundModelChangeHandler = null;
-    }
-    if (this.temperatureSlider && this.boundTempSliderHandler) {
-        this.temperatureSlider.removeEventListener('input', this.boundTempSliderHandler);
-        this.boundTempSliderHandler = null;
     }
   }
 

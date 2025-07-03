@@ -443,14 +443,15 @@ export class FixManager {
     });
 
     const clickOutsideListener = (ev: MouseEvent) => {
-      if (!ratingOptionsContainer.contains(ev.target as Node) && ev.target !== rateButton) {
-        ratingOptionsContainer.remove();
-        document.removeEventListener('click', clickOutsideListener, true);
-      }
-    };
-    setTimeout(() => document.addEventListener('click', clickOutsideListener, true), 0);
+       if (!ratingOptionsContainer.contains(ev.target as Node) && ev.target !== rateButton) {
+         ratingOptionsContainer.remove();
+         document.removeEventListener('click', clickOutsideListener, true);
+       }
+     };
+     setTimeout(() => document.addEventListener('click', clickOutsideListener, true), 0);
 
-    rateButton.parentElement?.appendChild(ratingOptionsContainer);
+    // Append to the wrapper element so it's positioned relative to the entire fix
+    fixInfo.appliedWrapperElement.appendChild(ratingOptionsContainer);
   }
 
   private createRatingForm(fixId: string, ratingValue: 1 | 2, container: HTMLElement): HTMLFormElement {
@@ -608,7 +609,8 @@ export class FixManager {
     };
     setTimeout(() => document.addEventListener('click', clickOutside, true), 0);
 
-    (event.currentTarget as HTMLElement).parentElement?.appendChild(overlay);
+    // Append to the wrapper element so it's positioned relative to the entire fix
+    fixInfo.appliedWrapperElement.appendChild(overlay);
   }
 }
 
